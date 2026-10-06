@@ -7,9 +7,10 @@ import '../services/numeric_guard.dart';
 import '../services/nutrition_planner.dart';
 import '../services/units.dart';
 import '../theme/accents.dart';
+import '../theme/cookie_border.dart';
+import '../theme/lockout_motion.dart';
 import '../theme/lockout_semantics.dart';
 import '../theme/lockout_theme.dart';
-import '../theme/palette.dart';
 import '../theme/theme_controller.dart';
 import '../widgets/calm_row.dart';
 import '../widgets/lockout_card.dart';
@@ -327,16 +328,34 @@ class SettingsBodyState extends State<SettingsBody> {
 
   // --- THEME ---
 
-  /// Tap handler for a theme swatch. `selectAccent` persists the selection;
-  /// a throw there (storage failure) must not vanish as a silent, unhandled
-  /// async error — surface it the same way every other write on this screen
-  /// does.
-  Future<void> _selectAccent(LockoutAccent accent) async {
+  // Two handlers rather than one, because the picker is two independent
+  // axes: a brightness tap must not disturb the accent, and vice versa.
+  // Each persists through `ThemeController`; a throw there (storage
+  // failure) must not vanish as a silent, unhandled async error — surface
+  // it the same way every other write on this screen does.
+  //
+  // The `setState` is not redundant with the controller's own notification:
+  // this body reads `ThemeController.instance` directly rather than through
+  // a `ListenableBuilder`, so without it the segmented button and the
+  // swatches would keep painting the previous selection until something
+  // else rebuilt the screen.
+
+  Future<void> _applyBrightness(LockoutBrightnessChoice choice) async {
+    try {
+      await ThemeController.instance.selectBrightness(choice);
+    } catch (_) {
+      _toast('Could not apply the theme.', warn: true);
+    }
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _applyAccent(LockoutAccent accent) async {
     try {
       await ThemeController.instance.selectAccent(accent);
     } catch (_) {
-      _toast('Could not apply theme.', warn: true);
+      _toast('Could not apply the accent.', warn: true);
     }
+    if (mounted) setState(() {});
   }
 
   // --- REMINDERS ---
@@ -557,6 +576,13 @@ class SettingsBodyState extends State<SettingsBody> {
     );
   }
 
+  /// The appearance picker: two independent axes, nothing else.
+  ///
+  /// Brightness is a segmented button rather than a switch because "system"
+  /// is a real third choice, not the absence of the other two. Accent is a
+  /// row of swatches with no text beside them — the colour *is* the label,
+  /// and each swatch carries its name in semantics so a screen reader is
+  /// not left reading five identical buttons.
   Widget _buildAppearanceCard(BuildContext context) {
     final theme = Theme.of(context);
     final controller = ThemeController.instance;
@@ -566,21 +592,46 @@ class SettingsBodyState extends State<SettingsBody> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('Applies instantly.', style: theme.textTheme.bodySmall),
-          const SizedBox(height: LockoutTheme.spaceMd),
+          const SizedBox(height: LockoutTheme.headingGap),
+          SizedBox(
+            width: double.infinity,
+            child: SegmentedButton<LockoutBrightnessChoice>(
+              segments: const [
+                ButtonSegment(
+                  value: LockoutBrightnessChoice.system,
+                  label: Text('System'),
+                ),
+                ButtonSegment(
+                  value: LockoutBrightnessChoice.light,
+                  label: Text('Light'),
+                ),
+                ButtonSegment(
+                  value: LockoutBrightnessChoice.dark,
+                  label: Text('Dark'),
+                ),
+              ],
+              selected: {controller.brightnessChoice},
+              showSelectedIcon: false,
+              onSelectionChanged: (selection) =>
+                  _applyBrightness(selection.first),
+            ),
+          ),
+          const SizedBox(height: LockoutTheme.sectionGap),
+          Text('Accent', style: theme.textTheme.titleLarge),
+          const SizedBox(height: LockoutTheme.headingGap),
+          // A `Wrap`, not a `Row`: five 48dp targets plus their gaps clear
+          // 360dp only just, and a device at a large display scale has less
+          // room than that. Wrapping onto a second line is the one failure
+          // mode here that is not an overflow stripe.
           Wrap(
-            spacing: LockoutTheme.spaceMd,
-            runSpacing: LockoutTheme.spaceMd,
-            // One swatch per accent. The brightness axis is the picker's
-            // other half and is rebuilt, with this list, in task 8; each
-            // swatch previews its accent against the brightness that is on
-            // screen right now.
+            spacing: LockoutTheme.spaceSm,
+            runSpacing: LockoutTheme.spaceSm,
             children: [
               for (final accent in LockoutAccent.all)
-                _ThemeSwatch(
-                  name: accent.name,
-                  colors: LockoutPalette.schemeFor(theme.brightness, accent),
+                _AccentSwatch(
+                  accent: accent,
                   selected: controller.accent == accent,
-                  onTap: () => _selectAccent(accent),
+                  onTap: () => _applyAccent(accent),
                 ),
             ],
           ),
@@ -986,97 +1037,78 @@ class SettingsBodyState extends State<SettingsBody> {
   }
 }
 
-/// One selectable appearance in the theme picker: a 2-column miniature card
-/// preview, the scheme name, and a check mark when selected.
+/// One accent choice.
 ///
-/// [colors] used to be nullable for the dynamic ("Match my phone") entry,
-/// which had no fixed swatch of its own and drew an icon instead. Material
-/// You is gone, so every swatch now has real colours to preview.
-class _ThemeSwatch extends StatelessWidget {
-  final String name;
-  final ColorScheme colors;
+/// The swatch is the one place in the app where the shape language is itself
+/// the content, so it wears a lobed outline rather than a rounded rectangle,
+/// and the outline is what changes when it is chosen.
+///
+/// The `Semantics` wrapper is what makes the swatch addressable at all: it
+/// draws no text, so without a label a screen reader would announce five
+/// identical buttons. `selected` is set on both states rather than only the
+/// chosen one, so an unselected swatch reads as "not selected" instead of
+/// as something with no selection state to report.
+class _AccentSwatch extends StatelessWidget {
+  final LockoutAccent accent;
   final bool selected;
   final VoidCallback onTap;
 
-  const _ThemeSwatch({
-    required this.name,
-    required this.colors,
+  const _AccentSwatch({
+    required this.accent,
     required this.selected,
     required this.onTap,
   });
 
+  /// The swatch at rest and when chosen. Both sit inside
+  /// [LockoutTheme.minTouchTarget], so growing one never grows the target
+  /// it lives in — the tap area is the same 48dp either way.
+  static const double _restDiameter = 34;
+  static const double _selectedDiameter = 44;
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final swatchColors = colors;
+    final colors = Theme.of(context).colorScheme;
+    final tier = LockoutMotion.springFast;
 
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(LockoutTheme.radiusField),
-      child: Container(
-        width: LockoutTheme.swatchWidth,
-        padding: const EdgeInsets.all(LockoutTheme.spaceSm),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(LockoutTheme.radiusField),
-          border: Border.all(
-            color: selected
-                ? theme.colorScheme.primary
-                : theme.colorScheme.outlineVariant,
-            width: selected ? 2 : 1,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Container(
-                  height: LockoutTheme.swatchPreviewHeight,
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(LockoutTheme.spaceXs),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: swatchColors.surface,
-                    borderRadius: BorderRadius.circular(LockoutTheme.radiusField),
+    return Semantics(
+      label: accent.name,
+      button: true,
+      selected: selected,
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: SizedBox(
+          width: LockoutTheme.minTouchTarget,
+          height: LockoutTheme.minTouchTarget,
+          child: Center(
+            child: AnimatedContainer(
+              duration: tier.durationFor(context),
+              curve: tier.curve,
+              width: selected ? _selectedDiameter : _restDiameter,
+              height: selected ? _selectedDiameter : _restDiameter,
+              decoration: ShapeDecoration(
+                color: accent.accent,
+                // The lobe count is held fixed across both states on
+                // purpose: `CookieBorder` refuses to interpolate between two
+                // counts, so only the amplitude and the outline may animate.
+                shape: CookieBorder(
+                  lobes: CookieBorder.training.lobes,
+                  amplitude: selected
+                      ? CookieBorder.training.amplitude
+                      : CookieBorder.training.amplitude / 2,
+                  side: BorderSide(
+                    color: selected ? colors.onSurface : Colors.transparent,
+                    width: 2,
                   ),
-                  child: Row(
-                          children: [
-                            Expanded(child: _pill(swatchColors.primary)),
-                            const SizedBox(width: LockoutTheme.spaceXs),
-                            Expanded(child: _pill(swatchColors.secondary)),
-                          ],
-                        ),
                 ),
-                if (selected)
-                  Positioned(
-                    top: LockoutTheme.swatchCheckOffset,
-                    right: LockoutTheme.swatchCheckOffset,
-                    child: Icon(
-                      Icons.check_circle,
-                      size: LockoutTheme.swatchCheckSize,
-                      color: theme.colorScheme.primary,
-                    ),
-                  ),
-              ],
+              ),
+              child: selected
+                  ? Icon(Icons.check, size: 18, color: accent.ink)
+                  : null,
             ),
-            const SizedBox(height: LockoutTheme.spaceXs),
-            Text(
-              name,
-              style: theme.textTheme.labelMedium,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
-
-  Widget _pill(Color color) => Container(
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(LockoutTheme.radiusPill),
-        ),
-      );
 }

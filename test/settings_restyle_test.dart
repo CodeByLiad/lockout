@@ -479,6 +479,10 @@ void main() {
     });
 
     testWidgets('a tappable row clears the 48dp touch target', (tester) async {
+      // An accent swatch draws no text, so the only handle on it is the
+      // semantics label that makes it usable in the first place; enabled
+      // before the pump so the first semantics tree already carries it.
+      final semantics = tester.ensureSemantics();
       await pumpSettings(tester);
 
       final switchTile = tester.getSize(find.widgetWithText(
@@ -508,14 +512,14 @@ void main() {
       expect(incrementButton.height, greaterThanOrEqualTo(LockoutTheme.minTouchTarget));
 
       for (final accent in LockoutAccent.all) {
-        final swatch = find.ancestor(
-          of: find.text(accent.name),
-          matching: find.byType(InkWell),
-        );
-        final size = tester.getSize(swatch);
+        final size = tester.getSize(find.bySemanticsLabel(accent.name));
+        expect(size.width, greaterThanOrEqualTo(LockoutTheme.minTouchTarget),
+            reason: accent.key);
         expect(size.height, greaterThanOrEqualTo(LockoutTheme.minTouchTarget),
             reason: accent.key);
       }
+
+      semantics.dispose();
     });
 
     testWidgets(
@@ -573,16 +577,26 @@ void main() {
       expect(sentinel, isNot(colors.error));
     });
 
-    testWidgets('the accent picker sits under an Appearance caption',
+    testWidgets('both appearance axes sit under an Appearance caption',
         (tester) async {
+      final semantics = tester.ensureSemantics();
       await pumpSettings(tester);
       expect(find.text('Appearance'), findsOneWidget);
 
       // This would still pass with the whole picker deleted, unless it also
-      // asserts the swatches its own name promises are actually there.
-      for (final accent in LockoutAccent.all) {
-        expect(find.text(accent.name), findsOneWidget, reason: accent.key);
+      // asserts the controls its own name promises are actually there —
+      // both axes, since the caption covers the brightness segments as well
+      // as the swatches.
+      for (final label in ['System', 'Light', 'Dark']) {
+        expect(find.text(label), findsOneWidget, reason: label);
       }
+      expect(find.text('Accent'), findsOneWidget);
+      for (final accent in LockoutAccent.all) {
+        expect(find.bySemanticsLabel(accent.name), findsOneWidget,
+            reason: accent.key);
+      }
+
+      semantics.dispose();
     });
   });
 
