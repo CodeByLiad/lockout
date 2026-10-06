@@ -33,7 +33,9 @@ const List<String> _branchOneFiles = [
   'lib/widgets/hero_card.dart',
   'lib/widgets/lockout_card.dart',
   'lib/widgets/morphing_surface.dart',
+  'lib/widgets/stat_tile.dart',
   'lib/screens/settings_screen.dart',
+  'lib/screens/today_tab.dart',
 ];
 
 List<File> _dartFilesIn(String directory) => Directory(directory)
@@ -152,10 +154,34 @@ void main() {
       // branch 2, and widening this list is that branch's job. Data
       // normalisation — scheduling-mode names, tag matching — is not display
       // copy and never belongs in this list.
+      // Two separate failures: calling `toUpperCase` on display copy, and
+      // writing the copy in capitals to begin with. This guard caught only
+      // the first, so `'SESSION SAVED - ...'` sailed straight through it.
+      final shouty = RegExp("'[^']*\\b[A-Z]{3,}\\b[^']*'");
+      // Proper nouns, licence identifiers and domain acronyms are not
+      // shouting. Everything else in capitals is copy that should be
+      // sentence case.
+      const allowed = {
+        'LOCKOUT', // the app's own name
+        'GPL', 'OFL', // licence identifiers
+        'BMI', 'BMR', 'TDEE', 'KCAL', 'SQL', 'JSON', 'CSV', 'URL', 'API',
+      };
+
       for (final path in _branchOneFiles) {
-        expect(File(path).readAsStringSync().contains('toUpperCase'), isFalse,
+        final source = File(path).readAsStringSync();
+        expect(source.contains('toUpperCase'), isFalse,
             reason: '$path uppercases copy; the house document forbids '
                 'all-caps labels (section 4.2)');
+
+        for (final match in shouty.allMatches(_withoutComments(source))) {
+          final literal = match.group(0)!;
+          final words = RegExp('\\b[A-Z]{3,}\\b')
+              .allMatches(literal)
+              .map((m) => m.group(0)!)
+              .where((w) => !allowed.contains(w))
+              .toList();
+          expect(words, isEmpty, reason: '$path has all-caps copy: $literal');
+        }
       }
     });
   });
@@ -176,6 +202,39 @@ void main() {
       expect(LockoutTheme.radiusChipRest, isNot(LockoutTheme.radiusChipActive));
       expect(LockoutTheme.radiusSwatchRest,
           isNot(LockoutTheme.radiusSwatchActive));
+    });
+
+    test('the button themes resolve a different shape when pressed', () {
+      // The constants differing proves nothing on its own: this branch was
+      // reviewed once with all of them defined and none of them reaching a
+      // component theme, and this assertion passed. It now checks the
+      // resolver rather than the token.
+      final theme = LockoutTheme.build(
+        colors: LockoutPalette.schemeFor(Brightness.dark, LockoutAccent.lime),
+        semantics:
+            LockoutPalette.semanticsFor(Brightness.dark, LockoutAccent.lime),
+      );
+
+      double radiusOf(OutlinedBorder? shape) =>
+          ((shape! as RoundedRectangleBorder).borderRadius as BorderRadius)
+              .topLeft
+              .x;
+
+      final resolvers = <String, WidgetStateProperty<OutlinedBorder?>>{
+        'filled': theme.filledButtonTheme.style!.shape!,
+        'outlined': theme.outlinedButtonTheme.style!.shape!,
+        'text': theme.textButtonTheme.style!.shape!,
+        'segmented': theme.segmentedButtonTheme.style!.shape!,
+      };
+
+      resolvers.forEach((name, resolver) {
+        final rest = radiusOf(resolver.resolve(<WidgetState>{}));
+        final pressed =
+            radiusOf(resolver.resolve(<WidgetState>{WidgetState.pressed}));
+        expect(pressed, isNot(rest),
+            reason: '$name keeps one radius through a press, which the '
+                'contract calls a violation');
+      });
     });
 
     test('the house declares each corner value the app uses', () {
@@ -216,8 +275,11 @@ void main() {
       }
     });
 
-    test('framework easing tokens are gone from the theme layer', () {
-      for (final file in _dartFilesIn('lib/theme')) {
+    test('framework easing tokens are gone', () {
+      // Scoped to all of `lib`, not just the theme layer: the one surviving
+      // `Durations.medium1` was in `today_tab.dart`, a restyled file this
+      // guard was not looking at.
+      for (final file in _dartFilesIn('lib')) {
         final source = _withoutComments(file.readAsStringSync());
         expect(source.contains('Easing.'), isFalse, reason: file.path);
         expect(source.contains('Durations.'), isFalse, reason: file.path);

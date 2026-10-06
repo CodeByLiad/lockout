@@ -58,17 +58,88 @@ void main() {
     });
 
     test('pubspec declares each family at the weights the scale uses', () {
-      final pubspec = File('pubspec.yaml').readAsStringSync();
-      for (final line in const [
-        'family: BricolageGrotesque',
-        'family: Figtree',
-        'family: JetBrainsMono',
-      ]) {
-        expect(pubspec.contains(line), isTrue, reason: '$line is missing');
+      // Per family, not against the whole file. Checking `weight: 500`
+      // globally passed while JetBrains Mono had no 500 at all, which is how
+      // `numeric()` came to request a weight that silently matched down to
+      // Regular.
+      final declared = <String, Set<int>>{};
+      String? family;
+      for (final line in File('pubspec.yaml').readAsLinesSync()) {
+        final name = RegExp(r'- family:\s*(\S+)').firstMatch(line);
+        if (name != null) {
+          family = name.group(1);
+          declared[family!] = <int>{};
+          continue;
+        }
+        final weight = RegExp(r'weight:\s*(\d+)').firstMatch(line);
+        if (weight != null && family != null) {
+          declared[family]!.add(int.parse(weight.group(1)!));
+        }
       }
-      for (final weight in const [400, 500, 600, 700, 800]) {
-        expect(pubspec.contains('weight: $weight'), isTrue,
-            reason: 'weight $weight is never declared');
+
+      expect(declared['BricolageGrotesque'], containsAll(<int>[500, 700, 800]),
+          reason: 'the display scale uses 500, 700 and 800');
+      expect(declared['Figtree'], containsAll(<int>[400, 500, 600, 700]),
+          reason: 'the body scale uses 400, 500, 600 and 700');
+      expect(declared['JetBrainsMono'], containsAll(<int>[400, 700]),
+          reason: 'the numeric style uses 400 and 700');
+    });
+
+    testWidgets('every weight the type scale asks for is bundled',
+        (tester) async {
+      // A font matcher does not fail on an unbundled weight; it quietly
+      // matches to the nearest one, and the style stops meaning anything.
+      final declared = <String, Set<int>>{};
+      String? family;
+      for (final line in File('pubspec.yaml').readAsLinesSync()) {
+        final name = RegExp(r'- family:\s*(\S+)').firstMatch(line);
+        if (name != null) {
+          family = name.group(1);
+          declared[family!] = <int>{};
+          continue;
+        }
+        final weight = RegExp(r'weight:\s*(\d+)').firstMatch(line);
+        if (weight != null && family != null) {
+          declared[family]!.add(int.parse(weight.group(1)!));
+        }
+      }
+
+      final text = LockoutTheme.textThemeFor(const ColorScheme.light());
+      final styles = <TextStyle>[
+        ...<TextStyle?>[
+          text.displayLarge,
+          text.displayMedium,
+          text.displaySmall,
+          text.headlineLarge,
+          text.headlineMedium,
+          text.headlineSmall,
+          text.titleLarge,
+          text.titleMedium,
+          text.titleSmall,
+          text.bodyLarge,
+          text.bodyMedium,
+          text.bodySmall,
+          text.labelLarge,
+          text.labelMedium,
+          text.labelSmall,
+        ].whereType<TextStyle>(),
+        LockoutTheme.countdown(const ColorScheme.light()),
+      ];
+
+      late TextStyle numericStyle;
+      await tester.pumpWidget(MaterialApp(
+        home: Builder(builder: (context) {
+          numericStyle = LockoutTheme.numeric(context);
+          return const SizedBox();
+        }),
+      ));
+      styles.add(numericStyle);
+
+      for (final style in styles) {
+        final weight = int.parse(style.fontWeight!.toString().split('.w').last);
+        expect(declared[style.fontFamily], contains(weight),
+            reason: '${style.fontFamily} has no weight $weight bundled, so '
+                'this style matches down to the nearest one that is');
       }
     });
   });

@@ -214,7 +214,7 @@ class LockoutTheme {
   static TextStyle numeric(
     BuildContext context, {
     double size = 15,
-    FontWeight weight = FontWeight.w500,
+    FontWeight weight = FontWeight.w700,
     Color? color,
     double? height,
   }) {
@@ -229,7 +229,31 @@ class LockoutTheme {
   }
 
   /// The house `numericTable` leading, 15/22. See [numeric].
+  ///
+  /// The style's weight is 700, not the 500 the house table first carried:
+  /// JetBrains Mono is bundled at 400 and 700 only, so a 500 request matches
+  /// down to Regular and the weight silently stops meaning anything. The
+  /// house document was corrected to agree.
   static const double numericTableHeight = 22 / 15;
+
+  /// A shape that answers the interaction state, which is what the contract
+  /// means by shape-as-state: a surface carries a rest radius and an active
+  /// (pressed or selected) radius and resolves between them.
+  ///
+  /// `WidgetStateProperty` rather than an animated widget, because component
+  /// themes have no build context to animate in. `MorphingSurface` is the
+  /// animated form, for surfaces a screen owns directly.
+  static WidgetStateProperty<OutlinedBorder?> _statefulShape(
+    double rest,
+    double active, {
+    BorderSide? side,
+  }) {
+    return WidgetStateProperty.resolveWith((states) {
+      final engaged = states.contains(WidgetState.pressed) ||
+          states.contains(WidgetState.selected);
+      return _rounded(engaged ? active : rest, side: side);
+    });
+  }
 
   static RoundedRectangleBorder _rounded(double radius, {BorderSide? side}) {
     return RoundedRectangleBorder(
@@ -307,7 +331,8 @@ class LockoutTheme {
           minimumSize: const Size(0, controlHeight),
           padding: const EdgeInsets.symmetric(horizontal: spaceLg),
           textStyle: text.labelLarge,
-          shape: _rounded(radiusButtonRest),
+        ).copyWith(
+          shape: _statefulShape(radiusButtonRest, radiusButtonLargeActive),
         ),
       ),
 
@@ -317,8 +342,11 @@ class LockoutTheme {
           padding: const EdgeInsets.symmetric(horizontal: spaceLg),
           textStyle: text.labelLarge,
           foregroundColor: colors.onSurface,
-          side: BorderSide(color: colors.outline),
-          shape: _rounded(radiusButtonRest),
+        ).copyWith(
+          shape: _statefulShape(
+            radiusButtonRest,
+            radiusButtonActive,
+            ),
         ),
       ),
 
@@ -326,7 +354,8 @@ class LockoutTheme {
         style: TextButton.styleFrom(
           minimumSize: const Size(0, minTouchTarget),
           textStyle: text.labelLarge,
-          shape: _rounded(radiusButtonRest),
+        ).copyWith(
+          shape: _statefulShape(radiusButtonRest, radiusButtonActive),
         ),
       ),
 
@@ -373,14 +402,19 @@ class LockoutTheme {
         height: navBarHeight,
         backgroundColor: colors.surfaceContainerLow,
         surfaceTintColor: Colors.transparent,
-        indicatorColor: colors.primaryContainer,
+        // The house document assigns the nav indicator `secondaryContainer`
+        // (sections 3.1 and 7.1), not the accent. The accent is for emphasis
+        // on two or three elements per screen, and a persistent nav pill plus
+        // the FAB would spend that budget before a screen drew anything.
+        indicatorColor: colors.secondaryContainer,
         indicatorShape: const StadiumBorder(),
         elevation: 0,
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           final selected = states.contains(WidgetState.selected);
           return text.labelMedium?.copyWith(
-            color: selected ? colors.primary : colors.onSurfaceVariant,
+            color:
+                selected ? colors.onSecondaryContainer : colors.onSurfaceVariant,
             fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
           );
         }),
@@ -402,6 +436,8 @@ class LockoutTheme {
           side: BorderSide(color: colors.outlineVariant),
           textStyle: text.labelLarge,
           minimumSize: const Size(0, minTouchTarget),
+        ).copyWith(
+          shape: _statefulShape(radiusSegmentInner, radiusChipActive),
         ),
       ),
 
@@ -410,7 +446,8 @@ class LockoutTheme {
         selectedColor: colors.secondaryContainer,
         side: BorderSide(color: colors.outlineVariant),
         labelStyle: text.labelMedium!,
-        shape: const StadiumBorder(),
+        shape: _rounded(radiusChipRest,
+            side: BorderSide(color: colors.outlineVariant)),
         padding: const EdgeInsets.symmetric(
           horizontal: spaceSm,
           vertical: spaceXs,
@@ -435,6 +472,8 @@ class LockoutTheme {
         subtitleTextStyle: text.bodySmall,
         iconColor: colors.onSurfaceVariant,
         shape: _rounded(radiusRowRest),
+        // The pressed radius is applied by `MorphingSurface` where a row is
+        // interactive; `ListTileThemeData.shape` takes no state resolver.
         contentPadding: const EdgeInsets.symmetric(horizontal: spaceMd),
         minTileHeight: minTouchTarget,
       ),

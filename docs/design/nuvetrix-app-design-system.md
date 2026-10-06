@@ -154,7 +154,7 @@ hard to compare at a glance. A monospaced face fixes the column without affectin
 | `labelMedium` | Figtree | 700 | 13 / 18 | 0 | Chips, badges |
 | `labelSmall` | Figtree | 600 | 12 / 16 | 0 | Nav bar labels |
 | `countdown` (custom) | Bricolage | 800 | 88 / 72 | -0.05em | The one big number on a hero card |
-| `numericTable` (custom, optional) | JetBrains Mono | 500 | 15 / 22 | 0 | Numerals in columns (sets, reps, weights) |
+| `numericTable` (custom, optional) | JetBrains Mono | 700 | 15 / 22 | 0 | Numerals in columns (sets, reps, weights) |
 
 ### 4.2 Type rules
 
