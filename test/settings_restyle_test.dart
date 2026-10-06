@@ -577,6 +577,19 @@ void main() {
       expect(sentinel, isNot(colors.error));
     });
 
+    // The About card is the one place the app explains what leaves the
+    // device, and it points at a control by name. That name has to be the
+    // label the user actually sees on the control — 'Watch', in the routine
+    // editor — in the case it is actually written in, since the house
+    // document forbids all-caps labels (section 4.2, register entry D8).
+    testWidgets('the About card names the Watch control as it is labelled',
+        (tester) async {
+      await pumpSettings(tester);
+
+      expect(find.textContaining('when you tap Watch'), findsOneWidget);
+      expect(find.textContaining('WATCH'), findsNothing);
+    });
+
     testWidgets('both appearance axes sit under an Appearance caption',
         (tester) async {
       final semantics = tester.ensureSemantics();

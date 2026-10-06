@@ -8,6 +8,7 @@ import 'package:lockout/screens/today_tab.dart';
 import 'package:lockout/services/database_service.dart';
 import 'package:lockout/services/schedule_service.dart';
 import 'package:lockout/theme/cookie_border.dart';
+import 'package:lockout/theme/lockout_motion.dart';
 import 'package:lockout/theme/lockout_theme.dart';
 import 'package:lockout/widgets/action_grid.dart';
 import 'package:lockout/widgets/hero_card.dart';
@@ -459,6 +460,95 @@ void main() {
         matching: find.byType(FittedBox),
       ).first);
       expect(slot.width, greaterThanOrEqualTo(40));
+    });
+
+    // The tint is a colour fade, which is the `effects` tier — 200ms and no
+    // overshoot, because a colour that passes its target lands on a hue
+    // nobody authored. Framework `Durations`/`Easing` tokens are not a
+    // motion system; three shared tiers are.
+    testWidgets('the completion tint fades on the effects tier',
+        (tester) async {
+      await seedActiveWeekdayRoutineForToday();
+      await tester.pumpWidget(hostedTodayTab());
+      await settle(tester);
+      await tester.tap(find.text('Start session'));
+      await settle(tester);
+
+      final fade = tester.widget<TweenAnimationBuilder<Color?>>(
+        find
+            .ancestor(
+              of: find.byKey(const ValueKey('set-row-0-0')),
+              matching: find.byType(TweenAnimationBuilder<Color?>),
+            )
+            .first,
+      );
+
+      expect(fade.duration, LockoutMotion.effects.duration);
+      expect(fade.curve, LockoutMotion.effects.curve);
+    });
+
+    // Reading the tier's `duration` directly would pass the test above and
+    // still animate for someone who has asked the OS to stop animating —
+    // an accessibility regression, not a flourish. Only
+    // `durationFor(context)` collapses it.
+    testWidgets(
+        'the completion tint does not animate when the OS asks for no '
+        'animation', (tester) async {
+      await seedActiveWeekdayRoutineForToday();
+      await tester.pumpWidget(MaterialApp(
+        theme: lockoutTestTheme(),
+        home: Builder(
+          builder: (context) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(disableAnimations: true),
+            child: TodayTab(),
+          ),
+        ),
+      ));
+      await settle(tester);
+      await tester.tap(find.text('Start session'));
+      await settle(tester);
+
+      final fade = tester.widget<TweenAnimationBuilder<Color?>>(
+        find
+            .ancestor(
+              of: find.byKey(const ValueKey('set-row-0-0')),
+              matching: find.byType(TweenAnimationBuilder<Color?>),
+            )
+            .first,
+      );
+
+      expect(fade.duration, Duration.zero);
+    });
+
+    // The house document forbids all-caps labels outright (section 4.2,
+    // deviation register D8), and a snackbar is display copy like any other.
+    testWidgets('the save confirmation is sentence case', (tester) async {
+      await seedActiveWeekdayRoutineForToday();
+      await tester.pumpWidget(hostedTodayTab());
+      await settle(tester);
+      await tester.tap(find.text('Start session'));
+      await settle(tester);
+      await tester.tap(find.byKey(const ValueKey('set-complete-0-0')));
+      await settle(tester, maxPumps: 4);
+      await tester.tap(find.text('Finish'));
+      await settle(tester);
+      await tester.tap(find.text('Save'));
+      await settle(tester);
+
+      final message = tester
+          .widget<Text>(
+            find
+                .descendant(
+                  of: find.byType(SnackBar),
+                  matching: find.byType(Text),
+                )
+                .first,
+          )
+          .data!;
+
+      expect(message, startsWith('Session saved'));
+      expect(message, isNot(message.toUpperCase()),
+          reason: 'the house document forbids all-caps labels (section 4.2)');
     });
 
     testWidgets('the rest bar adjusts in both directions', (tester) async {

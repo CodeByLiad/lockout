@@ -1003,10 +1003,16 @@ class SettingsBodyState extends State<SettingsBody> {
           // Destructive: this replaces every row on the device. It sits at
           // the bottom of the card, behind the confirmation dialog in
           // `_import`, and carries `semantics.danger` — the same role as
-          // that dialog's confirm button. Colouring the trigger `error` and
-          // the confirmation `danger` split one action across two roles,
-          // which `ThemeController._harmonised` can resolve to two visibly
-          // different reds under a dynamic (Material You) scheme.
+          // that dialog's confirm button.
+          //
+          // `danger` rather than `colorScheme.error` because the two say
+          // different things: `error` reports that something has already
+          // gone wrong, while `danger` warns that this control is about to
+          // destroy data if the user goes through with it. They are free to
+          // diverge — `LockoutSemantics` owns one and the scheme owns the
+          // other — so colouring the trigger `error` and its confirmation
+          // `danger` would split one action across two roles and, the
+          // moment they ever differ, across two visibly different reds.
           OutlinedButton(
             key: const Key('importBackupButton'),
             onPressed: _busy ? null : _import,
@@ -1030,7 +1036,7 @@ class SettingsBodyState extends State<SettingsBody> {
         'Offline-first: routines, workout logs, nutrition and body data are '
         'stored only on this device in SQLite. No analytics, no ads, no '
         'account.\nThe network is used for one thing — streaming exercise '
-        'form videos from YouTube when you tap WATCH.',
+        'form videos from YouTube when you tap Watch.',
         style: theme.textTheme.bodyMedium,
       ),
     );

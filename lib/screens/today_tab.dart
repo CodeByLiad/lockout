@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'progress_tab.dart' show ProgressSegment;
 import '../theme/cookie_border.dart';
+import '../theme/lockout_motion.dart';
 import '../theme/lockout_semantics.dart';
 import '../theme/lockout_theme.dart';
 import '../models/models.dart';
@@ -426,7 +427,7 @@ class TodayTabState extends State<TodayTab> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'SESSION SAVED - ${setRows.length} sets, ${_fmtWeight(session.totalVolumeKg)} kg volume',
+          'Session saved — ${setRows.length} sets, ${_fmtWeight(session.totalVolumeKg)} kg volume',
         ),
       ),
     );
@@ -1040,16 +1041,22 @@ class TodayTabState extends State<TodayTab> {
 
     // A completed row tints its whole background, not just the tick — a
     // TweenAnimationBuilder rather than a plain DecoratedBox so the tint
-    // eases in over the M3 "standard" motion token instead of snapping,
-    // while the keyed widget the tests read stays a real `DecoratedBox`.
+    // fades in instead of snapping, while the keyed widget the tests read
+    // stays a real `DecoratedBox`.
+    //
+    // `effects` is the tier for colour and opacity: 200ms on an ease-out,
+    // with none of the spring tiers' overshoot, since a colour that passes
+    // its target lands on a hue nobody authored. Taken through
+    // `durationFor` so the fade collapses to nothing when the user has
+    // asked the OS to remove animations.
     final targetColor = set.completed
         ? semantics.success.withValues(alpha: 0.12)
         : Colors.transparent;
     return TweenAnimationBuilder<Color?>(
       key: ObjectKey(set),
       tween: ColorTween(end: targetColor),
-      duration: Durations.medium1,
-      curve: Easing.standard,
+      duration: LockoutMotion.effects.durationFor(context),
+      curve: LockoutMotion.effects.curve,
       builder: (context, color, child) => DecoratedBox(
         key: ValueKey('set-row-$exerciseIndex-$setIndex'),
         decoration: BoxDecoration(
