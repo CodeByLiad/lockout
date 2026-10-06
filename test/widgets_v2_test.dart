@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lockout/theme/lockout_theme.dart';
-import 'package:lockout/theme/schemes.dart';
 import 'package:lockout/widgets/action_grid.dart';
 import 'package:lockout/widgets/calm_row.dart';
 import 'package:lockout/widgets/day_block.dart';
@@ -19,7 +18,7 @@ Widget _host(Widget child) => MaterialApp(
 
 /// The ramp the rebuilt widgets identify with, replacing the palette accents
 /// the neubrutalist versions took.
-Color _ramp(int i) => LockoutScheme.graphite.semantics.categoryAt(i);
+Color _ramp(int i) => darkAppearance.semantics.categoryAt(i);
 
 /// Hosts a button that raises an undo banner into the root overlay, the way
 /// BODY and FOOD raise it after a delete.
@@ -212,11 +211,11 @@ void main() {
     const titleTone = Color(0xFF00FF00);
     const amountTone = Color(0xFFFF00FF);
     final theme = LockoutTheme.build(
-      colors: LockoutScheme.graphite.colors.copyWith(
+      colors: darkAppearance.colors.copyWith(
         onSurface: titleTone,
         onSurfaceVariant: amountTone,
       ),
-      semantics: LockoutScheme.graphite.semantics,
+      semantics: darkAppearance.semantics,
     );
 
     await tester.pumpWidget(MaterialApp(
@@ -325,8 +324,8 @@ void main() {
     const sentinel = Color(0xFF00FF00);
     final theme = LockoutTheme.build(
       colors:
-          LockoutScheme.graphite.colors.copyWith(inversePrimary: sentinel),
-      semantics: LockoutScheme.graphite.semantics,
+          darkAppearance.colors.copyWith(inversePrimary: sentinel),
+      semantics: darkAppearance.semantics,
     );
     await tester.pumpWidget(_undoHost(theme: theme));
     await tester.tap(find.text('delete'));

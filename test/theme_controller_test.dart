@@ -1,12 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lockout/services/database_service.dart';
-import 'package:lockout/theme/lockout_semantics.dart';
-import 'package:lockout/theme/schemes.dart';
+import 'package:lockout/theme/accents.dart';
 import 'package:lockout/theme/theme_controller.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'test_helpers.dart';
+
+Future<void> _loadWithSetting(String? value) async {
+  await wipeDatabaseAndReseed(DatabaseService.instance);
+  if (value != null) {
+    await DatabaseService.instance.saveSetting('theme_key', value);
+  }
+  ThemeController.instance.resetForTest();
+  await ThemeController.instance.load();
+}
 
 void main() {
   // The no-isolate factory against an in-memory path, matching every other
@@ -22,291 +30,157 @@ void main() {
     ThemeController.instance.resetForTest();
   });
 
-  test('defaults to graphite when nothing is saved', () async {
-    await ThemeController.instance.load();
+  // The shared serial runner reuses one process, so a selection left applied
+  // here would follow every later suite into its own setUp.
+  tearDown(() => ThemeController.instance.resetForTest());
 
-    expect(ThemeController.instance.selectedKey, 'graphite');
-    expect(ThemeController.instance.themeMode, ThemeMode.light);
-    expect(ThemeController.instance.lightTheme.brightness, Brightness.dark);
-    expect(ThemeController.instance.darkTheme, isNull);
+  group('migration from the six retired schemes', () {
+    const cases = <String, (LockoutBrightnessChoice, LockoutAccent)>{
+      'graphite': (LockoutBrightnessChoice.dark, LockoutAccent.steel),
+      'paper': (LockoutBrightnessChoice.light, LockoutAccent.steel),
+      'ember': (LockoutBrightnessChoice.dark, LockoutAccent.coral),
+      'linen': (LockoutBrightnessChoice.light, LockoutAccent.coral),
+      'indigo': (LockoutBrightnessChoice.dark, LockoutAccent.violet),
+      'frost': (LockoutBrightnessChoice.light, LockoutAccent.teal),
+      'dynamic': (LockoutBrightnessChoice.system, LockoutAccent.lime),
+    };
+
+    cases.forEach((key, expected) {
+      test('$key migrates to ${expected.$1} + ${expected.$2.key}', () async {
+        await _loadWithSetting(key);
+        expect(ThemeController.instance.brightnessChoice, expected.$1);
+        expect(ThemeController.instance.accent, expected.$2);
+      });
+    });
+
+    /// The pre-Jinatra keys migrated in two hops: `schemes.dart` mapped them
+    /// onto one of the six, and the six are mapped here. Deleting
+    /// `schemes.dart` deleted the first hop, so these have to land in one.
+    /// Without them every install still carrying one silently loses its
+    /// choice on upgrade — the exact outcome `no_legacy_theme_test.dart`'s
+    /// allowlist comment was written to prevent.
+    const ancient = <String, (LockoutBrightnessChoice, LockoutAccent)>{
+      'carbon_lime': (LockoutBrightnessChoice.dark, LockoutAccent.steel),
+      'midnight_cyan': (LockoutBrightnessChoice.dark, LockoutAccent.violet),
+      'ash_amber': (LockoutBrightnessChoice.dark, LockoutAccent.coral),
+      'void_magenta': (LockoutBrightnessChoice.dark, LockoutAccent.steel),
+      'jinatra_cream': (LockoutBrightnessChoice.light, LockoutAccent.steel),
+      'paper_press': (LockoutBrightnessChoice.light, LockoutAccent.steel),
+      'mint_lab': (LockoutBrightnessChoice.light, LockoutAccent.teal),
+      'sunblock': (LockoutBrightnessChoice.light, LockoutAccent.coral),
+    };
+
+    ancient.forEach((key, expected) {
+      test('the pre-Jinatra key $key still migrates in one hop', () async {
+        await _loadWithSetting(key);
+        expect(ThemeController.instance.brightnessChoice, expected.$1,
+            reason: key);
+        expect(ThemeController.instance.accent, expected.$2, reason: key);
+      });
+    });
+
+    test('a junk value falls back without clearing the setting', () async {
+      await _loadWithSetting('not-a-theme');
+      expect(ThemeController.instance.brightnessChoice,
+          LockoutBrightnessChoice.system);
+      expect(ThemeController.instance.accent, LockoutAccent.lime);
+
+      final stored = await DatabaseService.instance
+          .getSetting('theme_key', defaultValue: '');
+      expect(stored, isNotEmpty,
+          reason: 'migration must rewrite the setting, never clear it');
+    });
+
+    test('an absent setting lands on the fresh-install default', () async {
+      await _loadWithSetting(null);
+      expect(ThemeController.instance.brightnessChoice,
+          LockoutBrightnessChoice.system);
+      expect(ThemeController.instance.accent, LockoutAccent.lime);
+    });
+
+    test('a migrated value is written back in the new format', () async {
+      await _loadWithSetting('indigo');
+      final stored = await DatabaseService.instance
+          .getSetting('theme_key', defaultValue: '');
+      expect(stored, 'dark|violet');
+    });
+
+    test('the new format round-trips', () async {
+      await _loadWithSetting('light|teal');
+      expect(ThemeController.instance.brightnessChoice,
+          LockoutBrightnessChoice.light);
+      expect(ThemeController.instance.accent, LockoutAccent.teal);
+    });
   });
 
-  test('an authored dark scheme is served through `theme`, not `darkTheme`',
-      () async {
-    await ThemeController.instance.load();
-    await ThemeController.instance.select('ember');
+  group('the two axes move independently', () {
+    test('changing the accent leaves the brightness alone', () async {
+      await _loadWithSetting('dark|lime');
+      await ThemeController.instance.selectAccent(LockoutAccent.coral);
+      expect(ThemeController.instance.accent, LockoutAccent.coral);
+      expect(ThemeController.instance.brightnessChoice,
+          LockoutBrightnessChoice.dark);
+    });
 
-    // themeMode.light means MaterialApp reads `theme`. The scheme carries its
-    // own brightness, so an explicit choice is never overridden by the
-    // system's light/dark setting.
-    expect(ThemeController.instance.themeMode, ThemeMode.light);
-    expect(ThemeController.instance.lightTheme.brightness, Brightness.dark);
-    expect(ThemeController.instance.darkTheme, isNull);
-  });
+    test('changing the brightness leaves the accent alone', () async {
+      await _loadWithSetting('dark|coral');
+      await ThemeController.instance
+          .selectBrightness(LockoutBrightnessChoice.light);
+      expect(ThemeController.instance.brightnessChoice,
+          LockoutBrightnessChoice.light);
+      expect(ThemeController.instance.accent, LockoutAccent.coral);
+    });
 
-  test('a saved legacy Jinatra key resolves to its nearest scheme', () async {
-    await DatabaseService.instance.saveSetting('theme_key', 'midnight_cyan');
-    await ThemeController.instance.load();
+    test('selecting the value already in force does not notify', () async {
+      await _loadWithSetting('dark|coral');
+      var notifications = 0;
+      void listener() => notifications++;
+      ThemeController.instance.addListener(listener);
+      await ThemeController.instance.selectAccent(LockoutAccent.coral);
+      ThemeController.instance.removeListener(listener);
+      expect(notifications, 0);
+    });
 
-    expect(ThemeController.instance.selectedKey, 'indigo');
-    expect(ThemeController.instance.lightTheme.brightness, Brightness.dark);
-  });
+    test('both axes persist in one setting', () async {
+      await _loadWithSetting('system|lime');
+      await ThemeController.instance
+          .selectBrightness(LockoutBrightnessChoice.dark);
+      await ThemeController.instance.selectAccent(LockoutAccent.violet);
 
-  test('select persists and notifies exactly once', () async {
-    await ThemeController.instance.load();
-    var notifications = 0;
-    void listener() => notifications++;
-    ThemeController.instance.addListener(listener);
-    addTearDown(() => ThemeController.instance.removeListener(listener));
-
-    await ThemeController.instance.select('paper');
-
-    expect(notifications, 1);
-    expect(ThemeController.instance.selectedKey, 'paper');
-    expect(ThemeController.instance.lightTheme.brightness, Brightness.light);
-    expect(
-      await DatabaseService.instance.getSetting('theme_key', defaultValue: ''),
-      'paper',
-    );
-  });
-
-  test('selecting the current scheme is a no-op', () async {
-    await ThemeController.instance.load();
-    var notifications = 0;
-    void listener() => notifications++;
-    ThemeController.instance.addListener(listener);
-    addTearDown(() => ThemeController.instance.removeListener(listener));
-
-    await ThemeController.instance.select('graphite');
-
-    expect(notifications, 0);
-  });
-
-  test('selecting junk falls back rather than throwing', () async {
-    await ThemeController.instance.load();
-    await ThemeController.instance.select('not_a_scheme');
-
-    expect(ThemeController.instance.selectedKey, LockoutScheme.fallback.key);
-  });
-
-  test('dynamic is absent from the picker until schemes arrive', () async {
-    await ThemeController.instance.load();
-
-    expect(ThemeController.instance.dynamicAvailable, isFalse);
-    expect(
-      ThemeController.instance.pickerKeys.contains(LockoutScheme.dynamicKey),
-      isFalse,
-    );
-    expect(ThemeController.instance.pickerKeys.length, 6);
-
-    ThemeController.instance.setDynamicSchemes(
-      light: const ColorScheme.light(),
-      dark: const ColorScheme.dark(),
-    );
-
-    expect(ThemeController.instance.dynamicAvailable, isTrue);
-    expect(ThemeController.instance.pickerKeys.last, LockoutScheme.dynamicKey);
-    expect(ThemeController.instance.pickerKeys.length, 7);
-  });
-
-  test('setDynamicSchemes does not notify when nothing changed', () async {
-    await ThemeController.instance.load();
-    ThemeController.instance.setDynamicSchemes(
-      light: const ColorScheme.light(),
-      dark: const ColorScheme.dark(),
-    );
-
-    var notifications = 0;
-    void listener() => notifications++;
-    ThemeController.instance.addListener(listener);
-    addTearDown(() => ThemeController.instance.removeListener(listener));
-
-    ThemeController.instance.setDynamicSchemes(
-      light: const ColorScheme.light(),
-      dark: const ColorScheme.dark(),
-    );
-
-    expect(
-      notifications,
-      0,
-      reason: 'DynamicColorBuilder rebuilds often; notifying every time would '
-          'loop the app root',
-    );
-  });
-
-  test('dynamic selection follows the system brightness', () async {
-    await ThemeController.instance.load();
-    ThemeController.instance.setDynamicSchemes(
-      light: const ColorScheme.light(),
-      dark: const ColorScheme.dark(),
-    );
-    await ThemeController.instance.select(LockoutScheme.dynamicKey);
-
-    expect(ThemeController.instance.themeMode, ThemeMode.system);
-    expect(ThemeController.instance.darkTheme, isNotNull);
-    expect(ThemeController.instance.lightTheme.brightness, Brightness.light);
-    expect(ThemeController.instance.darkTheme!.brightness, Brightness.dark);
-  });
-
-  test('a saved dynamic key falls back to graphite when unavailable', () async {
-    await DatabaseService.instance
-        .saveSetting('theme_key', LockoutScheme.dynamicKey);
-    await ThemeController.instance.load();
-
-    expect(ThemeController.instance.dynamicAvailable, isFalse);
-    expect(ThemeController.instance.lightTheme.brightness, Brightness.dark);
-    expect(ThemeController.instance.darkTheme, isNull);
-    expect(ThemeController.instance.themeMode, ThemeMode.light);
-  });
-
-  test('a saved dynamic key comes back once the platform supplies schemes',
-      () async {
-    await DatabaseService.instance
-        .saveSetting('theme_key', LockoutScheme.dynamicKey);
-    await ThemeController.instance.load();
-    expect(ThemeController.instance.themeMode, ThemeMode.light);
-
-    ThemeController.instance.setDynamicSchemes(
-      light: const ColorScheme.light(),
-      dark: const ColorScheme.dark(),
-    );
-
-    expect(
-      ThemeController.instance.themeMode,
-      ThemeMode.system,
-      reason: 'the choice was never discarded, only unservable',
-    );
-  });
-
-  test('dynamic keeps our authored warning, error and ramp', () async {
-    await ThemeController.instance.load();
-    ThemeController.instance.setDynamicSchemes(
-      light: const ColorScheme.light(),
-      dark: const ColorScheme.dark(),
-    );
-    await ThemeController.instance.select(LockoutScheme.dynamicKey);
-
-    for (final theme in [
-      ThemeController.instance.lightTheme,
-      ThemeController.instance.darkTheme!,
-    ]) {
-      expect(theme.colorScheme.error, LockoutScheme.graphite.colors.error);
-      expect(theme.colorScheme.tertiary, LockoutScheme.graphite.colors.tertiary);
       expect(
-        theme.extension<LockoutSemantics>()!.categoryRamp,
-        LockoutScheme.graphite.semantics.categoryRamp,
+        await DatabaseService.instance
+            .getSetting('theme_key', defaultValue: ''),
+        'dark|violet',
       );
-    }
+    });
   });
 
-  test('dynamic still takes its primary from the platform', () async {
-    await ThemeController.instance.load();
-    const platformLight = ColorScheme.light(primary: Color(0xFF7722AA));
-    ThemeController.instance.setDynamicSchemes(
-      light: platformLight,
-      dark: const ColorScheme.dark(),
-    );
-    await ThemeController.instance.select(LockoutScheme.dynamicKey);
+  group('themes', () {
+    test('both light and dark themes are always offered', () async {
+      await _loadWithSetting('system|lime');
+      expect(ThemeController.instance.lightTheme, isA<ThemeData>());
+      expect(ThemeController.instance.darkTheme, isA<ThemeData>());
+      expect(ThemeController.instance.themeMode, ThemeMode.system);
+    });
 
-    expect(
-      ThemeController.instance.lightTheme.colorScheme.primary,
-      const Color(0xFF7722AA),
-      reason: 'wallpaper decides hue; we only pin what must carry meaning',
-    );
+    test('an explicit brightness pins themeMode', () async {
+      await _loadWithSetting('dark|lime');
+      expect(ThemeController.instance.themeMode, ThemeMode.dark);
+      await ThemeController.instance
+          .selectBrightness(LockoutBrightnessChoice.light);
+      expect(ThemeController.instance.themeMode, ThemeMode.light);
+    });
+
+    test('the accent reaches the built theme', () async {
+      await _loadWithSetting('dark|teal');
+      expect(ThemeController.instance.darkTheme.colorScheme.primary,
+          LockoutAccent.teal.accent);
+    });
+
+    test('each theme carries its own brightness', () async {
+      await _loadWithSetting('system|lime');
+      expect(ThemeController.instance.lightTheme.brightness, Brightness.light);
+      expect(ThemeController.instance.darkTheme.brightness, Brightness.dark);
+    });
   });
-
-  test('every picker key resolves to something buildable', () async {
-    await ThemeController.instance.load();
-    ThemeController.instance.setDynamicSchemes(
-      light: const ColorScheme.light(),
-      dark: const ColorScheme.dark(),
-    );
-
-    for (final key in ThemeController.instance.pickerKeys) {
-      await ThemeController.instance.select(key);
-      expect(
-        ThemeController.instance.lightTheme.extension<LockoutSemantics>(),
-        isNotNull,
-        reason: key,
-      );
-    }
-  });
-
-  test('storing platform schemes does not notify while an authored theme is '
-      'selected', () async {
-    await ThemeController.instance.load();
-    expect(ThemeController.instance.selectedKey, 'graphite');
-
-    var notifications = 0;
-    void listener() => notifications++;
-    ThemeController.instance.addListener(listener);
-    addTearDown(() => ThemeController.instance.removeListener(listener));
-
-    ThemeController.instance.setDynamicSchemes(
-      light: const ColorScheme.light(),
-      dark: const ColorScheme.dark(),
-    );
-
-    // The app root publishes these from a post-frame callback inside the
-    // DynamicColorBuilder that also rebuilds on notify. Notifying for schemes
-    // that cannot change what is on screen rebuilds the whole tree for
-    // nothing, and on a device that supplies a palette it feeds straight back
-    // into the callback that published them.
-    expect(
-      notifications,
-      0,
-      reason: 'graphite is selected; platform schemes change nothing on screen',
-    );
-    expect(ThemeController.instance.dynamicAvailable, isTrue);
-  });
-
-  test('the picker still gains dynamic once schemes arrive, without a '
-      'notification storm', () async {
-    await ThemeController.instance.load();
-
-    var notifications = 0;
-    void listener() => notifications++;
-    ThemeController.instance.addListener(listener);
-    addTearDown(() => ThemeController.instance.removeListener(listener));
-
-    for (var i = 0; i < 5; i++) {
-      ThemeController.instance.setDynamicSchemes(
-        light: const ColorScheme.light(),
-        dark: const ColorScheme.dark(),
-      );
-    }
-
-    expect(notifications, 0);
-    expect(
-      ThemeController.instance.pickerKeys.contains(LockoutScheme.dynamicKey),
-      isTrue,
-    );
-  });
-
-  test('a dynamic selection does notify, because the screen changes',
-      () async {
-    await ThemeController.instance.load();
-    ThemeController.instance.setDynamicSchemes(
-      light: const ColorScheme.light(),
-      dark: const ColorScheme.dark(),
-    );
-    await ThemeController.instance.select(LockoutScheme.dynamicKey);
-
-    var notifications = 0;
-    void listener() => notifications++;
-    ThemeController.instance.addListener(listener);
-    addTearDown(() => ThemeController.instance.removeListener(listener));
-
-    ThemeController.instance.setDynamicSchemes(
-      light: const ColorScheme.light(primary: Color(0xFF00FF00)),
-      dark: const ColorScheme.dark(),
-    );
-
-    expect(
-      notifications,
-      1,
-      reason: 'the wallpaper changed and dynamic is what is on screen',
-    );
-  });
-
 }

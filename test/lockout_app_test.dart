@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-
 import 'package:lockout/main.dart';
 import 'package:lockout/screens/main_screen.dart';
 import 'package:lockout/services/database_service.dart';
 import 'package:lockout/theme/lockout_semantics.dart';
-import 'package:lockout/theme/schemes.dart';
 import 'package:lockout/theme/theme_controller.dart';
 import 'package:lockout/widgets/bottom_nav.dart';
 
@@ -63,12 +61,19 @@ void main() {
   }
 
   testWidgets('the app boots on the saved theme', (tester) async {
+    // An explicit dark choice rather than the fresh-install `system`: the
+    // test binding reports a light platform brightness, so `system` would
+    // paint light and prove nothing about the saved value being read.
+    await DatabaseService.instance.saveSetting('theme_key', 'dark|lime');
+    ThemeController.instance.resetForTest();
+    await ThemeController.instance.load();
+
     await tester.pumpWidget(const LockoutApp());
     await settle(tester);
 
     expect(find.byType(MainScreen), findsOneWidget);
     expect(find.byType(BottomNav), findsOneWidget);
-    expect(scaffoldFill(tester), LockoutScheme.graphite.colors.surface);
+    expect(scaffoldFill(tester), darkAppearance.colors.surface);
   });
 
   testWidgets('the semantics extension reaches the widgets below MaterialApp',
@@ -79,7 +84,9 @@ void main() {
     final context = tester.element(find.byType(BottomNav));
     expect(
       LockoutSemantics.of(context).categoryRamp,
-      LockoutScheme.graphite.semantics.categoryRamp,
+      lightAppearance.semantics.categoryRamp,
+      reason: 'the fresh-install default follows the system, and the test '
+          'binding reports a light platform brightness',
     );
   });
 
@@ -89,10 +96,11 @@ void main() {
     await settle(tester);
 
     final before = scaffoldFill(tester);
-    expect(before, LockoutScheme.graphite.colors.surface);
+    expect(before, lightAppearance.colors.surface);
     final navBefore = navFill(tester);
 
-    await ThemeController.instance.select('paper');
+    await ThemeController.instance
+        .selectBrightness(LockoutBrightnessChoice.dark);
     // pumpAndSettle, not a single pump: MaterialApp wraps its theme in an
     // AnimatedTheme, so frame zero still samples the previous colours and a
     // one-frame pump would assert against the tween's starting value.
@@ -103,7 +111,7 @@ void main() {
       isNot(before),
       reason: 'MainScreen kept the previous theme after a change',
     );
-    expect(scaffoldFill(tester), LockoutScheme.paper.colors.surface);
+    expect(scaffoldFill(tester), darkAppearance.colors.surface);
     expect(
       navFill(tester),
       isNot(navBefore),
@@ -129,7 +137,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('on top'), findsOneWidget);
 
-    await ThemeController.instance.select('indigo');
+    await ThemeController.instance
+        .selectBrightness(LockoutBrightnessChoice.dark);
     await tester.pumpAndSettle();
 
     navigator.pop();
@@ -143,7 +152,7 @@ void main() {
       reason: 'BottomNav still carries the theme it was built with before the '
           'user changed it',
     );
-    expect(scaffoldFill(tester), LockoutScheme.indigo.colors.surface);
+    expect(scaffoldFill(tester), darkAppearance.colors.surface);
   });
 
   testWidgets('a legacy palette key saved by the previous build still boots',
@@ -155,6 +164,6 @@ void main() {
     await tester.pumpWidget(const LockoutApp());
     await settle(tester);
 
-    expect(scaffoldFill(tester), LockoutScheme.graphite.colors.surface);
+    expect(scaffoldFill(tester), darkAppearance.colors.surface);
   });
 }

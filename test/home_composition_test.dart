@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lockout/theme/schemes.dart';
 import 'package:lockout/widgets/action_grid.dart';
 import 'package:lockout/widgets/calm_row.dart';
 import 'package:lockout/widgets/home_hub.dart';
@@ -24,7 +23,7 @@ HomeHub _hub({
     eyebrow: 'TODAY · MON',
     title: 'Legs',
     subtitle: '4 exercises · 12 sets',
-    heroColor: LockoutScheme.graphite.semantics.categoryAt(0),
+    heroColor: darkAppearance.semantics.categoryAt(0),
     heroActions: const [],
     foodTabEnabled: foodTabEnabled,
     summary: summary ??

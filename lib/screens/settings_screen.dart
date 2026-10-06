@@ -6,9 +6,10 @@ import '../services/notification_service.dart';
 import '../services/numeric_guard.dart';
 import '../services/nutrition_planner.dart';
 import '../services/units.dart';
+import '../theme/accents.dart';
 import '../theme/lockout_semantics.dart';
 import '../theme/lockout_theme.dart';
-import '../theme/schemes.dart';
+import '../theme/palette.dart';
 import '../theme/theme_controller.dart';
 import '../widgets/calm_row.dart';
 import '../widgets/lockout_card.dart';
@@ -326,16 +327,13 @@ class SettingsBodyState extends State<SettingsBody> {
 
   // --- THEME ---
 
-  /// `key` is a [LockoutScheme.key], or [LockoutScheme.dynamicKey].
-  Future<void> _applyTheme(String key) => ThemeController.instance.select(key);
-
-  /// Tap handler for a theme swatch. `_applyTheme` persists the selection;
-  /// a throw there (bad key, storage failure) must not vanish as a silent,
-  /// unhandled async error — surface it the same way every other write on
-  /// this screen does.
-  Future<void> _selectTheme(String key) async {
+  /// Tap handler for a theme swatch. `selectAccent` persists the selection;
+  /// a throw there (storage failure) must not vanish as a silent, unhandled
+  /// async error — surface it the same way every other write on this screen
+  /// does.
+  Future<void> _selectAccent(LockoutAccent accent) async {
     try {
-      await _applyTheme(key);
+      await ThemeController.instance.selectAccent(accent);
     } catch (_) {
       _toast('Could not apply theme.', warn: true);
     }
@@ -445,10 +443,10 @@ class SettingsBodyState extends State<SettingsBody> {
     }
 
     // Restored settings include the theme, so re-read everything.
-    final db = DatabaseService.instance;
-    final restoredTheme =
-        await db.getSetting('theme_key', defaultValue: LockoutScheme.fallback.key);
-    await ThemeController.instance.select(restoredTheme);
+    // `load()` rather than a read-then-select pair: it is the one place that
+    // knows both axes and the legacy formats, and an imported backup can
+    // carry a `theme_key` written by any older build.
+    await ThemeController.instance.load();
     if (!mounted) return;
 
     // A belt, and deliberately kept as one now that both braces hold:
@@ -572,27 +570,18 @@ class SettingsBodyState extends State<SettingsBody> {
           Wrap(
             spacing: LockoutTheme.spaceMd,
             runSpacing: LockoutTheme.spaceMd,
-            // `pickerKeys` is the single source of "what the picker should
-            // offer, in order" — it already gates the dynamic entry on
-            // `dynamicAvailable`, so re-deriving that gate here would just be
-            // a second copy of the same rule to keep in sync.
+            // One swatch per accent. The brightness axis is the picker's
+            // other half and is rebuilt, with this list, in task 8; each
+            // swatch previews its accent against the brightness that is on
+            // screen right now.
             children: [
-              for (final key in controller.pickerKeys)
-                if (key == LockoutScheme.dynamicKey)
-                  _ThemeSwatch(
-                    name: 'Match my phone',
-                    colors: null,
-                    icon: Icons.palette,
-                    selected: controller.selectedKey == LockoutScheme.dynamicKey,
-                    onTap: () => _selectTheme(LockoutScheme.dynamicKey),
-                  )
-                else
-                  _ThemeSwatch(
-                    name: LockoutScheme.byKey(key).name,
-                    colors: LockoutScheme.byKey(key).colors,
-                    selected: controller.selectedKey == key,
-                    onTap: () => _selectTheme(key),
-                  ),
+              for (final accent in LockoutAccent.all)
+                _ThemeSwatch(
+                  name: accent.name,
+                  colors: LockoutPalette.schemeFor(theme.brightness, accent),
+                  selected: controller.accent == accent,
+                  onTap: () => _selectAccent(accent),
+                ),
             ],
           ),
         ],
@@ -681,7 +670,7 @@ class SettingsBodyState extends State<SettingsBody> {
               ),
               decoration: BoxDecoration(
                 color: theme.colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(LockoutTheme.radiusButton),
+                borderRadius: BorderRadius.circular(LockoutTheme.radiusField),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -849,7 +838,7 @@ class SettingsBodyState extends State<SettingsBody> {
                 padding: const EdgeInsets.all(LockoutTheme.spaceMd),
                 decoration: BoxDecoration(
                   color: theme.colorScheme.tertiaryContainer,
-                  borderRadius: BorderRadius.circular(LockoutTheme.radiusButton),
+                  borderRadius: BorderRadius.circular(LockoutTheme.radiusField),
                 ),
                 child: Text(
                   plan.warning!,
@@ -1000,19 +989,18 @@ class SettingsBodyState extends State<SettingsBody> {
 /// One selectable appearance in the theme picker: a 2-column miniature card
 /// preview, the scheme name, and a check mark when selected.
 ///
-/// [colors] is null only for the dynamic ("Match my phone") entry, which has
-/// no fixed swatch of its own — its preview is [icon] instead.
+/// [colors] used to be nullable for the dynamic ("Match my phone") entry,
+/// which had no fixed swatch of its own and drew an icon instead. Material
+/// You is gone, so every swatch now has real colours to preview.
 class _ThemeSwatch extends StatelessWidget {
   final String name;
-  final ColorScheme? colors;
-  final IconData? icon;
+  final ColorScheme colors;
   final bool selected;
   final VoidCallback onTap;
 
   const _ThemeSwatch({
     required this.name,
     required this.colors,
-    this.icon,
     required this.selected,
     required this.onTap,
   });
@@ -1024,12 +1012,12 @@ class _ThemeSwatch extends StatelessWidget {
 
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(LockoutTheme.radiusButton),
+      borderRadius: BorderRadius.circular(LockoutTheme.radiusField),
       child: Container(
         width: LockoutTheme.swatchWidth,
         padding: const EdgeInsets.all(LockoutTheme.spaceSm),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(LockoutTheme.radiusButton),
+          borderRadius: BorderRadius.circular(LockoutTheme.radiusField),
           border: Border.all(
             color: selected
                 ? theme.colorScheme.primary
@@ -1050,13 +1038,10 @@ class _ThemeSwatch extends StatelessWidget {
                   padding: const EdgeInsets.all(LockoutTheme.spaceXs),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: swatchColors?.surface ??
-                        theme.colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(LockoutTheme.radiusButton),
+                    color: swatchColors.surface,
+                    borderRadius: BorderRadius.circular(LockoutTheme.radiusField),
                   ),
-                  child: swatchColors == null
-                      ? Icon(icon, color: theme.colorScheme.onSurfaceVariant)
-                      : Row(
+                  child: Row(
                           children: [
                             Expanded(child: _pill(swatchColors.primary)),
                             const SizedBox(width: LockoutTheme.spaceXs),

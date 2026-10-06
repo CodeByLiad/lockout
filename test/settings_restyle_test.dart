@@ -7,15 +7,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-
 import 'package:lockout/models/models.dart';
 import 'package:lockout/screens/profile_tab.dart';
 import 'package:lockout/screens/settings_screen.dart';
 import 'package:lockout/services/database_service.dart';
 import 'package:lockout/services/goal_service.dart';
 import 'package:lockout/services/nutrition_planner.dart';
+import 'package:lockout/theme/accents.dart';
 import 'package:lockout/theme/lockout_theme.dart';
-import 'package:lockout/theme/schemes.dart';
 import 'package:lockout/widgets/lockout_field.dart';
 
 import 'test_helpers.dart';
@@ -492,7 +491,7 @@ void main() {
           tester.getSize(find.byKey(const Key('importBackupButton')));
       expect(importButton.height, greaterThanOrEqualTo(LockoutTheme.minTouchTarget));
 
-      // The two hand-built stepper buttons and the seven swatches take their
+      // The two hand-built stepper buttons and the accent swatches take their
       // size from `LockoutTheme` too, but by their own `constraints:` /
       // `width:`/`height:`, not from a component theme the two checks above
       // already pin — so they need their own assertion.
@@ -508,39 +507,39 @@ void main() {
       expect(incrementButton.width, greaterThanOrEqualTo(LockoutTheme.minTouchTarget));
       expect(incrementButton.height, greaterThanOrEqualTo(LockoutTheme.minTouchTarget));
 
-      for (final scheme in LockoutScheme.all) {
+      for (final accent in LockoutAccent.all) {
         final swatch = find.ancestor(
-          of: find.text(scheme.name),
+          of: find.text(accent.name),
           matching: find.byType(InkWell),
         );
         final size = tester.getSize(swatch);
         expect(size.height, greaterThanOrEqualTo(LockoutTheme.minTouchTarget),
-            reason: scheme.key);
+            reason: accent.key);
       }
     });
 
     testWidgets(
         'the import trigger and its confirmation are both danger-coloured',
         (tester) async {
-      // Every shipped scheme happens to set `danger` to the same value as
+      // Every shipped appearance happens to set `danger` to the same value as
       // `ColorScheme.error`, so a test against the shipped theme could not
       // tell the two roles apart. This one overrides `danger` to a sentinel
       // that no other role holds.
       const sentinel = Color(0xFF00FF00);
       final theme = LockoutTheme.build(
-        colors: LockoutScheme.graphite.colors,
+        colors: darkAppearance.colors,
         semantics:
-            LockoutScheme.graphite.semantics.copyWith(danger: sentinel),
+            darkAppearance.semantics.copyWith(danger: sentinel),
       );
       await pumpSettings(tester, theme: theme);
       final colors = theme.colorScheme;
 
-      // The trigger, not only the confirmation. Under a dynamic (Material
-      // You) scheme `ThemeController._harmonised` keeps `error` on the
-      // wallpaper's red while `danger` comes from the authored fallback, so
-      // a button painted `error` and the dialog it opens painted `danger`
-      // put one destructive action in two colours on one screen. The
-      // sentinel above is what makes that difference visible here.
+      // The trigger, not only the confirmation. `danger` and
+      // `colorScheme.error` are separate roles that happen to agree in every
+      // shipped appearance, so a button painted `error` and the dialog it
+      // opens painted `danger` would put one destructive action in two
+      // colours the moment they ever diverge. The sentinel above is what
+      // makes that difference visible here.
       final importButton = tester.widget<OutlinedButton>(
         find.byKey(const Key('importBackupButton')),
       );
@@ -574,15 +573,15 @@ void main() {
       expect(sentinel, isNot(colors.error));
     });
 
-    testWidgets('the seven-swatch theme picker sits under an Appearance caption',
+    testWidgets('the accent picker sits under an Appearance caption',
         (tester) async {
       await pumpSettings(tester);
       expect(find.text('Appearance'), findsOneWidget);
 
       // This would still pass with the whole picker deleted, unless it also
       // asserts the swatches its own name promises are actually there.
-      for (final scheme in LockoutScheme.all) {
-        expect(find.text(scheme.name), findsOneWidget, reason: scheme.key);
+      for (final accent in LockoutAccent.all) {
+        expect(find.text(accent.name), findsOneWidget, reason: accent.key);
       }
     });
   });

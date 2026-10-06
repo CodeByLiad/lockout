@@ -1,7 +1,6 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lockout/services/database_service.dart';
-import 'package:lockout/theme/schemes.dart';
+import 'package:lockout/theme/accents.dart';
 import 'package:lockout/theme/theme_controller.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -29,40 +28,31 @@ void main() {
   // otherwise leak into the next one to run.
   tearDown(() => ThemeController.instance.resetForTest());
 
-  testWidgets('offers six swatches and no dynamic option when unavailable',
+  testWidgets('offers one swatch per accent and no Material You entry',
       (tester) async {
     await tester.pumpWidget(hostedProfileTab());
     await settle(tester);
 
-    for (final scheme in LockoutScheme.all) {
-      expect(find.text(scheme.name), findsOneWidget, reason: scheme.key);
+    for (final accent in LockoutAccent.all) {
+      expect(find.text(accent.name), findsOneWidget, reason: accent.key);
     }
+    // Material You went with the `dynamic_color` dependency: the house
+    // system forbids wallpaper-derived colour.
     expect(find.text('Match my phone'), findsNothing);
-  });
-
-  testWidgets('offers the dynamic option once the platform supplies one',
-      (tester) async {
-    ThemeController.instance.setDynamicSchemes(
-      light: const ColorScheme.light(),
-      dark: const ColorScheme.dark(),
-    );
-    await tester.pumpWidget(hostedProfileTab());
-    await settle(tester);
-
-    expect(find.text('Match my phone'), findsOneWidget);
   });
 
   testWidgets('choosing a swatch persists it and repaints', (tester) async {
     await tester.pumpWidget(hostedProfileTab());
     await settle(tester);
 
-    await tester.tap(find.text('Paper'));
+    await tester.tap(find.text(LockoutAccent.coral.name));
     await settle(tester);
 
-    expect(ThemeController.instance.selectedKey, 'paper');
+    expect(ThemeController.instance.accent, LockoutAccent.coral);
     expect(
       await DatabaseService.instance.getSetting('theme_key', defaultValue: ''),
-      'paper',
+      'system|coral',
+      reason: 'the accent moves without disturbing the brightness axis',
     );
   });
 
@@ -75,7 +65,8 @@ void main() {
   testWidgets(
       'a swatch tap that fails to persist warns instead of vanishing as an '
       'unhandled error', (tester) async {
-    // Forces `ThemeController.select`'s `saveSetting` write to throw, the
+    // Forces `ThemeController.selectAccent`'s `saveSetting` write to throw,
+    // the
     // same aborting-trigger technique `database_service_test.dart` uses for
     // `set_logs`. Self-contained: created and dropped inside this test only,
     // so it cannot leak into the suites the serial runner reuses this
@@ -94,7 +85,7 @@ void main() {
     await tester.pumpWidget(hostedProfileTab());
     await settle(tester);
 
-    await tester.tap(find.text('Paper'));
+    await tester.tap(find.text(LockoutAccent.coral.name));
     await settle(tester);
 
     // Before the fix, `onTap: () async => await _applyTheme(key)` still

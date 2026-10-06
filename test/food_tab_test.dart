@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-
 import 'package:lockout/models/models.dart';
-import 'package:lockout/theme/schemes.dart';
+
 import 'package:lockout/screens/food_tab.dart';
 import 'package:lockout/services/database_service.dart';
 import 'package:lockout/widgets/meal_section.dart';
@@ -248,7 +247,7 @@ void main() {
       // configured in a freshly-wiped/reseeded DB, so no nutrition plan
       // exists to override it.
       expect(hero.progress, closeTo(800 / 2200, 0.0001));
-      expect(hero.accent, equals(LockoutScheme.graphite.colors.primary));
+      expect(hero.accent, equals(darkAppearance.colors.primary));
       expect(find.textContaining('left'), findsOneWidget);
     });
 
@@ -270,7 +269,7 @@ void main() {
       await settle(tester);
 
       final hero = tester.widget<ProgressHero>(find.byType(ProgressHero));
-      expect(hero.accent, equals(LockoutScheme.graphite.colors.error));
+      expect(hero.accent, equals(darkAppearance.colors.error));
       expect(find.textContaining('over'), findsOneWidget);
     });
 

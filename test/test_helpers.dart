@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lockout/screens/profile_tab.dart';
 import 'package:lockout/services/database_service.dart';
+import 'package:lockout/theme/accents.dart';
+import 'package:lockout/theme/lockout_semantics.dart';
 import 'package:lockout/theme/lockout_theme.dart';
-import 'package:lockout/theme/schemes.dart';
+import 'package:lockout/theme/palette.dart';
 import 'package:lockout/theme/theme_controller.dart';
 import 'package:webview_flutter_platform_interface/webview_flutter_platform_interface.dart';
 
@@ -131,14 +133,59 @@ int _endOfStringLiteral(String source, int start) {
   return source.length;
 }
 
+/// One appearance the app can be in: a brightness crossed with an accent.
+///
+/// The appearance used to be a single named `LockoutScheme`, and a test that
+/// wanted "the shipped dark look" could say `LockoutScheme.graphite`. Theme
+/// selection is two independent axes now, so this pairs them back up for the
+/// tests that only ever needed *an* appearance to paint against — it is a
+/// test fixture, not a reintroduction of the retired class: it authors no
+/// colour of its own and reads everything from [LockoutPalette].
+@immutable
+class TestAppearance {
+  const TestAppearance(this.brightness, this.accent);
+
+  final Brightness brightness;
+  final LockoutAccent accent;
+
+  ColorScheme get colors => LockoutPalette.schemeFor(brightness, accent);
+
+  LockoutSemantics get semantics =>
+      LockoutPalette.semanticsFor(brightness, accent);
+
+  ThemeData get theme =>
+      LockoutTheme.build(colors: colors, semantics: semantics);
+
+  /// What a failure reason should name, matching the persisted format.
+  String get key => '${brightness.name}|${accent.key}';
+}
+
+/// The default appearance for a test that just needs the app's dark look.
+const darkAppearance = TestAppearance(Brightness.dark, LockoutAccent.fallback);
+
+/// Its light counterpart, for the tests that prove a value came from the
+/// theme by watching it change across two of them.
+const lightAppearance =
+    TestAppearance(Brightness.light, LockoutAccent.fallback);
+
+/// Every appearance the app can produce: both brightnesses crossed with
+/// every accent. The replacement for the retired `LockoutScheme.all` in the
+/// suites that swept every shipped appearance.
+final allAppearances = <TestAppearance>[
+  for (final accent in LockoutAccent.all) ...[
+    TestAppearance(Brightness.light, accent),
+    TestAppearance(Brightness.dark, accent),
+  ],
+];
+
 /// The app's real `ThemeData`, for any test that pumps a widget which reads
 /// `LockoutSemantics`.
 ///
 /// `LockoutSemantics.of` asserts rather than falling back, so a bare
 /// `MaterialApp()` fails loudly instead of silently painting framework
 /// defaults. This is the one-liner that satisfies it.
-ThemeData lockoutTestTheme([LockoutScheme scheme = LockoutScheme.graphite]) =>
-    LockoutTheme.build(colors: scheme.colors, semantics: scheme.semantics);
+ThemeData lockoutTestTheme([TestAppearance appearance = darkAppearance]) =>
+    appearance.theme;
 
 /// Hosts `ProfileTab` the way `main.dart` hosts `MainScreen`: rebuilt
 /// whenever `ThemeController` notifies, so a swatch selection actually

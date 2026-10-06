@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lockout/theme/lockout_theme.dart';
-import 'package:lockout/theme/schemes.dart';
 import 'package:lockout/widgets/lockout_card.dart';
 import 'package:lockout/widgets/lockout_field.dart';
 import 'package:lockout/widgets/sheet_scaffold.dart';
 
-ThemeData _theme([LockoutScheme scheme = LockoutScheme.graphite]) =>
+import 'test_helpers.dart';
+
+ThemeData _theme([TestAppearance scheme = darkAppearance]) =>
     LockoutTheme.build(colors: scheme.colors, semantics: scheme.semantics);
 
-Widget _host(Widget child, {LockoutScheme scheme = LockoutScheme.graphite}) =>
+Widget _host(Widget child, {TestAppearance scheme = darkAppearance}) =>
     MaterialApp(theme: _theme(scheme), home: Scaffold(body: child));
 
 Widget _sheetOpener({String title = 'Add day'}) => Builder(
@@ -124,7 +125,7 @@ void main() {
       // the inner TextField sees it, so asserting `fillColor == null` would
       // only prove where the merge happens. Asserting the resolved value
       // against two different schemes proves it actually came from the theme.
-      Future<Color?> fillUnder(LockoutScheme scheme) async {
+      Future<Color?> fillUnder(TestAppearance scheme) async {
         await tester.pumpWidget(
           _host(
             LockoutField(controller: controller, label: 'Weight'),
@@ -141,12 +142,12 @@ void main() {
       }
 
       expect(
-        await fillUnder(LockoutScheme.graphite),
-        LockoutScheme.graphite.colors.surfaceContainerHigh,
+        await fillUnder(darkAppearance),
+        darkAppearance.colors.surfaceContainerHigh,
       );
       expect(
-        await fillUnder(LockoutScheme.paper),
-        LockoutScheme.paper.colors.surfaceContainerHigh,
+        await fillUnder(lightAppearance),
+        lightAppearance.colors.surfaceContainerHigh,
       );
     });
   });
@@ -245,7 +246,7 @@ void main() {
 
   testWidgets('the kit repaints across every scheme without a hard border',
       (tester) async {
-    for (final scheme in LockoutScheme.all) {
+    for (final scheme in allAppearances) {
       await tester.pumpWidget(_host(
         LockoutCard(child: const Text('x')),
         scheme: scheme,
