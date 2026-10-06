@@ -16,6 +16,38 @@ Future<void> _loadWithSetting(String? value) async {
   await ThemeController.instance.load();
 }
 
+/// Makes every write to `theme_key` fail, and only that key.
+///
+/// The same aborting-trigger technique `theme_picker_test.dart` and
+/// `database_service_test.dart` use: it is the one way to produce what a
+/// locked, read-only or full database does without mocking
+/// `DatabaseService`, which is a singleton with no injection seam. Scoped to
+/// one key so the seeding each `setUp` does still works, and dropped in a
+/// teardown so it cannot follow the process into another suite.
+Future<void> _failEveryThemeWrite() async {
+  final database = await DatabaseService.instance.database;
+  Future<void> drop() =>
+      database.execute('DROP TRIGGER IF EXISTS test_fail_theme_key');
+  await drop();
+  addTearDown(drop);
+  await database.execute(
+    "CREATE TRIGGER test_fail_theme_key BEFORE INSERT ON user_settings "
+    "WHEN NEW.key = 'theme_key' "
+    "BEGIN SELECT RAISE(ABORT, 'rejected by test trigger'); END;",
+  );
+}
+
+/// Stops `getSetting` resolving, by moving the table it reads out from under
+/// it. A read failure has to stay loud, and no trigger fires on a SELECT, so
+/// the table itself is renamed aside and put back in a teardown.
+Future<void> _failEverySettingRead() async {
+  final database = await DatabaseService.instance.database;
+  await database
+      .execute('ALTER TABLE user_settings RENAME TO user_settings_hidden');
+  addTearDown(() => database
+      .execute('ALTER TABLE user_settings_hidden RENAME TO user_settings'));
+}
+
 void main() {
   // The no-isolate factory against an in-memory path, matching every other
   // suite here. The isolate-backed factory arms a 10s transaction timeout
@@ -181,6 +213,169 @@ void main() {
       await _loadWithSetting('system|lime');
       expect(ThemeController.instance.lightTheme.brightness, Brightness.light);
       expect(ThemeController.instance.darkTheme.brightness, Brightness.dark);
+    });
+  });
+
+  // `main.dart` awaits `load()` before `runApp`, so anything that escapes it
+  // happens with no widget tree to report it in: a blank screen on every
+  // launch and no way back from inside the app. The write-back is only an
+  // optimisation — the choice is already in memory by the time it runs — so
+  // losing it costs one re-migration next launch, not the app.
+  group('load() survives a write it cannot make', () {
+    test('a migration whose write-back fails still applies the choice',
+        () async {
+      await wipeDatabaseAndReseed(DatabaseService.instance);
+      await DatabaseService.instance.saveSetting('theme_key', 'indigo');
+      await _failEveryThemeWrite();
+      ThemeController.instance.resetForTest();
+
+      await expectLater(ThemeController.instance.load(), completes);
+      expect(ThemeController.instance.brightnessChoice,
+          LockoutBrightnessChoice.dark);
+      expect(ThemeController.instance.accent, LockoutAccent.violet);
+    });
+
+    test('a fresh install whose first write fails still boots', () async {
+      await wipeDatabaseAndReseed(DatabaseService.instance);
+      await _failEveryThemeWrite();
+      ThemeController.instance.resetForTest();
+
+      await expectLater(ThemeController.instance.load(), completes);
+      expect(ThemeController.instance.brightnessChoice,
+          LockoutBrightnessChoice.system);
+      expect(ThemeController.instance.accent, LockoutAccent.lime);
+    });
+
+    test('the un-written migration simply runs again on the next launch',
+        () async {
+      await wipeDatabaseAndReseed(DatabaseService.instance);
+      await DatabaseService.instance.saveSetting('theme_key', 'indigo');
+      final database = await DatabaseService.instance.database;
+      await _failEveryThemeWrite();
+      ThemeController.instance.resetForTest();
+      await ThemeController.instance.load();
+
+      // The old value is left intact rather than cleared, so the next launch
+      // migrates it again — this time against a writable database.
+      expect(await DatabaseService.instance.getSetting('theme_key'), 'indigo');
+
+      await database.execute('DROP TRIGGER IF EXISTS test_fail_theme_key');
+      ThemeController.instance.resetForTest();
+      await ThemeController.instance.load();
+      expect(
+        await DatabaseService.instance.getSetting('theme_key'),
+        'dark|violet',
+      );
+    });
+
+    test('a failed read still escapes, because nothing can be resolved '
+        'without it', () async {
+      await wipeDatabaseAndReseed(DatabaseService.instance);
+      await _failEverySettingRead();
+      ThemeController.instance.resetForTest();
+
+      await expectLater(ThemeController.instance.load(), throwsA(anything));
+    });
+  });
+
+  // Committing the field before the write leaves the controller claiming a
+  // choice the database refused, with no `notifyListeners` to repaint the app
+  // to match — and the equality guard then swallows the retry.
+  group('a selection that cannot be persisted changes nothing', () {
+    test('selectAccent leaves the accent as stored when the write fails',
+        () async {
+      await _loadWithSetting('dark|lime');
+      await _failEveryThemeWrite();
+
+      await expectLater(
+        ThemeController.instance.selectAccent(LockoutAccent.teal),
+        throwsA(anything),
+      );
+      expect(ThemeController.instance.accent, LockoutAccent.lime);
+      expect(
+          await DatabaseService.instance.getSetting('theme_key'), 'dark|lime');
+    });
+
+    test('selectBrightness leaves the brightness as stored when the write '
+        'fails', () async {
+      await _loadWithSetting('dark|lime');
+      await _failEveryThemeWrite();
+
+      await expectLater(
+        ThemeController.instance
+            .selectBrightness(LockoutBrightnessChoice.light),
+        throwsA(anything),
+      );
+      expect(ThemeController.instance.brightnessChoice,
+          LockoutBrightnessChoice.dark);
+      expect(
+          await DatabaseService.instance.getSetting('theme_key'), 'dark|lime');
+    });
+
+    test('a failed selection does not notify, so nothing repaints a choice '
+        'the database refused', () async {
+      await _loadWithSetting('dark|lime');
+      await _failEveryThemeWrite();
+
+      var notifications = 0;
+      void listener() => notifications++;
+      ThemeController.instance.addListener(listener);
+      await expectLater(
+        ThemeController.instance.selectAccent(LockoutAccent.teal),
+        throwsA(anything),
+      );
+      ThemeController.instance.removeListener(listener);
+      expect(notifications, 0);
+    });
+
+    test('tapping the same accent again retries rather than no-opping',
+        () async {
+      await _loadWithSetting('dark|lime');
+      final database = await DatabaseService.instance.database;
+      await _failEveryThemeWrite();
+
+      await expectLater(
+        ThemeController.instance.selectAccent(LockoutAccent.teal),
+        throwsA(anything),
+      );
+
+      // The second tap, against a writable database. Had the first tap
+      // committed the field, the equality guard would return early here and
+      // the user would be stuck with a theme that never applies and a toast
+      // that never comes back.
+      await database.execute('DROP TRIGGER IF EXISTS test_fail_theme_key');
+      var notifications = 0;
+      void listener() => notifications++;
+      ThemeController.instance.addListener(listener);
+      await ThemeController.instance.selectAccent(LockoutAccent.teal);
+      ThemeController.instance.removeListener(listener);
+
+      expect(notifications, 1);
+      expect(ThemeController.instance.accent, LockoutAccent.teal);
+      expect(
+          await DatabaseService.instance.getSetting('theme_key'), 'dark|teal');
+    });
+
+    test('tapping the same brightness again retries rather than no-opping',
+        () async {
+      await _loadWithSetting('dark|lime');
+      final database = await DatabaseService.instance.database;
+      await _failEveryThemeWrite();
+
+      await expectLater(
+        ThemeController.instance
+            .selectBrightness(LockoutBrightnessChoice.light),
+        throwsA(anything),
+      );
+
+      await database.execute('DROP TRIGGER IF EXISTS test_fail_theme_key');
+      await ThemeController.instance
+          .selectBrightness(LockoutBrightnessChoice.light);
+
+      expect(ThemeController.instance.brightnessChoice,
+          LockoutBrightnessChoice.light);
+      expect(
+          await DatabaseService.instance.getSetting('theme_key'), 'light|lime');
     });
   });
 }

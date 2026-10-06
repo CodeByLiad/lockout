@@ -91,27 +91,50 @@ class ThemeController extends ChangeNotifier {
 
     final canonical = _encode(brightness, accent);
     if (saved != canonical) {
-      await DatabaseService.instance.saveSetting(_settingKey, canonical);
+      try {
+        await DatabaseService.instance.saveSetting(_settingKey, canonical);
+      } catch (_) {
+        // The write is an optimisation, not the migration: the resolved
+        // choice is already in the fields above. `main` awaits this before
+        // `runApp`, so letting the failure out would replace the app with a
+        // blank screen on every launch, with no widget alive to offer a way
+        // back. Dropping it costs one re-migration next launch instead, and
+        // the stored value is left intact for it — never cleared.
+      }
     }
     notifyListeners();
   }
 
+  /// Persist first, then commit.
+  ///
+  /// The write is the part that can fail, so the field is only moved once
+  /// the database has taken the value. The alternative — assign, then write —
+  /// leaves the controller claiming a choice the database refused, with no
+  /// `notifyListeners` to repaint the app to match, and the equality guard
+  /// below then turns the user's retry into a no-op. The throw is deliberate:
+  /// the caller shows the failure.
   Future<void> selectBrightness(LockoutBrightnessChoice choice) async {
     if (choice == _brightness) return;
+    await _persist(choice, _accent);
     _brightness = choice;
-    await _persist();
     notifyListeners();
   }
 
   Future<void> selectAccent(LockoutAccent accent) async {
     if (accent == _accent) return;
+    await _persist(_brightness, accent);
     _accent = accent;
-    await _persist();
     notifyListeners();
   }
 
-  Future<void> _persist() => DatabaseService.instance
-      .saveSetting(_settingKey, _encode(_brightness, _accent));
+  /// Takes the pair explicitly rather than reading the fields, so it cannot
+  /// be called in an order that writes a half-applied state.
+  Future<void> _persist(
+    LockoutBrightnessChoice brightness,
+    LockoutAccent accent,
+  ) =>
+      DatabaseService.instance
+          .saveSetting(_settingKey, _encode(brightness, accent));
 
   static String _encode(
     LockoutBrightnessChoice brightness,
