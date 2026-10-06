@@ -22,9 +22,16 @@ Future<double> _statTileContentHeight(
           body: Align(
             alignment: Alignment.topLeft,
             child: IntrinsicHeight(
-              child: Padding(
+              // A `Container` with both an explicit padding and a border
+              // adds `decoration.padding` on top — 1dp a side — so a plain
+              // `Padding` probe under-reports the real `StatTile` by 2dp.
+              // The probe that exists to stop guessing must not itself guess.
+              child: Container(
                 key: const Key('probe'),
                 padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  border: Border.all(color: const Color(0xFF000000)),
+                ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,

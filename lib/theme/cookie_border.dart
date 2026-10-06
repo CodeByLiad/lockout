@@ -112,15 +112,25 @@ class CookieBorder extends ShapeBorder {
         side: side.scale(t),
       );
 
-  @override
-  ShapeBorder? lerpFrom(ShapeBorder? a, double t) {
-    if (a is! CookieBorder) return super.lerpFrom(a, t);
-    assert(
-      a.lobes == lobes,
-      'CookieBorder cannot interpolate between ${a.lobes} and $lobes lobes: '
+  /// Refuses a lobe-count mismatch in release as well as in debug.
+  ///
+  /// This used to be an `assert`, which is stripped from a release build —
+  /// so the one outcome the design says this prevents, silently drawing a
+  /// path with the wrong lobe count, was exactly what shipped. A register
+  /// mismatch is a programming error either way, so it throws either way.
+  void _requireSameRegister(int other) {
+    if (other == lobes) return;
+    throw ArgumentError(
+      'CookieBorder cannot interpolate between $other and $lobes lobes: '
       'lobe count is a register, not a value. Cross-fade the two shapes '
       'instead of morphing one into the other.',
     );
+  }
+
+  @override
+  ShapeBorder? lerpFrom(ShapeBorder? a, double t) {
+    if (a is! CookieBorder) return super.lerpFrom(a, t);
+    _requireSameRegister(a.lobes);
     return CookieBorder(
       lobes: lobes,
       amplitude: lerpDouble(a.amplitude, amplitude, t)!,
@@ -131,12 +141,7 @@ class CookieBorder extends ShapeBorder {
   @override
   ShapeBorder? lerpTo(ShapeBorder? b, double t) {
     if (b is! CookieBorder) return super.lerpTo(b, t);
-    assert(
-      b.lobes == lobes,
-      'CookieBorder cannot interpolate between $lobes and ${b.lobes} lobes: '
-      'lobe count is a register, not a value. Cross-fade the two shapes '
-      'instead of morphing one into the other.',
-    );
+    _requireSameRegister(b.lobes);
     return CookieBorder(
       lobes: lobes,
       amplitude: lerpDouble(amplitude, b.amplitude, t)!,

@@ -83,10 +83,14 @@ void main() {
       expect(mid.amplitude, closeTo(0.05, 0.0001));
     });
 
-    test('a lobe-count mismatch asserts rather than drawing a wrong path', () {
+    test('a lobe-count mismatch throws rather than drawing a wrong path', () {
       const a = CookieBorder(lobes: 6, amplitude: 0.07);
       const b = CookieBorder(lobes: 9, amplitude: 0.06);
-      expect(() => ShapeBorder.lerp(a, b, 0.5), throwsAssertionError);
+      // `throwsArgumentError`, not `throwsAssertionError`: an assert is
+      // stripped from a release build, so the silent wrong path this guards
+      // against was precisely what would have shipped.
+      expect(() => ShapeBorder.lerp(a, b, 0.5), throwsArgumentError);
+      expect(() => ShapeBorder.lerp(b, a, 0.5), throwsArgumentError);
     });
   });
 

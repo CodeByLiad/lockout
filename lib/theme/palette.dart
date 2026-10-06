@@ -83,11 +83,11 @@ class LockoutPalette {
   /// colour and produced muddy mid-tones; that finding predates this
   /// redesign and still holds. Two ramps now, not six.
   static const List<Color> _lightRamp = [
-    Color(0xFF3F6B2E),
+    Color(0xFF365E27),
     Color(0xFF1D5C78),
     Color(0xFF6B3F8C),
     Color(0xFF8C4A1F),
-    Color(0xFF0F6B5C),
+    Color(0xFF0C5B4E),
     Color(0xFF7A2F55),
     Color(0xFF3E4A6B),
     Color(0xFF6B5C0F),

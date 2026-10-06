@@ -117,6 +117,25 @@ void main() {
       }
     });
 
+    test('every ramp entry clears 4.5 on its own tinted chip', () {
+      // `week_day_row.dart` paints a ramp colour as 12px text over a 16%
+      // alpha wash of itself. Testing the ramp against the bare surface
+      // missed that composite entirely, and two light entries sat at 4.39
+      // and 4.45.
+      for (final brightness in Brightness.values) {
+        final scheme = LockoutPalette.schemeFor(brightness, LockoutAccent.lime);
+        final semantics =
+            LockoutPalette.semanticsFor(brightness, LockoutAccent.lime);
+
+        for (final colour in semantics.categoryRamp) {
+          final chip =
+              Color.alphaBlend(colour.withValues(alpha: 0.16), scheme.surfaceContainer);
+          expect(_contrast(colour, chip), greaterThanOrEqualTo(4.5),
+              reason: '$colour on its own $brightness chip');
+        }
+      }
+    });
+
     test('the ramp has eight entries, as categoryAt assumes', () {
       expect(
         LockoutPalette.semanticsFor(Brightness.dark, LockoutAccent.lime)
