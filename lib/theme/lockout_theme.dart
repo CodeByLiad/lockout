@@ -43,13 +43,19 @@ class LockoutTheme {
   /// screen is: a ratio makes every narrower column a shorter tile, so the
   /// same grid that fits on a 430dp phone clips on a 360dp one.
   ///
-  /// The number is set by text scale, not by design taste. Measured against
-  /// this theme, the label line, the 4dp gap, the 16pt mono value and the
-  /// tile's own 12dp padding come to 66dp at scale 1.0, 68 at 1.05, 71 at
-  /// 1.10 and 72 at 1.15. 72 is therefore the smallest value on the 8dp grid
-  /// that survives Android's "Large" font setting, which is the largest step
-  /// a user reaches without opening accessibility settings.
-  /// `body_tab_test.dart` pins that.
+  /// The number is set by text scale, not by design taste. Re-measured
+  /// against Figtree when the body face replaced Inter: the label line, the
+  /// 4dp gap, the 16pt mono value and the tile's own 12dp padding come to
+  /// 67dp at scale 1.0, 69 at 1.05, 71 at 1.10 and 72 at 1.15. Figtree needs
+  /// one more dp than Inter at the low end and lands on exactly the same
+  /// ceiling at the high end, so 72 survives the face change unchanged — but
+  /// with zero headroom, which is why the measurement is a test rather than
+  /// a comment.
+  ///
+  /// 72 is the smallest value on the 8dp grid that survives Android's
+  /// "Large" font setting, the largest step a user reaches without opening
+  /// accessibility settings. `measured_constants_test.dart` measures it and
+  /// `body_tab_test.dart` pins it.
   static const double statTileHeight = 72;
 
   // The theme picker's swatch card — the only raw dimensions left outside
