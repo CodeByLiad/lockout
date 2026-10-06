@@ -133,24 +133,36 @@ void main() {
       expect(style, isNotNull);
       expect(
         style!.fontFamily,
-        anyOf('Inter', 'JetBrainsMono'),
+        anyOf(
+          LockoutTheme.fontDisplay,
+          LockoutTheme.fontBody,
+          LockoutTheme.fontMono,
+        ),
         reason: 'unbundled family ${style.fontFamily}',
       );
     }
   });
 
-  test('the type scale matches the design brief', () {
+  test('the type scale matches the house document', () {
     final text = _themeFor(darkAppearance).textTheme;
 
-    expect(text.displaySmall!.fontSize, 36);
-    expect(text.displaySmall!.fontWeight, FontWeight.w700);
-    expect(text.headlineMedium!.fontSize, 28);
+    expect(text.displayLarge!.fontSize, 44);
+    expect(text.displayLarge!.fontWeight, FontWeight.w800);
+    expect(text.headlineLarge!.fontSize, 28);
+    expect(text.headlineLarge!.fontWeight, FontWeight.w800);
+    expect(text.headlineMedium!.fontSize, 22);
     expect(text.headlineMedium!.fontWeight, FontWeight.w700);
-    expect(text.titleMedium!.fontSize, 18);
-    expect(text.titleMedium!.fontWeight, FontWeight.w600);
-    expect(text.bodyMedium!.fontSize, 14);
-    expect(text.labelMedium!.fontSize, 12);
-    expect(text.labelSmall!.fontSize, 11);
+    expect(text.titleLarge!.fontSize, 19);
+    expect(text.titleMedium!.fontSize, 16);
+    expect(text.titleMedium!.fontWeight, FontWeight.w700);
+    expect(text.bodyMedium!.fontSize, 15);
+    expect(text.labelMedium!.fontSize, 13);
+    expect(text.labelSmall!.fontSize, 12);
+
+    // `displaySmall` and `headlineSmall` are the two styles the house scale
+    // does not name; they are interpolated between their neighbours.
+    expect(text.displaySmall!.fontSize, 32);
+    expect(text.headlineSmall!.fontSize, 20);
   });
 
   testWidgets('numeric() is mono so digits keep their column', (tester) async {

@@ -31,12 +31,15 @@ Future<double> _statTileContentHeight(
                   children: [
                     Text('Weight', style: text.labelSmall),
                     const SizedBox(height: 4),
-                    Text(
-                      '82.5',
-                      style: TextStyle(
-                        fontFamily: LockoutTheme.fontMono,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
+                    // The real `StatTile` value style, read through
+                    // `LockoutTheme.numeric` rather than hand-built: the
+                    // house `numericTable` line-height ratio applies at
+                    // every call size, and building the style by hand here
+                    // is what let a 3dp overflow through the first time.
+                    Builder(
+                      builder: (context) => Text(
+                        '82.5',
+                        style: LockoutTheme.numeric(context, size: 16),
                       ),
                     ),
                   ],

@@ -93,20 +93,24 @@ class LockoutTheme {
   /// screen is: a ratio makes every narrower column a shorter tile, so the
   /// same grid that fits on a 430dp phone clips on a 360dp one.
   ///
-  /// The number is set by text scale, not by design taste. Re-measured
-  /// against Figtree when the body face replaced Inter: the label line, the
-  /// 4dp gap, the 16pt mono value and the tile's own 12dp padding come to
-  /// 67dp at scale 1.0, 69 at 1.05, 71 at 1.10 and 72 at 1.15. Figtree needs
-  /// one more dp than Inter at the low end and lands on exactly the same
-  /// ceiling at the high end, so 72 survives the face change unchanged — but
-  /// with zero headroom, which is why the measurement is a test rather than
-  /// a comment.
+  /// The number is set by text scale, not by design taste. Re-measured when
+  /// Figtree replaced Inter as the body face and [numeric] took the house
+  /// `numericTable` metrics: the label line, the 4dp gap, the 16pt mono
+  /// value and the tile's own 12dp padding now come to roughly 75dp at text
+  /// scale 1.15, against 72 under the old face.
   ///
-  /// 72 is the smallest value on the 8dp grid that survives Android's
-  /// "Large" font setting, the largest step a user reaches without opening
-  /// accessibility settings. `measured_constants_test.dart` measures it and
+  /// The growth is the line-height ratio, not the face. The house
+  /// `numericTable` style is 15/22, a ratio [numeric] applies at every call
+  /// size, so the tile's 16pt figure gained about 2.7dp of leading. The old
+  /// 72 had no headroom at all, so it overflowed by 3dp the moment that
+  /// landed.
+  ///
+  /// 80 is the next step on the 8dp grid above the measured need, and the
+  /// smallest that survives Android's "Large" font setting — the largest
+  /// step a user reaches without opening accessibility settings.
+  /// `measured_constants_test.dart` measures it against the real style and
   /// `body_tab_test.dart` pins it.
-  static const double statTileHeight = 72;
+  static const double statTileHeight = 80;
 
   // The theme picker's swatch card — the only raw dimensions left outside
   // this file before this constraint was enforced.
