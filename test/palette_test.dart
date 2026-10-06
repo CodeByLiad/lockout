@@ -200,6 +200,33 @@ void main() {
     });
   });
 
+  group('the navigation bar', () {
+    // The selected icon was left on `onPrimaryContainer` when the indicator
+    // moved to `secondaryContainer`, which in dark is the accent's near-black
+    // ink: 1.08:1 on the new pill, so the selected tab's icon vanished while
+    // every unselected one stayed bright. Nothing caught it, because no test
+    // read a nav colour at all.
+    test('the selected label and icon are legible on the indicator', () {
+      for (final brightness in Brightness.values) {
+        for (final accent in LockoutAccent.all) {
+          final s = LockoutPalette.schemeFor(brightness, accent);
+          expect(_contrast(s.onSecondaryContainer, s.secondaryContainer),
+              greaterThanOrEqualTo(4.5),
+              reason: '$brightness + ${accent.key}: selected nav foreground '
+                  'on the indicator');
+        }
+      }
+    });
+
+    test('unselected labels are legible on the nav background', () {
+      for (final brightness in Brightness.values) {
+        final s = LockoutPalette.schemeFor(brightness, LockoutAccent.lime);
+        expect(_contrast(s.onSurfaceVariant, s.surfaceContainerLow),
+            greaterThanOrEqualTo(4.5));
+      }
+    });
+  });
+
   group('the snackbar pairing', () {
     // The house document's section 8 specifies an `onSurface` background
     // with `surface` text, which is exactly what the inverse pair means.

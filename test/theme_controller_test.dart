@@ -187,6 +187,55 @@ void main() {
     });
   });
 
+  group('two selections in flight', () {
+    test('the last tap wins when a user changes their mind mid-write',
+        () async {
+      await _loadWithSetting('light|lime');
+
+      // No await on the first: it is still writing when the second lands,
+      // which is exactly the "tapped the wrong one, tap back" gesture.
+      final first = ThemeController.instance.selectAccent(LockoutAccent.teal);
+      final second = ThemeController.instance.selectAccent(LockoutAccent.coral);
+      await Future.wait([first, second]);
+
+      expect(ThemeController.instance.accent, LockoutAccent.coral);
+      final stored = await DatabaseService.instance
+          .getSetting('theme_key', defaultValue: '');
+      expect(stored, 'light|coral',
+          reason: 'the second selection must not be swallowed by the guard');
+    });
+
+    test('tapping back to the current value mid-write is not a no-op',
+        () async {
+      await _loadWithSetting('light|lime');
+
+      final away = ThemeController.instance.selectAccent(LockoutAccent.teal);
+      final back = ThemeController.instance.selectAccent(LockoutAccent.lime);
+      await Future.wait([away, back]);
+
+      expect(ThemeController.instance.accent, LockoutAccent.lime);
+      final stored = await DatabaseService.instance
+          .getSetting('theme_key', defaultValue: '');
+      expect(stored, 'light|lime');
+    });
+
+    test('the axes do not clobber each other when interleaved', () async {
+      await _loadWithSetting('light|lime');
+
+      final a = ThemeController.instance.selectAccent(LockoutAccent.violet);
+      final b = ThemeController.instance
+          .selectBrightness(LockoutBrightnessChoice.dark);
+      await Future.wait([a, b]);
+
+      expect(ThemeController.instance.accent, LockoutAccent.violet);
+      expect(ThemeController.instance.brightnessChoice,
+          LockoutBrightnessChoice.dark);
+      final stored = await DatabaseService.instance
+          .getSetting('theme_key', defaultValue: '');
+      expect(stored, 'dark|violet');
+    });
+  });
+
   group('themes', () {
     test('both light and dark themes are always offered', () async {
       await _loadWithSetting('system|lime');

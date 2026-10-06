@@ -113,16 +113,40 @@ class ThemeController extends ChangeNotifier {
   /// `notifyListeners` to repaint the app to match, and the equality guard
   /// below then turns the user's retry into a no-op. The throw is deliberate:
   /// the caller shows the failure.
+  /// What the most recent call is trying to store, which is not what the
+  /// fields say while a write is in flight.
+  ///
+  /// The equality guard has to compare against this rather than against the
+  /// field, or the "I tapped the wrong one, tap back" gesture loses: tap
+  /// teal, then lime before the first write lands, and a guard reading
+  /// `_accent` still sees lime, returns early, writes nothing — and teal
+  /// then commits underneath. The user's last choice is the one that must
+  /// win.
+  LockoutBrightnessChoice? _pendingBrightness;
+  LockoutAccent? _pendingAccent;
+
   Future<void> selectBrightness(LockoutBrightnessChoice choice) async {
-    if (choice == _brightness) return;
-    await _persist(choice, _accent);
+    if (choice == (_pendingBrightness ?? _brightness)) return;
+    _pendingBrightness = choice;
+    try {
+      await _persist(choice, _pendingAccent ?? _accent);
+    } finally {
+      // Cleared only if this call is still the latest; a newer selection owns
+      // the slot and will clear it when its own write returns.
+      if (_pendingBrightness == choice) _pendingBrightness = null;
+    }
     _brightness = choice;
     notifyListeners();
   }
 
   Future<void> selectAccent(LockoutAccent accent) async {
-    if (accent == _accent) return;
-    await _persist(_brightness, accent);
+    if (accent == (_pendingAccent ?? _accent)) return;
+    _pendingAccent = accent;
+    try {
+      await _persist(_pendingBrightness ?? _brightness, accent);
+    } finally {
+      if (_pendingAccent == accent) _pendingAccent = null;
+    }
     _accent = accent;
     notifyListeners();
   }
@@ -208,5 +232,7 @@ class ThemeController extends ChangeNotifier {
   void resetForTest() {
     _brightness = LockoutBrightnessChoice.system;
     _accent = LockoutAccent.fallback;
+    _pendingBrightness = null;
+    _pendingAccent = null;
   }
 }

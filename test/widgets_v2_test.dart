@@ -76,7 +76,6 @@ void main() {
       eyebrow: 'TODAY - MON',
       title: 'LEGS',
       subtitle: '4 EX - 12 SETS',
-      accent: _ramp(0),
       actions: [
         ElevatedButton(onPressed: () {}, child: const Text('START')),
       ],

@@ -33,6 +33,7 @@ const List<String> _branchOneFiles = [
   'lib/widgets/hero_card.dart',
   'lib/widgets/lockout_card.dart',
   'lib/widgets/morphing_surface.dart',
+  'lib/widgets/home_hub.dart',
   'lib/widgets/stat_tile.dart',
   'lib/screens/settings_screen.dart',
   'lib/screens/today_tab.dart',
@@ -222,9 +223,13 @@ void main() {
         'filled': theme.filledButtonTheme.style!.shape!,
         'outlined': theme.outlinedButtonTheme.style!.shape!,
         'text': theme.textButtonTheme.style!.shape!,
-        'segmented': theme.segmentedButtonTheme.style!.shape!,
       };
 
+      // Deliberately not the segmented control: `SegmentedButton` hardcodes
+      // each segment's shape and resolves the style with `selected`
+      // permanently set, so resolving it here against `{}` and `{pressed}`
+      // would assert a shape the framework never paints. Asserting something
+      // inert is the exact mistake this test exists to stop.
       resolvers.forEach((name, resolver) {
         final rest = radiusOf(resolver.resolve(<WidgetState>{}));
         final pressed =
@@ -244,7 +249,11 @@ void main() {
         final consumers = _dartFilesIn('lib')
             .where((f) => !f.path.endsWith(
                 '${widget == 'MorphingSurface' ? 'morphing_surface' : 'connected_group'}.dart'))
-            .where((f) => f.readAsStringSync().contains('$widget('))
+            // Comments stripped: every other guard in this file does, and
+            // without it a doc comment naming the widget keeps this green
+            // forever while nothing actually builds one.
+            .where((f) =>
+                _withoutComments(f.readAsStringSync()).contains('$widget('))
             .map((f) => f.path)
             .toList();
         expect(consumers, isNotEmpty,
@@ -260,6 +269,81 @@ void main() {
     });
   });
 
+  group('the shapes reach real widgets, not just the theme', () {
+    // Resolving a WidgetStateProperty by hand proves the theme agrees with
+    // itself. These pump the actual widget and read what it paints, which is
+    // the only way to catch a framework default overriding the theme — the
+    // way SegmentedButton discards the segment shape it is given.
+    Widget host(Widget child) => MaterialApp(
+          theme: LockoutTheme.build(
+            colors:
+                LockoutPalette.schemeFor(Brightness.dark, LockoutAccent.lime),
+            semantics: LockoutPalette.semanticsFor(
+                Brightness.dark, LockoutAccent.lime),
+          ),
+          home: Scaffold(body: Center(child: child)),
+        );
+
+    double radiusOf(ShapeBorder? shape) =>
+        ((shape! as RoundedRectangleBorder).borderRadius as BorderRadius)
+            .topLeft
+            .x;
+
+    testWidgets('a chip is 12dp unselected and a pill once chosen',
+        (tester) async {
+      for (final selected in const [false, true]) {
+        await tester.pumpWidget(host(ChoiceChip(
+          label: const Text('Push'),
+          selected: selected,
+          onSelected: (_) {},
+        )));
+        await tester.pumpAndSettle();
+
+        final shape = tester
+            .widgetList<Material>(find.descendant(
+              of: find.byType(ChoiceChip),
+              matching: find.byType(Material),
+            ))
+            .map((m) => m.shape)
+            .whereType<RoundedRectangleBorder>()
+            .first;
+
+        expect(radiusOf(shape),
+            selected ? LockoutTheme.radiusChipActive : LockoutTheme.radiusChipRest,
+            reason: 'chip selected=$selected');
+      }
+    });
+
+    testWidgets('a filled button morphs from pill to 12dp under the finger',
+        (tester) async {
+      await tester.pumpWidget(host(
+        FilledButton(onPressed: () {}, child: const Text('Save')),
+      ));
+      await tester.pumpAndSettle();
+
+      ShapeBorder? shapeNow() => tester
+          .widgetList<Material>(find.descendant(
+            of: find.byType(FilledButton),
+            matching: find.byType(Material),
+          ))
+          .map((m) => m.shape)
+          .whereType<RoundedRectangleBorder>()
+          .first;
+
+      expect(radiusOf(shapeNow()), LockoutTheme.radiusButtonRest);
+
+      final gesture =
+          await tester.startGesture(tester.getCenter(find.byType(FilledButton)));
+      await tester.pumpAndSettle();
+      expect(radiusOf(shapeNow()), LockoutTheme.radiusButtonLargeActive,
+          reason: 'the press morph must reach the painted Material');
+
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(radiusOf(shapeNow()), LockoutTheme.radiusButtonRest);
+    });
+  });
+
   group('motion', () {
     test('there are exactly three tiers', () {
       expect(LockoutMotion.springFast.duration.inMilliseconds, 250);
@@ -271,22 +355,16 @@ void main() {
       // Matched on the animated widgets rather than on a bare duration
       // literal, because a debounce or a timer is a duration that is not
       // motion and must not be dragged into the motion system.
-      const animated = [
-        'AnimatedContainer(',
-        'AnimatedScale(',
-        'AnimatedOpacity(',
-        'AnimatedAlign(',
-        'AnimatedPadding(',
-        'AnimatedSwitcher(',
-      ];
+      // Matched on the duration argument itself. The previous form passed if
+      // the file mentioned `LockoutMotion.` anywhere, so one correct call
+      // site licensed every hand-rolled duration sitting beside it.
+      final handRolled = RegExp(r'duration:\s*(const\s+)?Duration\(');
       for (final path in _branchOneFiles) {
         if (path.endsWith('lockout_motion.dart')) continue;
-        final source = File(path).readAsStringSync();
-        for (final widget in animated) {
-          if (!source.contains(widget)) continue;
-          expect(source.contains('LockoutMotion.'), isTrue,
-              reason: '$path animates with $widget but never reads a tier');
-        }
+        final source = _withoutComments(File(path).readAsStringSync());
+        expect(handRolled.hasMatch(source), isFalse,
+            reason: '$path passes a literal Duration to an animation; every '
+                'animated surface reads a LockoutMotion tier');
       }
     });
 

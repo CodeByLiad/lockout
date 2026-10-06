@@ -181,7 +181,6 @@ class LogTabState extends State<LogTab> {
               title: _streakLabel,
               subtitle: '${_logs.length} workouts - '
                   '${kgWhole(_totalVolumeAllTime)} kg total',
-              accent: semantics.categoryAt(0),
             ),
             Row(
               children: [

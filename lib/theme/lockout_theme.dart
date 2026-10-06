@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'lockout_motion.dart';
 import 'lockout_semantics.dart';
 
 /// Builds the app's `ThemeData` from a colour scheme.
@@ -328,6 +329,12 @@ class LockoutTheme {
           minimumSize: const Size(0, controlHeight),
           padding: const EdgeInsets.symmetric(horizontal: spaceLg),
           textStyle: text.labelLarge,
+          // The press morph is animated by `_MaterialInterior` inside
+          // `ButtonStyleButton`, which defaults to `kThemeChangeDuration`.
+          // Pinning it to the fast tier keeps the one motion the theme layer
+          // can reach on the shared vocabulary; it still cannot honour
+          // reduced motion, because `build` has no context — see D10.
+          animationDuration: LockoutMotion.springFast.duration,
         ).copyWith(
           shape: _statefulShape(radiusButtonRest, radiusButtonLargeActive),
         ),
@@ -339,11 +346,18 @@ class LockoutTheme {
           padding: const EdgeInsets.symmetric(horizontal: spaceLg),
           textStyle: text.labelLarge,
           foregroundColor: colors.onSurface,
+          // The press morph is animated by `_MaterialInterior` inside
+          // `ButtonStyleButton`, which defaults to `kThemeChangeDuration`.
+          // Pinning it to the fast tier keeps the one motion the theme layer
+          // can reach on the shared vocabulary; it still cannot honour
+          // reduced motion, because `build` has no context — see D10.
+          animationDuration: LockoutMotion.springFast.duration,
         ).copyWith(
           shape: _statefulShape(
             radiusButtonRest,
             radiusButtonActive,
-            ),
+            side: BorderSide(color: colors.outline),
+          ),
         ),
       ),
 
@@ -351,6 +365,12 @@ class LockoutTheme {
         style: TextButton.styleFrom(
           minimumSize: const Size(0, minTouchTarget),
           textStyle: text.labelLarge,
+          // The press morph is animated by `_MaterialInterior` inside
+          // `ButtonStyleButton`, which defaults to `kThemeChangeDuration`.
+          // Pinning it to the fast tier keeps the one motion the theme layer
+          // can reach on the shared vocabulary; it still cannot honour
+          // reduced motion, because `build` has no context — see D10.
+          animationDuration: LockoutMotion.springFast.duration,
         ).copyWith(
           shape: _statefulShape(radiusButtonRest, radiusButtonActive),
         ),
@@ -419,8 +439,14 @@ class LockoutTheme {
           final selected = states.contains(WidgetState.selected);
           return IconThemeData(
             size: 24,
-            color:
-                selected ? colors.onPrimaryContainer : colors.onSurfaceVariant,
+            // Paired with the indicator, not with the accent. When the
+            // indicator moved to `secondaryContainer` this was left on
+            // `onPrimaryContainer`, which in dark is the accent's near-black
+            // ink — 1.08:1 on the new pill, so the selected tab's icon
+            // vanished while all four unselected ones stayed bright.
+            color: selected
+                ? colors.onSecondaryContainer
+                : colors.onSurfaceVariant,
           );
         }),
       ),
@@ -434,7 +460,14 @@ class LockoutTheme {
           textStyle: text.labelLarge,
           minimumSize: const Size(0, minTouchTarget),
         ).copyWith(
-          shape: _statefulShape(radiusSegmentInner, radiusChipActive),
+          // The bar's own outline only. `SegmentedButton` hardcodes each
+          // segment's shape (`segment_button.dart`'s `segmentStyleFor`), and
+          // resolves this style with `selected` permanently set for a
+          // single-select group, so a state-resolved shape here would be
+          // both inert and misleading. The house section 5.2 segment shapes
+          // are therefore not implementable through the theme; see the
+          // deviation register.
+          shape: WidgetStatePropertyAll(_rounded(radiusSegmentEnd)),
         ),
       ),
 
@@ -443,8 +476,7 @@ class LockoutTheme {
         selectedColor: colors.secondaryContainer,
         side: BorderSide(color: colors.outlineVariant),
         labelStyle: text.labelMedium!,
-        shape: _rounded(radiusChipRest,
-            side: BorderSide(color: colors.outlineVariant)),
+        shape: _ChipBorder(BorderSide(color: colors.outlineVariant)),
         padding: const EdgeInsets.symmetric(
           horizontal: spaceSm,
           vertical: spaceXs,
@@ -527,6 +559,35 @@ class LockoutTheme {
         ),
         textStyle: text.labelMedium?.copyWith(color: colors.onInverseSurface),
       ),
+    );
+  }
+}
+
+/// A chip outline that answers selection: 12dp at rest, a full pill once
+/// chosen, per the house document's section 5.2.
+///
+/// `ChipThemeData.shape` takes a plain `OutlinedBorder`, so a constant there
+/// can never morph. Flutter resolves it against the chip's states only when
+/// it is also a `WidgetStateOutlinedBorder`, which is what this is.
+@immutable
+class _ChipBorder extends RoundedRectangleBorder
+    implements WidgetStateOutlinedBorder {
+  const _ChipBorder(BorderSide side)
+      : super(
+          side: side,
+          borderRadius: const BorderRadius.all(
+            Radius.circular(LockoutTheme.radiusChipRest),
+          ),
+        );
+
+  @override
+  OutlinedBorder? resolve(Set<WidgetState> states) {
+    final radius = states.contains(WidgetState.selected)
+        ? LockoutTheme.radiusChipActive
+        : LockoutTheme.radiusChipRest;
+    return RoundedRectangleBorder(
+      side: side,
+      borderRadius: BorderRadius.all(Radius.circular(radius)),
     );
   }
 }

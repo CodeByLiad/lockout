@@ -24,76 +24,87 @@ class HeroCard extends StatelessWidget {
   /// Optional detail line under the title.
   final String? subtitle;
 
-  /// The identifying accent, normally from `LockoutSemantics.categoryAt(n)`.
-  /// Used for the rail and the eyebrow, never as a fill.
-  final Color accent;
-
   /// Actions laid out in a wrap under the text.
   final List<Widget> actions;
+
+  /// The house document's hero-card padding (section 8), which is wider than
+  /// the 16dp every other card takes.
+  static const double heroPadding = 22;
 
   const HeroCard({
     super.key,
     required this.eyebrow,
     required this.title,
     this.subtitle,
-    required this.accent,
     this.actions = const [],
   });
 
   @override
   Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final text = theme.textTheme;
+    final ink = colors.onPrimaryContainer;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: LockoutTheme.spaceMd),
       child: LockoutCard(
-        elevated: true,
         shape: LockoutTheme.heroCardShape,
-        // IntrinsicHeight, because the rail below stretches to the row's
-        // height and has no height of its own: inside a scroll view that
-        // resolves to an infinite constraint and fails layout. The cost is one
-        // extra measuring pass on a single card per screen.
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-            // The accent identifies the day without colouring the card.
-              Container(
-                width: 4,
-                margin: const EdgeInsets.only(right: LockoutTheme.spaceMd),
-                decoration: BoxDecoration(
-                  color: accent,
-                  borderRadius: BorderRadius.circular(LockoutTheme.radiusPill),
-                ),
-              ),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      eyebrow,
-                      style: text.labelSmall?.copyWith(color: accent),
+        // Accent fill, per the house document's section 8. The previous
+        // treatment — a neutral surface with a 4dp accent rail — came from
+        // the design this branch replaces, which argued against flooding a
+        // card with colour. The house system makes the opposite choice: the
+        // hero card is one of the two or three places a screen is allowed to
+        // spend the accent, and leaving it neutral is why the chosen accent
+        // was invisible on the Today tab in light mode.
+        color: colors.primaryContainer,
+        padding: const EdgeInsets.all(heroPadding),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(eyebrow, style: text.labelMedium?.copyWith(color: ink)),
+            const SizedBox(height: LockoutTheme.spaceXs),
+            Text(title, style: text.headlineMedium?.copyWith(color: ink)),
+            if (subtitle != null) ...[
+              const SizedBox(height: LockoutTheme.spaceXs),
+              Text(subtitle!, style: text.bodyMedium?.copyWith(color: ink)),
+            ],
+            if (actions.isNotEmpty) ...[
+              const SizedBox(height: LockoutTheme.spaceMd),
+              // The actions sit on the accent, so their own colours come from
+              // the ink pair rather than from the ambient scheme: a tonal
+              // button's `secondaryContainer` is authored against a neutral
+              // surface and goes muddy on a bright fill.
+              Theme(
+                data: theme.copyWith(
+                  filledButtonTheme: FilledButtonThemeData(
+                    style: theme.filledButtonTheme.style?.copyWith(
+                      backgroundColor: WidgetStatePropertyAll(ink),
+                      foregroundColor:
+                          WidgetStatePropertyAll(colors.primaryContainer),
                     ),
-                    const SizedBox(height: LockoutTheme.spaceXs),
-                    Text(title, style: text.headlineSmall),
-                    if (subtitle != null) ...[
-                      const SizedBox(height: LockoutTheme.spaceXs),
-                      Text(subtitle!, style: text.bodyMedium),
-                    ],
-                    if (actions.isNotEmpty) ...[
-                      const SizedBox(height: LockoutTheme.spaceMd),
-                      Wrap(
-                        spacing: LockoutTheme.spaceSm,
-                        runSpacing: LockoutTheme.spaceSm,
-                        children: actions,
-                      ),
-                    ],
-                  ],
+                  ),
+                  outlinedButtonTheme: OutlinedButtonThemeData(
+                    style: theme.outlinedButtonTheme.style?.copyWith(
+                      foregroundColor: WidgetStatePropertyAll(ink),
+                      side: WidgetStatePropertyAll(BorderSide(color: ink)),
+                    ),
+                  ),
+                  textButtonTheme: TextButtonThemeData(
+                    style: theme.textButtonTheme.style?.copyWith(
+                      foregroundColor: WidgetStatePropertyAll(ink),
+                    ),
+                  ),
+                ),
+                child: Wrap(
+                  spacing: LockoutTheme.spaceSm,
+                  runSpacing: LockoutTheme.spaceSm,
+                  children: actions,
                 ),
               ),
             ],
-          ),
+          ],
         ),
       ),
     );

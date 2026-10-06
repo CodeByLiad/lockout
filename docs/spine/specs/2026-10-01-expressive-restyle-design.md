@@ -52,6 +52,8 @@ this table may depart from it.
 | D5 | `CookieBorder` lobe count carries meaning | §5.3 assigns cookie shapes to avatars, badges and placeholder logos. Lockout additionally reads lobe count as register on subject-scale elements; see 7.4. |
 | D6 | `steel` as a fifth accent | Not in §3.4's optional set. Required so that `graphite` and `paper` users migrate onto a neutral rather than a hue they never chose. Its lightness is roughly 72%, just under §3.3's 75–85% band; accepted because `steel` is deliberately a neutral rather than an identity hue, and its ink pairing still clears 4.5:1 at about 7.6:1. |
 | D7 | Five bottom-navigation tabs | §7.1 caps at four. Consolidating Lockout's navigation is a product decision, not a restyle. **Unresolved — carried to a later branch, not fixed here.** |
+| D9 | Segmented-control segment shapes not implemented | §5.2 wants inner segments at 8dp, outer ends at 22dp and the selected segment a full pill. `SegmentedButton` hardcodes each segment's shape in `segmentStyleFor`, and resolves the group style with `selected` permanently set for a single-select group, so none of the three is reachable from a theme. Only the bar's outer radius is ours to set. Implementing the rest means a bespoke control, which is out of scope for a restyle. |
+| D10 | The button press morph does not honour reduced motion | The morph is animated by `_MaterialInterior` inside `ButtonStyleButton` at `kThemeChangeDuration`, and `LockoutTheme.build` has no `BuildContext` to read `MediaQuery.disableAnimations` from. `animationDuration` is pinned to the fast tier so the duration at least matches; zeroing it under reduced motion needs a context-aware theme. |
 | D8 | No all-caps label style | Not a departure but a correction: the first draft of this spec specified a `labelMicro` style at 12px uppercase. §4.2 forbids all-caps labels outright, so `labelMicro` is dropped and `labelSmall` takes its place. Type contrast comes from size alone. |
 
 ## 4. Decisions
@@ -261,7 +263,7 @@ agreed with them and are unchanged.
 | List row | 8dp | 20dp | Agrees with the draft |
 | Group first/last child | 26dp outer corners, 3dp gaps | — | Agrees with the draft |
 | Chip | 12dp | full pill | House §5.2 — replaces the draft's 12→19 |
-| Segmented control | inner 8dp, ends 22dp | selected segment full pill | House §5.2, new to Lockout |
+| Segmented control | bar ends 22dp, segments framework default | — | See D9 |
 | Theme swatch | lobed, amplitude 0.07 | lobed, amplitude 0.098 | Lockout extension; see the note below |
 | Hero card | `36 / 36 / 36 / 12` bottom-left, static | — | House §5.2 signature shape |
 
