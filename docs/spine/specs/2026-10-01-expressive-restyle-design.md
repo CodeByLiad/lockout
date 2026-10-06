@@ -262,11 +262,24 @@ agreed with them and are unchanged.
 | Group first/last child | 26dp outer corners, 3dp gaps | — | Agrees with the draft |
 | Chip | 12dp | full pill | House §5.2 — replaces the draft's 12→19 |
 | Segmented control | inner 8dp, ends 22dp | selected segment full pill | House §5.2, new to Lockout |
-| Theme swatch | 18dp | 26dp | Lockout extension; the house system does not cover swatches |
+| Theme swatch | lobed, amplitude 0.07 | lobed, amplitude 0.098 | Lockout extension; see the note below |
 | Hero card | `36 / 36 / 36 / 12` bottom-left, static | — | House §5.2 signature shape |
 
 The hero card no longer morphs. The draft gave it a 36→22 pair; the house system makes its
 asymmetric outline the family's signature card shape, and a card has no pressed state.
+
+**Correction, made during the whole-branch review.** This table first gave the theme swatch an
+18→26 radius pair, which contradicts 7.4's rule that the swatch wears a lobed outline: a
+`CookieBorder` has no corner radius, so that pair was dead by construction rather than by
+oversight. The swatch morphs its lobe amplitude instead, and `radiusSwatchRest` /
+`radiusSwatchActive` are removed.
+
+The same review found that `MorphingSurface` and `ConnectedGroup` had been built, tested and
+documented with no production consumer at all — the component themes and every screen still
+carried single fixed radii. That was a defect in the plan rather than in its execution: the
+plan declared two tasks as consuming `MorphingSurface` and then specified code that did not.
+The contract guard now fails if either primitive loses its last consumer, and the
+interactive-radius assertion resolves the component themes rather than comparing two constants.
 
 Non-interactive surfaces keep a single radius: dialog 32dp, bottom sheet 32dp top corners,
 text field 16dp.

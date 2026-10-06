@@ -30,9 +30,6 @@ class LockoutTheme {
   static const double radiusSegmentInner = 8;
   static const double radiusSegmentEnd = 22;
 
-  static const double radiusSwatchRest = 18;
-  static const double radiusSwatchActive = 26;
-
   /// The outer corners of a connected group's first and last child.
   static const double radiusGroupEnd = 26;
 

@@ -1105,7 +1105,13 @@ class _AccentSwatch extends StatelessWidget {
       selected: selected,
       child: InkWell(
         onTap: onTap,
-        customBorder: const CircleBorder(),
+        // The ripple takes the swatch's own outline. A `CircleBorder` at
+        // the 48dp target's radius splashed well outside the 34dp disc it
+        // belonged to, which read as the wrong swatch lighting up.
+        customBorder: const CookieBorder(
+          lobes: 6,
+          amplitude: 0.07,
+        ),
         child: SizedBox(
           width: LockoutTheme.minTouchTarget,
           height: LockoutTheme.minTouchTarget,
@@ -1122,9 +1128,14 @@ class _AccentSwatch extends StatelessWidget {
                 // counts, so only the amplitude and the outline may animate.
                 shape: CookieBorder(
                   lobes: CookieBorder.training.lobes,
+                  // Both states carry a visible lobe. Halving the rest
+                  // amplitude put peak-to-trough at about 1.1px on a 34dp
+                  // disc, so the swatch read as a plain circle until it was
+                  // chosen — and the shape language is meant to be the
+                  // content here, not the reward for tapping.
                   amplitude: selected
-                      ? CookieBorder.training.amplitude
-                      : CookieBorder.training.amplitude / 2,
+                      ? CookieBorder.training.amplitude * 1.4
+                      : CookieBorder.training.amplitude,
                   side: BorderSide(
                     color: selected ? colors.onSurface : Colors.transparent,
                     width: 2,

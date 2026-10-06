@@ -200,8 +200,6 @@ void main() {
           isNot(LockoutTheme.radiusButtonActive));
       expect(LockoutTheme.radiusRowRest, isNot(LockoutTheme.radiusRowActive));
       expect(LockoutTheme.radiusChipRest, isNot(LockoutTheme.radiusChipActive));
-      expect(LockoutTheme.radiusSwatchRest,
-          isNot(LockoutTheme.radiusSwatchActive));
     });
 
     test('the button themes resolve a different shape when pressed', () {

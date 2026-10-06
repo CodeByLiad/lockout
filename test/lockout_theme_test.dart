@@ -63,8 +63,6 @@ void main() {
     expect(LockoutTheme.radiusChipActive, 999.0);
     expect(LockoutTheme.radiusSegmentInner, 8.0);
     expect(LockoutTheme.radiusSegmentEnd, 22.0);
-    expect(LockoutTheme.radiusSwatchRest, 18.0);
-    expect(LockoutTheme.radiusSwatchActive, 26.0);
     expect(LockoutTheme.radiusGroupEnd, 26.0);
 
     // Non-interactive surfaces keep one radius.
