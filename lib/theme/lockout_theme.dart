@@ -112,13 +112,6 @@ class LockoutTheme {
   /// `body_tab_test.dart` pins it.
   static const double statTileHeight = 80;
 
-  // The theme picker's swatch card — the only raw dimensions left outside
-  // this file before this constraint was enforced.
-  static const double swatchWidth = 104;
-  static const double swatchPreviewHeight = 44;
-  static const double swatchCheckOffset = -6;
-  static const double swatchCheckSize = 18;
-
   static const String fontDisplay = 'BricolageGrotesque';
   static const String fontBody = 'Figtree';
   static const String fontMono = 'JetBrainsMono';
