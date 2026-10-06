@@ -13,13 +13,61 @@ import 'lockout_semantics.dart';
 class LockoutTheme {
   LockoutTheme._();
 
-  // Shape scale.
-  static const double radiusButton = 14;
-  static const double radiusCard = 18;
-  static const double radiusDialog = 24;
-  static const double radiusSheet = 28;
-  static const double radiusField = 14;
+  // Shape scale. SHAPE IS A STATE, NOT A CONSTANT: every interactive
+  // surface carries a rest radius and an active (pressed or selected)
+  // radius and animates between them. The pairs come from
+  // `docs/design/nuvetrix-app-design-system.md` section 5.2.
+  static const double radiusButtonRest = 999;
+  static const double radiusButtonActive = 12;
+  static const double radiusButtonLargeActive = 16;
+
+  static const double radiusRowRest = 8;
+  static const double radiusRowActive = 20;
+
+  static const double radiusChipRest = 12;
+  static const double radiusChipActive = 999;
+
+  static const double radiusSegmentInner = 8;
+  static const double radiusSegmentEnd = 22;
+
+  static const double radiusSwatchRest = 18;
+  static const double radiusSwatchActive = 26;
+
+  /// The outer corners of a connected group's first and last child.
+  static const double radiusGroupEnd = 26;
+
+  /// How far apart rows sit inside a connected group.
+  static const double groupGap = 3;
+
+  /// How far a pressed surface shrinks.
+  static const double pressScale = 0.97;
+
+  // Non-interactive surfaces keep a single radius: shape-as-state applies to
+  // interaction, and a dialog does not have a pressed state.
+  static const double radiusCard = 28;
+  static const double radiusDialog = 32;
+  static const double radiusSheet = 32;
+  static const double radiusField = 16;
   static const double radiusPill = 999;
+
+  /// The family's signature card outline — 36dp on three corners, 12dp on
+  /// the bottom-left.
+  ///
+  /// Static rather than a rest/active pair: the house document makes this
+  /// outline the identity of a hero card, and a card has no pressed state.
+  static const RoundedRectangleBorder heroCardShape = RoundedRectangleBorder(
+    borderRadius: BorderRadius.only(
+      topLeft: Radius.circular(36),
+      topRight: Radius.circular(36),
+      bottomRight: Radius.circular(36),
+      bottomLeft: Radius.circular(12),
+    ),
+  );
+
+  /// Retained only until the call-site sweep lands; every use becomes an
+  /// explicit rest or active radius from the pairs above.
+  @Deprecated('Use radiusButtonRest or radiusButtonActive')
+  static const double radiusButton = 14;
 
   // 8dp spacing grid.
   static const double spaceXs = 4;
