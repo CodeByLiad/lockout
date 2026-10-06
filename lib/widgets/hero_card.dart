@@ -12,8 +12,10 @@ import 'lockout_card.dart';
 /// with colour — a filled block that size fights the calm the design calls for
 /// and forces every label inside it onto a contrast knife-edge.
 class HeroCard extends StatelessWidget {
-  /// Small label above the title — context, not content. One of the few
-  /// places all-caps survives, because it is scanned rather than read.
+  /// Small label above the title — context, not content. Sentence case, like
+  /// everything else: the house document forbids all-caps labels (section
+  /// 4.2), so what used to be an all-caps eyebrow is now distinguished by
+  /// size and colour alone.
   final String eyebrow;
 
   /// The one thing this screen is about.
@@ -46,6 +48,7 @@ class HeroCard extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: LockoutTheme.spaceMd),
       child: LockoutCard(
         elevated: true,
+        shape: LockoutTheme.heroCardShape,
         // IntrinsicHeight, because the rail below stretches to the row's
         // height and has no height of its own: inside a scroll view that
         // resolves to an infinite constraint and fails layout. The cost is one
@@ -70,10 +73,7 @@ class HeroCard extends StatelessWidget {
                   children: [
                     Text(
                       eyebrow,
-                      style: text.labelSmall?.copyWith(
-                        color: accent,
-                        letterSpacing: 0.8,
-                      ),
+                      style: text.labelSmall?.copyWith(color: accent),
                     ),
                     const SizedBox(height: LockoutTheme.spaceXs),
                     Text(title, style: text.headlineSmall),

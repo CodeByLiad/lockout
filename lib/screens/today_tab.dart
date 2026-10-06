@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'progress_tab.dart' show ProgressSegment;
+import '../theme/cookie_border.dart';
 import '../theme/lockout_semantics.dart';
 import '../theme/lockout_theme.dart';
 import '../models/models.dart';
@@ -535,7 +536,7 @@ class TodayTabState extends State<TodayTab> {
 
     return SingleChildScrollView(
       child: HomeHub(
-        eyebrow: 'TODAY · $code',
+        eyebrow: 'Today · $code',
         title: isRest ? 'Rest day' : sched.day.name,
         subtitle: isRest
             ? 'Nothing scheduled. Train off-plan or take the day.'
@@ -702,9 +703,11 @@ class TodayTabState extends State<TodayTab> {
     );
   }
 
-  /// The three-figure Duration / Volume / Sets row, a Finish action, and the
-  /// exercise-completion bar beneath it — see `_FinishSummarySheet` for what
-  /// tapping Finish opens.
+  /// The header leads with one big number — the sets still to go — beside a
+  /// lobed register marker, then a Duration / Volume row, a Finish action,
+  /// and the exercise-completion bar. The sets figure is deliberately not
+  /// repeated in the stat row: one big number per screen, stated once. See
+  /// `_FinishSummarySheet` for what tapping Finish opens.
   Widget _buildSessionHeader(double exerciseProgress) {
     final theme = Theme.of(context);
     return LockoutCard(
@@ -722,6 +725,54 @@ class TodayTabState extends State<TodayTab> {
           ),
           const SizedBox(height: LockoutTheme.spaceXs),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              // The lobed marker reads as register: 6 lobes while a session
+              // is running, 4 when the day is rest. It is a subject-scale
+              // element, which is the only place a lobed shape is allowed.
+              Container(
+                width: 44,
+                height: 44,
+                alignment: Alignment.center,
+                decoration: ShapeDecoration(
+                  color: theme.colorScheme.primaryContainer,
+                  shape: _sessionTotalSets > 0
+                      ? CookieBorder.training
+                      : CookieBorder.rest,
+                ),
+                child: Icon(
+                  _sessionTotalSets > 0
+                      ? Icons.bolt_outlined
+                      : Icons.bedtime_outlined,
+                  size: 22,
+                  color: theme.colorScheme.onPrimaryContainer,
+                ),
+              ),
+              const SizedBox(width: LockoutTheme.spaceMd),
+              Text(
+                '${_sessionTotalSets - _sessionCompletedSets}',
+                style: LockoutTheme.countdown(theme.colorScheme),
+              ),
+              const SizedBox(width: LockoutTheme.spaceSm),
+              // Flexible, not a bare Padding: at 360dp the marker, the 88pt
+              // numeral and their gaps leave the label about 136dp, and a
+              // wide-metric face spills past that. It wraps rather than
+              // overflowing the header.
+              Flexible(
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 14),
+                  child: Text(
+                    _sessionTotalSets - _sessionCompletedSets == 1
+                        ? 'set left'
+                        : 'sets left',
+                    style: theme.textTheme.titleMedium,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: LockoutTheme.spaceMd),
+          Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Expanded(
@@ -738,12 +789,6 @@ class TodayTabState extends State<TodayTab> {
                   // width the unit cost.
                   label: 'Volume (kg)',
                   value: _fmtWeight(_sessionVolumeKg),
-                ),
-              ),
-              Expanded(
-                child: _SessionStat(
-                  label: 'Sets',
-                  value: '$_sessionCompletedSets/$_sessionTotalSets',
                 ),
               ),
               FilledButton.tonal(

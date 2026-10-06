@@ -22,6 +22,11 @@ class LockoutCard extends StatelessWidget {
   /// Lifts to elevation 3 for the one card per screen that leads.
   final bool elevated;
 
+  /// Overrides the theme's card shape. Only the hero card passes one — it
+  /// wears the family's signature asymmetric outline, and every other card
+  /// takes the uniform shape from `cardTheme`.
+  final ShapeBorder? shape;
+
   const LockoutCard({
     super.key,
     required this.child,
@@ -29,6 +34,7 @@ class LockoutCard extends StatelessWidget {
     this.color,
     this.onTap,
     this.elevated = false,
+    this.shape,
   });
 
   @override
@@ -41,11 +47,18 @@ class LockoutCard extends StatelessWidget {
     return Card(
       color: color,
       elevation: elevated ? 3 : null,
+      shape: shape,
       child: onTap == null
           ? body
+          // The ripple has to follow the card's own outline: a pill-radius
+          // splash on the asymmetric hero shape bleeds past the tight corner.
           : InkWell(
               onTap: onTap,
-              borderRadius: BorderRadius.circular(LockoutTheme.radiusCard),
+              customBorder: shape ??
+                  RoundedRectangleBorder(
+                    borderRadius:
+                        BorderRadius.circular(LockoutTheme.radiusCard),
+                  ),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(
                   minHeight: LockoutTheme.minTouchTarget,

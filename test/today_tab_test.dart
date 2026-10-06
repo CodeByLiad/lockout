@@ -3,12 +3,14 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-
 import 'package:lockout/models/models.dart';
 import 'package:lockout/screens/today_tab.dart';
 import 'package:lockout/services/database_service.dart';
 import 'package:lockout/services/schedule_service.dart';
+import 'package:lockout/theme/cookie_border.dart';
 import 'package:lockout/theme/lockout_theme.dart';
+import 'package:lockout/widgets/action_grid.dart';
+import 'package:lockout/widgets/hero_card.dart';
 
 import 'test_helpers.dart';
 
@@ -377,7 +379,8 @@ void main() {
       expect(setNumber.style?.fontFamily, 'JetBrainsMono');
     });
 
-    testWidgets('the header states duration, volume and sets', (tester) async {
+    testWidgets('the header states duration and volume, and carries sets as '
+        'the big number', (tester) async {
       await seedActiveWeekdayRoutineForToday();
       await tester.pumpWidget(hostedTodayTab());
       await settle(tester);
@@ -389,7 +392,11 @@ void main() {
       // has room to stay on-scale next to `Finish` at 360dp — see
       // `_buildSessionHeader`.
       expect(find.text('Volume (kg)'), findsOneWidget);
-      expect(find.text('Sets'), findsOneWidget);
+      // The sets figure moved out of the stat row and into the header's one
+      // big number — the house document allows one big number per screen,
+      // not the same figure stated twice.
+      expect(find.text('Sets'), findsNothing);
+      expect(find.textContaining('sets left'), findsOneWidget);
       expect(find.text('Finish'), findsOneWidget);
     });
 
@@ -569,6 +576,128 @@ void main() {
       // Declining the confirmation must leave the session running, not end
       // it anyway.
       expect(find.text('Finish'), findsOneWidget);
+    });
+  });
+  // Task 9's proof surface: the Today tab is where the expressive system has
+  // to hold up end to end — the hero's signature outline, the one big
+  // number, and the lobed register marker on a live session.
+  group('the expressive system on the Today tab', () {
+    testWidgets('the hero card wears the signature asymmetric outline',
+        (tester) async {
+      await tester.pumpWidget(hostedTodayTab());
+      await settle(tester);
+
+      final card = tester.widget<Card>(
+        find
+            .descendant(
+              of: find.byType(HeroCard),
+              matching: find.byType(Card),
+            )
+            .first,
+      );
+      final radius =
+          (card.shape! as RoundedRectangleBorder).borderRadius as BorderRadius;
+
+      expect(radius.topLeft.x, 36);
+      expect(radius.topRight.x, 36);
+      expect(radius.bottomRight.x, 36);
+      expect(radius.bottomLeft.x, 12,
+          reason: 'the bottom-left corner is the family signature');
+    });
+
+    testWidgets('the hero card does not morph on press', (tester) async {
+      await tester.pumpWidget(hostedTodayTab());
+      await settle(tester);
+
+      Object? shapeNow() => tester
+          .widget<Card>(
+            find
+                .descendant(
+                  of: find.byType(HeroCard),
+                  matching: find.byType(Card),
+                )
+                .first,
+          )
+          .shape;
+
+      final before = shapeNow();
+      final gesture =
+          await tester.startGesture(tester.getCenter(find.byType(HeroCard)));
+      await tester.pump(const Duration(milliseconds: 120));
+      expect(shapeNow(), before, reason: 'a card has no pressed state');
+      await gesture.up();
+      await settle(tester);
+    });
+
+    testWidgets('the eyebrow is sentence case', (tester) async {
+      await tester.pumpWidget(hostedTodayTab());
+      await settle(tester);
+
+      final hero = tester.widget<HeroCard>(find.byType(HeroCard));
+      expect(hero.eyebrow, isNot(hero.eyebrow.toUpperCase()),
+          reason: 'the house document forbids all-caps labels (section 4.2)');
+    });
+
+    testWidgets('the session header leads with one big countdown number',
+        (tester) async {
+      await seedActiveWeekdayRoutineForToday();
+      await tester.pumpWidget(hostedTodayTab());
+      await settle(tester);
+      await tester.tap(find.text('Start session'));
+      await settle(tester);
+
+      final big = tester
+          .widgetList<Text>(find.byType(Text))
+          .where((t) => t.style?.fontSize == 88)
+          .toList();
+      expect(big.length, 1,
+          reason: 'at most one big number per screen, and exactly one here');
+      expect(big.single.style!.fontFamily, LockoutTheme.fontDisplay);
+      expect(big.single.style!.fontWeight, FontWeight.w800);
+      expect(find.textContaining('sets left'), findsOneWidget);
+    });
+
+    testWidgets(
+        'the session marker is a lobed shape whose lobes read as register',
+        (tester) async {
+      await seedActiveWeekdayRoutineForToday();
+      await tester.pumpWidget(hostedTodayTab());
+      await settle(tester);
+      await tester.tap(find.text('Start session'));
+      await settle(tester);
+
+      final lobed = tester
+          .widgetList<Container>(find.byType(Container))
+          .map((c) => c.decoration)
+          .whereType<ShapeDecoration>()
+          .map((d) => d.shape)
+          .whereType<CookieBorder>()
+          .toList();
+
+      expect(lobed, isNotEmpty,
+          reason: 'the session marker must carry a CookieBorder');
+      expect(lobed.map((b) => b.lobes), everyElement(anyOf(4, 6)),
+          reason: '4 lobes is rest, 6 is training; the marker is one of them');
+    });
+
+    testWidgets('the action-grid icon containers do not rotate lobe count',
+        (tester) async {
+      await tester.pumpWidget(hostedTodayTab());
+      await settle(tester);
+
+      final gridShapes = tester
+          .widgetList<Container>(find.descendant(
+            of: find.byType(ActionGrid),
+            matching: find.byType(Container),
+          ))
+          .map((c) => c.decoration)
+          .whereType<ShapeDecoration>()
+          .map((d) => d.shape)
+          .whereType<CookieBorder>();
+
+      expect(gridShapes, isEmpty,
+          reason: 'repeated small icon containers take one consistent '
+              'squircle; colour already carries category');
     });
   });
 }
