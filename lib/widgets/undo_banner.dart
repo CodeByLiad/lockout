@@ -182,7 +182,7 @@ class _UndoBannerState extends State<_UndoBanner> {
               color: bg,
               elevation: 6,
               surfaceTintColor: Colors.transparent,
-              borderRadius: BorderRadius.circular(LockoutTheme.radiusButton),
+              borderRadius: BorderRadius.circular(LockoutTheme.radiusField),
               child: Padding(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 12),

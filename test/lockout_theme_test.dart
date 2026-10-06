@@ -51,13 +51,36 @@ void main() {
   /// component themes agree with whatever the tokens currently say, so a
   /// coordinated drift of every token together would pass it unnoticed. This
   /// test is the one that pins the actual numbers.
-  test('the shape scale is the pinned Lockout values', () {
-    expect(LockoutTheme.radiusButton, 14.0);
-    expect(LockoutTheme.radiusCard, 18.0);
-    expect(LockoutTheme.radiusDialog, 24.0);
-    expect(LockoutTheme.radiusSheet, 28.0);
-    expect(LockoutTheme.radiusField, 14.0);
+  test('the shape scale is the pinned house values', () {
+    // Interactive surfaces are pairs, not constants: a single fixed radius
+    // on one of them is a contract violation.
+    expect(LockoutTheme.radiusButtonRest, 999.0);
+    expect(LockoutTheme.radiusButtonActive, 12.0);
+    expect(LockoutTheme.radiusButtonLargeActive, 16.0);
+    expect(LockoutTheme.radiusRowRest, 8.0);
+    expect(LockoutTheme.radiusRowActive, 20.0);
+    expect(LockoutTheme.radiusChipRest, 12.0);
+    expect(LockoutTheme.radiusChipActive, 999.0);
+    expect(LockoutTheme.radiusSegmentInner, 8.0);
+    expect(LockoutTheme.radiusSegmentEnd, 22.0);
+    expect(LockoutTheme.radiusSwatchRest, 18.0);
+    expect(LockoutTheme.radiusSwatchActive, 26.0);
+    expect(LockoutTheme.radiusGroupEnd, 26.0);
+
+    // Non-interactive surfaces keep one radius.
+    expect(LockoutTheme.radiusCard, 28.0);
+    expect(LockoutTheme.radiusDialog, 32.0);
+    expect(LockoutTheme.radiusSheet, 32.0);
+    expect(LockoutTheme.radiusField, 16.0);
     expect(LockoutTheme.radiusPill, 999.0);
+  });
+
+  test('the hero card wears the signature asymmetric outline', () {
+    final radius = LockoutTheme.heroCardShape.borderRadius as BorderRadius;
+    expect(radius.topLeft.x, 36.0);
+    expect(radius.topRight.x, 36.0);
+    expect(radius.bottomRight.x, 36.0);
+    expect(radius.bottomLeft.x, 12.0);
   });
 
   test('the shape scale reaches the component themes', () {
@@ -67,11 +90,11 @@ void main() {
     expect(_radiusOf(theme.dialogTheme.shape), LockoutTheme.radiusDialog);
     expect(
       _radiusOf(theme.filledButtonTheme.style!.shape!.resolve({})),
-      LockoutTheme.radiusButton,
+      LockoutTheme.radiusButtonRest,
     );
     expect(
       _radiusOf(theme.outlinedButtonTheme.style!.shape!.resolve({})),
-      LockoutTheme.radiusButton,
+      LockoutTheme.radiusButtonRest,
     );
   });
 

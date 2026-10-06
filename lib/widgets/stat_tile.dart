@@ -29,7 +29,7 @@ class StatTile extends StatelessWidget {
       padding: const EdgeInsets.all(LockoutTheme.spaceSm + 4),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(LockoutTheme.radiusButton),
+        borderRadius: BorderRadius.circular(LockoutTheme.radiusField),
         border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
       child: Column(

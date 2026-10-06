@@ -79,7 +79,7 @@ class _MealRow extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: LockoutTheme.spaceSm),
       child: Material(
         color: theme.colorScheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(LockoutTheme.radiusButton),
+        borderRadius: BorderRadius.circular(LockoutTheme.radiusField),
         child: Padding(
           padding: const EdgeInsets.only(left: LockoutTheme.spaceMd),
           child: Row(

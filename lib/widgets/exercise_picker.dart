@@ -247,7 +247,7 @@ class _ExerciseRow extends StatelessWidget {
 
     return Material(
       color: theme.colorScheme.surfaceContainer,
-      borderRadius: BorderRadius.circular(LockoutTheme.radiusButton),
+      borderRadius: BorderRadius.circular(LockoutTheme.radiusField),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,

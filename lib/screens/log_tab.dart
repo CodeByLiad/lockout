@@ -249,7 +249,7 @@ class LogTabState extends State<LogTab> {
             // only ripple.
             InkWell(
               onTap: () => _toggleExpand(log),
-              borderRadius: BorderRadius.circular(LockoutTheme.radiusButton),
+              borderRadius: BorderRadius.circular(LockoutTheme.radiusField),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(
                   minHeight: LockoutTheme.minTouchTarget,

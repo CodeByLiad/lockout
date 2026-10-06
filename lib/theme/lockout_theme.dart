@@ -64,11 +64,6 @@ class LockoutTheme {
     ),
   );
 
-  /// Retained only until the call-site sweep lands; every use becomes an
-  /// explicit rest or active radius from the pairs above.
-  @Deprecated('Use radiusButtonRest or radiusButtonActive')
-  static const double radiusButton = 14;
-
   // 8dp spacing grid.
   static const double spaceXs = 4;
   static const double spaceSm = 8;
@@ -78,7 +73,14 @@ class LockoutTheme {
 
   static const double screenPadding = 20;
   static const double cardPadding = 16;
-  static const double sectionGap = 24;
+  static const double sectionGap = 28;
+
+  /// The gap between a section heading and its content.
+  static const double headingGap = 12;
+
+  /// Bottom padding for a scrollable screen that carries both a nav bar and
+  /// a FAB, so the last row is never hidden behind either.
+  static const double scrollBottomPadding = 128;
 
   static const double navBarHeight = 80;
   static const double minTouchTarget = 48;
@@ -302,7 +304,7 @@ class LockoutTheme {
           minimumSize: const Size(0, controlHeight),
           padding: const EdgeInsets.symmetric(horizontal: spaceLg),
           textStyle: text.labelLarge,
-          shape: _rounded(radiusButton),
+          shape: _rounded(radiusButtonRest),
         ),
       ),
 
@@ -313,7 +315,7 @@ class LockoutTheme {
           textStyle: text.labelLarge,
           foregroundColor: colors.onSurface,
           side: BorderSide(color: colors.outline),
-          shape: _rounded(radiusButton),
+          shape: _rounded(radiusButtonRest),
         ),
       ),
 
@@ -321,7 +323,7 @@ class LockoutTheme {
         style: TextButton.styleFrom(
           minimumSize: const Size(0, minTouchTarget),
           textStyle: text.labelLarge,
-          shape: _rounded(radiusButton),
+          shape: _rounded(radiusButtonRest),
         ),
       ),
 
@@ -429,7 +431,7 @@ class LockoutTheme {
         titleTextStyle: text.titleSmall,
         subtitleTextStyle: text.bodySmall,
         iconColor: colors.onSurfaceVariant,
-        shape: _rounded(radiusButton),
+        shape: _rounded(radiusRowRest),
         contentPadding: const EdgeInsets.symmetric(horizontal: spaceMd),
         minTileHeight: minTouchTarget,
       ),
@@ -439,15 +441,15 @@ class LockoutTheme {
         contentTextStyle:
             text.bodyMedium?.copyWith(color: colors.onInverseSurface),
         // `inversePrimary`, the primary tone meant for an inverse-surface
-        // background — `primary` itself measures 1.37:1 on graphite here.
-        // Nothing in this app builds a `SnackBarAction` today, so this line
-        // has never painted; it is stated correctly so that the first one
-        // that does is readable. `schemes_test.dart` holds the pairing at
-        // >= 4.5:1 across all six schemes, and `undo_banner.dart` (which
-        // borrows these colours) is the live consumer.
+        // background. Nothing in this app builds a `SnackBarAction` today,
+        // so this line has never painted; it is stated correctly so that the
+        // first one that does is readable. `palette_test.dart` holds the
+        // pairing at >= 4.5:1 across all ten brightness-and-accent
+        // combinations, and `undo_banner.dart` (which borrows these colours)
+        // is the live consumer.
         actionTextColor: colors.inversePrimary,
         behavior: SnackBarBehavior.floating,
-        shape: _rounded(radiusButton),
+        shape: _rounded(radiusField),
         insetPadding: const EdgeInsets.all(spaceMd),
       ),
 
@@ -462,7 +464,7 @@ class LockoutTheme {
         color: colors.surfaceContainerHigh,
         surfaceTintColor: Colors.transparent,
         elevation: 3,
-        shape: _rounded(radiusButton),
+        shape: _rounded(radiusField),
         textStyle: text.bodyMedium,
       ),
 
@@ -482,7 +484,7 @@ class LockoutTheme {
       tooltipTheme: TooltipThemeData(
         decoration: BoxDecoration(
           color: colors.inverseSurface,
-          borderRadius: BorderRadius.circular(radiusButton),
+          borderRadius: BorderRadius.circular(radiusChipRest),
         ),
         textStyle: text.labelMedium?.copyWith(color: colors.onInverseSurface),
       ),

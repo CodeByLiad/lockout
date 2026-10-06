@@ -1054,7 +1054,7 @@ class TodayTabState extends State<TodayTab> {
         key: ValueKey('set-row-$exerciseIndex-$setIndex'),
         decoration: BoxDecoration(
           color: color,
-          borderRadius: BorderRadius.circular(LockoutTheme.radiusButton),
+          borderRadius: BorderRadius.circular(LockoutTheme.radiusField),
         ),
         child: child,
       ),
