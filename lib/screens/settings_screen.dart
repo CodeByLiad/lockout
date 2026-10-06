@@ -13,6 +13,7 @@ import '../theme/lockout_semantics.dart';
 import '../theme/lockout_theme.dart';
 import '../theme/theme_controller.dart';
 import '../widgets/calm_row.dart';
+import '../widgets/connected_group.dart';
 import '../widgets/lockout_card.dart';
 import '../widgets/lockout_field.dart';
 
@@ -930,34 +931,56 @@ class SettingsBodyState extends State<SettingsBody> {
   }
 
   Widget _buildNotificationsCard(BuildContext context) {
+    final theme = Theme.of(context);
     return LockoutCard(
       padding: EdgeInsets.zero,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SwitchListTile(
-            title: const Text('Daily training nudge'),
-            subtitle: const Text('Scheduled on this device. Nothing is sent anywhere.'),
-            value: _remindersEnabled,
-            onChanged: _toggleReminders,
+          // A connected group rather than a stack of separate rows: the
+          // house document (section 5.2) reads these as one object, with the
+          // large outer corners on the first and last child and 3dp between
+          // them. The surface tone is what makes the grouping visible, so
+          // each row carries it rather than the group.
+          ConnectedGroup(
+            children: [
+              Material(
+                color: theme.colorScheme.surfaceContainerHigh,
+                child: SwitchListTile(
+                  title: const Text('Daily training nudge'),
+                  subtitle: const Text(
+                      'Scheduled on this device. Nothing is sent anywhere.'),
+                  value: _remindersEnabled,
+                  onChanged: _toggleReminders,
+                ),
+              ),
+              if (_remindersEnabled) ...[
+                Material(
+                  color: theme.colorScheme.surfaceContainerHigh,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: LockoutTheme.cardPadding,
+                    ),
+                    child: CalmRow(
+                      icon: Icons.schedule,
+                      title: 'Reminder time',
+                      value: _reminderTime.format(context),
+                      onTap: _pickReminderTime,
+                    ),
+                  ),
+                ),
+                Material(
+                  color: theme.colorScheme.surfaceContainerHigh,
+                  child: SwitchListTile(
+                    title: const Text('Streak warning at 21:00'),
+                    value: _streakAlertsEnabled,
+                    onChanged: _toggleStreakAlerts,
+                  ),
+                ),
+              ],
+            ],
           ),
           if (_remindersEnabled) ...[
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: LockoutTheme.cardPadding,
-              ),
-              child: CalmRow(
-                icon: Icons.schedule,
-                title: 'Reminder time',
-                value: _reminderTime.format(context),
-                onTap: _pickReminderTime,
-              ),
-            ),
-            SwitchListTile(
-              title: const Text('Streak warning at 21:00'),
-              value: _streakAlertsEnabled,
-              onChanged: _toggleStreakAlerts,
-            ),
             Padding(
               padding: const EdgeInsets.fromLTRB(
                 LockoutTheme.cardPadding,

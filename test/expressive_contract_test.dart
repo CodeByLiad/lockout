@@ -237,6 +237,23 @@ void main() {
       });
     });
 
+    test('the shape-as-state primitives have production consumers', () {
+      // This branch shipped a review cycle with `MorphingSurface` and
+      // `ConnectedGroup` built, tested, documented and called by nothing
+      // outside their own test files. A primitive with no consumer is not a
+      // design system, it is dead code with a doc comment.
+      for (final widget in const ['MorphingSurface', 'ConnectedGroup']) {
+        final consumers = _dartFilesIn('lib')
+            .where((f) => !f.path.endsWith(
+                '${widget == 'MorphingSurface' ? 'morphing_surface' : 'connected_group'}.dart'))
+            .where((f) => f.readAsStringSync().contains('$widget('))
+            .map((f) => f.path)
+            .toList();
+        expect(consumers, isNotEmpty,
+            reason: '$widget is built but wired to nothing in lib/');
+      }
+    });
+
     test('the house declares each corner value the app uses', () {
       for (final value in const [8, 12, 16, 22, 26, 28, 32, 36]) {
         expect(_house.contains('$value dp'), isTrue,
