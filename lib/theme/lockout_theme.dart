@@ -93,22 +93,16 @@ class LockoutTheme {
   /// screen is: a ratio makes every narrower column a shorter tile, so the
   /// same grid that fits on a 430dp phone clips on a 360dp one.
   ///
-  /// The number is set by text scale, not by design taste. Re-measured when
-  /// Figtree replaced Inter as the body face and [numeric] took the house
-  /// `numericTable` metrics: the label line, the 4dp gap, the 16pt mono
-  /// value and the tile's own 12dp padding now come to roughly 75dp at text
-  /// scale 1.15, against 72 under the old face.
-  ///
-  /// The growth is the line-height ratio, not the face. The house
-  /// `numericTable` style is 15/22, a ratio [numeric] applies at every call
-  /// size, so the tile's 16pt figure gained about 2.7dp of leading. The old
-  /// 72 had no headroom at all, so it overflowed by 3dp the moment that
-  /// landed.
+  /// The number is set by text scale, not by design taste. It was 72, sized
+  /// against Inter's `labelSmall` at 11pt with 1.2 leading — a 13.2dp label
+  /// line. The house scale makes `labelSmall` 12/16, a 16dp line, so the
+  /// tile needs 2.8dp more and 72 overflowed by exactly 3dp at text scale
+  /// 1.15. The face change is incidental; the label style is the cause.
   ///
   /// 80 is the next step on the 8dp grid above the measured need, and the
   /// smallest that survives Android's "Large" font setting — the largest
   /// step a user reaches without opening accessibility settings.
-  /// `measured_constants_test.dart` measures it against the real style and
+  /// `measured_constants_test.dart` measures it against the real styles and
   /// `body_tab_test.dart` pins it.
   static const double statTileHeight = 80;
 
@@ -209,21 +203,33 @@ class LockoutTheme {
   ///
   /// The house document defines no monospace face of its own; this is
   /// deviation register entry D1, and the role was filed upstream before use.
+  ///
+  /// [height] defaults to null, meaning the face's own metrics. The house
+  /// `numericTable` leading — [numericTableHeight] — was authored for a 15pt
+  /// table row, and applying that ratio at every call size is a category
+  /// error: it gives a 28pt display numeral a table's airiness, and it is
+  /// what pushed the stat tile 3dp past its box when this style first took
+  /// the house metrics. Pass it explicitly where a real column of figures
+  /// needs the house row rhythm.
   static TextStyle numeric(
     BuildContext context, {
     double size = 15,
     FontWeight weight = FontWeight.w500,
     Color? color,
+    double? height,
   }) {
     return TextStyle(
       fontFamily: fontMono,
       fontSize: size,
       fontWeight: weight,
-      height: 22 / 15,
+      height: height,
       color: color ?? Theme.of(context).colorScheme.onSurface,
       letterSpacing: 0,
     );
   }
+
+  /// The house `numericTable` leading, 15/22. See [numeric].
+  static const double numericTableHeight = 22 / 15;
 
   static RoundedRectangleBorder _rounded(double radius, {BorderSide? side}) {
     return RoundedRectangleBorder(
