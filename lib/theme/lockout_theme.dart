@@ -59,49 +59,91 @@ class LockoutTheme {
   static const double swatchCheckOffset = -6;
   static const double swatchCheckSize = 18;
 
-  static const String fontSans = 'Inter';
+  static const String fontDisplay = 'BricolageGrotesque';
+  static const String fontBody = 'Figtree';
   static const String fontMono = 'JetBrainsMono';
 
-  /// The Material type scale, stated rather than derived.
+  /// The house type scale, stated rather than derived.
   ///
-  /// Sizes come from the design brief. They are written out instead of scaled
-  /// from one base size so that changing `titleMedium` cannot silently move
-  /// `bodySmall` with it.
+  /// Sizes, weights, line heights and tracking come from
+  /// `docs/design/nuvetrix-app-design-system.md` section 4.1. They are
+  /// written out instead of scaled from one base size so that changing
+  /// `titleMedium` cannot silently move `bodySmall` with it.
+  ///
+  /// Flutter's `letterSpacing` is in logical pixels, not em, so each em
+  /// figure from the house document is multiplied by its own size here.
+  ///
+  /// `displaySmall` and `headlineSmall` have no house entry: the document's
+  /// scale has thirteen styles and Flutter's `TextTheme` has fifteen. They
+  /// are interpolated between their neighbours at the same family, weight
+  /// and tracking ratio, and are the only two styles in this method not
+  /// copied from the document.
   static TextTheme textThemeFor(ColorScheme colors) {
-    TextStyle sans(
+    TextStyle display(
       double size,
-      FontWeight weight, {
+      FontWeight weight,
+      double lineHeight,
+      double em, {
       Color? color,
-      double? height,
     }) {
       return TextStyle(
-        fontFamily: fontSans,
+        fontFamily: fontDisplay,
         fontSize: size,
         fontWeight: weight,
+        height: lineHeight / size,
+        letterSpacing: size * em,
         color: color ?? colors.onSurface,
-        height: height,
+      );
+    }
+
+    TextStyle body(
+      double size,
+      FontWeight weight,
+      double lineHeight, {
+      Color? color,
+    }) {
+      return TextStyle(
+        fontFamily: fontBody,
+        fontSize: size,
+        fontWeight: weight,
+        height: lineHeight / size,
+        letterSpacing: 0,
+        color: color ?? colors.onSurface,
       );
     }
 
     return TextTheme(
-      displayLarge: sans(45, FontWeight.w700, height: 1.05),
-      displayMedium: sans(40, FontWeight.w700, height: 1.05),
-      displaySmall: sans(36, FontWeight.w700, height: 1.08),
-      headlineLarge: sans(32, FontWeight.w700, height: 1.15),
-      headlineMedium: sans(28, FontWeight.w700, height: 1.15),
-      headlineSmall: sans(24, FontWeight.w600, height: 1.2),
-      titleLarge: sans(22, FontWeight.w600, height: 1.25),
-      titleMedium: sans(18, FontWeight.w600, height: 1.3),
-      titleSmall: sans(16, FontWeight.w600, height: 1.3),
-      bodyLarge: sans(16, FontWeight.w400, height: 1.45),
-      bodyMedium: sans(14, FontWeight.w400, height: 1.45),
-      bodySmall: sans(13, FontWeight.w400,
-          color: colors.onSurfaceVariant, height: 1.4),
-      labelLarge: sans(14, FontWeight.w600, height: 1.2),
-      labelMedium: sans(12, FontWeight.w500,
-          color: colors.onSurfaceVariant, height: 1.2),
-      labelSmall: sans(11, FontWeight.w500,
-          color: colors.onSurfaceVariant, height: 1.2),
+      displayLarge: display(44, FontWeight.w800, 46, -0.03),
+      displayMedium: display(36, FontWeight.w800, 38, -0.03),
+      displaySmall: display(32, FontWeight.w800, 34, -0.03),
+      headlineLarge: display(28, FontWeight.w800, 31, -0.025),
+      headlineMedium: display(22, FontWeight.w700, 26, -0.02),
+      headlineSmall: display(20, FontWeight.w700, 24, -0.02),
+      titleLarge: display(19, FontWeight.w700, 23, -0.01),
+      titleMedium: body(16, FontWeight.w700, 22),
+      titleSmall: body(14, FontWeight.w600, 20),
+      bodyLarge: body(17, FontWeight.w400, 25),
+      bodyMedium: body(15, FontWeight.w400, 22),
+      bodySmall: body(13, FontWeight.w400, 18, color: colors.onSurfaceVariant),
+      labelLarge: body(15, FontWeight.w600, 20),
+      labelMedium: body(13, FontWeight.w700, 18),
+      labelSmall: body(12, FontWeight.w600, 16,
+          color: colors.onSurfaceVariant),
+    );
+  }
+
+  /// The one big number on a hero card — the house `countdown` style.
+  ///
+  /// Not part of `TextTheme` because Flutter has no slot for it. At most one
+  /// per screen; the house document is explicit about that.
+  static TextStyle countdown(ColorScheme colors, {Color? color}) {
+    return TextStyle(
+      fontFamily: fontDisplay,
+      fontSize: 88,
+      fontWeight: FontWeight.w800,
+      height: 72 / 88,
+      letterSpacing: 88 * -0.05,
+      color: color ?? colors.onSurface,
     );
   }
 
@@ -109,19 +151,24 @@ class LockoutTheme {
   /// the rest timer, log rows.
   ///
   /// Mono, so a digit does not change width between 1 and 8 and a column of
-  /// numbers does not shimmer as it counts down.
+  /// numbers does not shimmer as it counts down. The house `numericTable`
+  /// style.
+  ///
+  /// The house document defines no monospace face of its own; this is
+  /// deviation register entry D1, and the role was filed upstream before use.
   static TextStyle numeric(
     BuildContext context, {
-    double size = 14,
-    FontWeight weight = FontWeight.w700,
+    double size = 15,
+    FontWeight weight = FontWeight.w500,
     Color? color,
   }) {
     return TextStyle(
       fontFamily: fontMono,
       fontSize: size,
       fontWeight: weight,
+      height: 22 / 15,
       color: color ?? Theme.of(context).colorScheme.onSurface,
-      letterSpacing: 0.2,
+      letterSpacing: 0,
     );
   }
 

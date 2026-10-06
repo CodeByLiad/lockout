@@ -36,11 +36,12 @@ dependencies:
   cupertino_icons: ^1.0.8
   sqflite: ^2.4.2+1
   path: ^1.9.1
-  # Inter and JetBrains Mono are bundled under assets/fonts instead of
-  # resolved through google_fonts: that package downloads typefaces over
-  # HTTP at first paint, which never completes on a zero-network device, so
-  # every chosen face silently fell back to Roboto in the shipped APK.
-  dynamic_color: ^1.7.0
+  # Bricolage Grotesque, Figtree and JetBrains Mono are bundled under
+  # assets/fonts instead of resolved through google_fonts: that package
+  # downloads typefaces over HTTP at first paint, which never completes on a
+  # zero-network device, so every chosen face silently fell back to Roboto in
+  # the shipped APK. `dynamic_color` is likewise absent — the Nuvetrix house
+  # system forbids wallpaper-derived colour (section 2).
   intl: ^0.20.3
   path_provider: ^2.1.6
   share_plus: ^13.3.0
@@ -80,17 +81,27 @@ flutter:
 
   # Static weights rather than the variable font: Flutter resolves a
   # variable face to a single default instance, so `fontWeight` would stop
-  # doing anything across the type scale.
+  # doing anything across the type scale. Bricolage Grotesque and Figtree
+  # both publish statics upstream; the Google Fonts API serves only the
+  # variable build, which is why these come from the projects themselves.
   fonts:
-    - family: Inter
+    - family: BricolageGrotesque
       fonts:
-        - asset: assets/fonts/Inter-Regular.ttf
-          weight: 400
-        - asset: assets/fonts/Inter-Medium.ttf
+        - asset: assets/fonts/BricolageGrotesque-Medium.ttf
           weight: 500
-        - asset: assets/fonts/Inter-SemiBold.ttf
+        - asset: assets/fonts/BricolageGrotesque-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/BricolageGrotesque-ExtraBold.ttf
+          weight: 800
+    - family: Figtree
+      fonts:
+        - asset: assets/fonts/Figtree-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Figtree-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Figtree-SemiBold.ttf
           weight: 600
-        - asset: assets/fonts/Inter-Bold.ttf
+        - asset: assets/fonts/Figtree-Bold.ttf
           weight: 700
     - family: JetBrainsMono
       fonts:
