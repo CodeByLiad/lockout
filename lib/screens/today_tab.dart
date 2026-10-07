@@ -19,6 +19,7 @@ import '../widgets/house/nv_empty_state.dart';
 import '../widgets/house/nv_grouped_list.dart';
 import '../widgets/house/nv_hero_card.dart';
 import '../widgets/house/nv_icon_tile.dart';
+import '../widgets/house/nv_wavy_progress.dart';
 import '../widgets/lockout_card.dart';
 import '../widgets/sheet_scaffold.dart';
 import '../widgets/sparkline.dart';
@@ -1016,7 +1017,7 @@ class TodayTabState extends State<TodayTab> {
   /// `_FinishSummarySheet` for what tapping Finish opens.
   Widget _buildSessionHeader(double exerciseProgress) {
     final theme = Theme.of(context);
-    return LockoutCard(
+    return NvInfoCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1097,17 +1098,15 @@ class TodayTabState extends State<TodayTab> {
                   value: _fmtWeight(_sessionVolumeKg),
                 ),
               ),
-              FilledButton.tonal(
+              NvButton(
+                variant: NvButtonVariant.tonal,
+                label: 'Finish',
                 onPressed: _confirmFinishSession,
-                child: const Text('Finish'),
               ),
             ],
           ),
           const SizedBox(height: LockoutTheme.spaceMd),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(LockoutTheme.radiusPill),
-            child: LinearProgressIndicator(value: exerciseProgress),
-          ),
+          NvWavyProgress(value: exerciseProgress),
         ],
       ),
     );
@@ -1454,10 +1453,7 @@ class TodayTabState extends State<TodayTab> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(LockoutTheme.radiusPill),
-                child: LinearProgressIndicator(value: progress),
-              ),
+              NvWavyProgress(value: progress),
               const SizedBox(height: LockoutTheme.spaceSm),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1468,7 +1464,9 @@ class TodayTabState extends State<TodayTab> {
                   ),
                   Row(
                     children: [
-                      TextButton(
+                      NvButton(
+                        variant: NvButtonVariant.text,
+                        label: '-15s',
                         onPressed: () => setState(() {
                           // `_restTotalSeconds` is the progress bar's
                           // denominator, so it has to shrink by the same
@@ -1486,9 +1484,10 @@ class TodayTabState extends State<TodayTab> {
                           _restSeconds = next;
                           if (_restSeconds == 0) _restRunning = false;
                         }),
-                        child: const Text('-15s'),
                       ),
-                      TextButton(
+                      NvButton(
+                        variant: NvButtonVariant.text,
+                        label: '+15s',
                         onPressed: () => setState(() {
                           // Symmetric with the total above: extending the
                           // rest also extends what "full" means for the bar,
@@ -1497,11 +1496,11 @@ class TodayTabState extends State<TodayTab> {
                           _restSeconds += 15;
                           _restTotalSeconds += 15;
                         }),
-                        child: const Text('+15s'),
                       ),
-                      TextButton(
+                      NvButton(
+                        variant: NvButtonVariant.text,
+                        label: 'Skip',
                         onPressed: () => setState(() => _restRunning = false),
-                        child: const Text('Skip'),
                       ),
                     ],
                   ),

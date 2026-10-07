@@ -12,6 +12,7 @@ import 'package:lockout/theme/lockout_motion.dart';
 import 'package:lockout/theme/lockout_theme.dart';
 import 'package:lockout/widgets/house/nv_hero_card.dart';
 import 'package:lockout/widgets/house/nv_icon_tile.dart';
+import 'package:lockout/widgets/house/nv_wavy_progress.dart';
 
 import 'test_helpers.dart';
 
@@ -335,7 +336,8 @@ void main() {
       await tester.tap(find.text('Start session'));
       await settle(tester);
 
-      expect(find.byType(LinearProgressIndicator), findsWidgets);
+      expect(find.byType(NvWavyProgress), findsWidgets,
+          reason: 'section 8 gives long-running work the wavy indicator');
       expect(find.byIcon(Icons.check), findsWidgets);
     });
 
@@ -419,7 +421,11 @@ void main() {
 
       final before = rowColour();
       await tester.tap(find.byKey(const ValueKey('set-complete-0-0')));
-      await tester.pumpAndSettle();
+      // Bounded pumps, not `pumpAndSettle`: the session header now carries
+      // the wavy progress indicator, whose drift repeats forever, so there
+      // is no settled frame to wait for. Same reason the helper exists for
+      // `CircularProgressIndicator`.
+      await settle(tester, maxPumps: 4);
 
       expect(rowColour(), isNot(before));
     });
