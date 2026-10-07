@@ -56,10 +56,20 @@ class _NvButtonState extends State<NvButton> {
     final colors = Theme.of(context).colorScheme;
     final semantics = LockoutSemantics.of(context);
 
+    // `Colors.transparent`, not a hex literal: the contract guard forbids a
+    // hard-coded colour in the catalog, and it is right to — this is the
+    // absence of a fill, which is the one thing no theme role can name.
+    const noFill = Colors.transparent;
+
     return switch (widget.variant) {
+      // `onPrimaryContainer` on `primaryContainer`, inverted: the accent
+      // button is the hero action, and the hero card it sits on is itself
+      // filled with `primaryContainer`. Sharing that fill made the primary
+      // action invisible on a device while every unit assertion passed
+      // (device QA B1).
       NvButtonVariant.accent => (
-          background: colors.primaryContainer,
-          foreground: colors.onPrimaryContainer,
+          background: colors.onPrimaryContainer,
+          foreground: colors.primaryContainer,
           side: BorderSide.none,
         ),
       NvButtonVariant.filled => (
@@ -72,18 +82,22 @@ class _NvButtonState extends State<NvButton> {
           foreground: colors.onSecondaryContainer,
           side: BorderSide.none,
         ),
+      // No fill, not `surface`: section 8 gives these a border or nothing at
+      // all, and a `surface` fill reads as a solid pill on any tinted
+      // background — three of them sat on the rest bar looking filled
+      // (device QA B3).
       NvButtonVariant.outlined => (
-          background: colors.surface,
+          background: noFill,
           foreground: colors.onSurface,
           side: BorderSide(color: colors.outline),
         ),
       NvButtonVariant.text => (
-          background: colors.surface,
+          background: noFill,
           foreground: colors.primary,
           side: BorderSide.none,
         ),
       NvButtonVariant.danger => (
-          background: colors.surface,
+          background: noFill,
           foreground: semantics.danger,
           side: BorderSide(color: colors.outlineVariant),
         ),

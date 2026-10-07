@@ -228,6 +228,43 @@ void main() {
       expect(tick().tone, NvIconButtonTone.success);
     });
 
+    testWidgets('an incomplete row still paints the group surface',
+        (tester) async {
+      // Device QA B2: a set row painted only its completion tint, so an
+      // incomplete row was transparent and its controls floated on the page
+      // background instead of sitting in the group.
+      await _startSession(tester);
+
+      final box = tester.widget<DecoratedBox>(
+        find.byKey(const ValueKey('set-row-0-0')),
+      );
+      final colors = Theme.of(
+        tester.element(find.byKey(const ValueKey('set-row-0-0'))),
+      ).colorScheme;
+
+      expect((box.decoration as BoxDecoration).color, colors.surfaceContainer,
+          reason: 'a row with nothing logged still belongs to the group');
+    });
+
+    testWidgets('a completed row tints over that surface', (tester) async {
+      await _startSession(tester);
+
+      Color? colourNow() =>
+          (tester
+                  .widget<DecoratedBox>(
+                    find.byKey(const ValueKey('set-row-0-0')),
+                  )
+                  .decoration as BoxDecoration)
+              .color;
+
+      final before = colourNow();
+      await tester.tap(find.byKey(const ValueKey('set-complete-0-0')));
+      await settle(tester, maxPumps: 6);
+
+      expect(colourNow(), isNot(before),
+          reason: 'completion still has to be visible on the row itself');
+    });
+
     testWidgets('every stepper control still clears 48dp', (tester) async {
       await _startSession(tester);
 

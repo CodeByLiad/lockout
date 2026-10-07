@@ -161,6 +161,46 @@ void main() {
     expect(node.flagsCollection.isEnabled, Tristate.isFalse);
   });
 
+  testWidgets('the low-emphasis variants carry no fill of their own',
+      (tester) async {
+    // Device QA B3: the text variant filled with `surface`, which reads as a
+    // solid white pill on any tinted surface — three of them sat on the rest
+    // bar looking like filled buttons. Section 8: the text variant has no
+    // fill, and outlined and danger carry a border, not a fill.
+    for (final variant in const [
+      NvButtonVariant.text,
+      NvButtonVariant.outlined,
+      NvButtonVariant.danger,
+    ]) {
+      await tester.pumpWidget(_host(variant: variant));
+      await tester.pumpAndSettle();
+
+      final container =
+          tester.widget<AnimatedContainer>(find.byType(AnimatedContainer).first);
+      final fill = (container.decoration! as BoxDecoration).color;
+      expect(fill?.a ?? 0, 0,
+          reason: '$variant paints a fill it should not have');
+    }
+  });
+
+  testWidgets('an accent button is legible on an accent card',
+      (tester) async {
+    // Device QA B1: NvButton.accent filled with primaryContainer and
+    // NvHeroCard fills with primaryContainer, so the hero's primary action
+    // painted itself the same colour as the card under it and vanished.
+    await tester.pumpWidget(_host(variant: NvButtonVariant.accent));
+    await tester.pumpAndSettle();
+
+    final colors = Theme.of(tester.element(find.byType(NvButton))).colorScheme;
+    final container =
+        tester.widget<AnimatedContainer>(find.byType(AnimatedContainer).first);
+    final fill = (container.decoration! as BoxDecoration).color;
+
+    expect(fill, isNot(colors.primaryContainer),
+        reason: 'the accent button is the action ON an accent card; sharing '
+            'its fill makes it invisible');
+  });
+
   testWidgets('every variant paints a colour the theme resolved',
       (tester) async {
     for (final variant in NvButtonVariant.values) {

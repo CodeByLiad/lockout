@@ -634,10 +634,16 @@ void main() {
       // than left to finish and hide.
       await tester.pump();
 
+      final element = tester.element(find.byKey(const ValueKey('set-row-0-0')));
       final decoration = tester
           .widget<DecoratedBox>(find.byKey(const ValueKey('set-row-0-0')))
           .decoration as BoxDecoration;
-      expect(decoration.color, Colors.transparent);
+      // The surviving row sits at the group's own surface, not the
+      // completion tint. It used to be transparent; a set row now paints the
+      // group surface so its controls are not left floating on the page
+      // (device QA B2). The rule this asserts is unchanged: the row that was
+      // never logged must not look logged.
+      expect(decoration.color, Theme.of(element).colorScheme.surfaceContainer);
     });
 
     // The finish sheet's Discard used to end a session with logged sets on

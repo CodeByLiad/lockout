@@ -12,9 +12,12 @@ class NvHeroCard extends StatelessWidget {
   final String title;
 
   /// The one big number. One per screen; the house document is explicit.
-  final String value;
+  ///
+  /// Null when the surface has no count worth that much of the screen — a
+  /// rest day spent it on `0`, which says nothing (device QA M1).
+  final String? value;
 
-  final String unit;
+  final String? unit;
 
   /// The subject-scale element — usually a lobed day marker. The only place
   /// a lobed shape belongs on this card.
@@ -28,8 +31,8 @@ class NvHeroCard extends StatelessWidget {
   const NvHeroCard({
     super.key,
     required this.title,
-    required this.value,
-    required this.unit,
+    this.value,
+    this.unit,
     this.marker,
     this.progress,
     this.actions = const [],
@@ -63,30 +66,34 @@ class NvHeroCard extends StatelessWidget {
                           color: colors.onPrimaryContainer,
                         ),
                       ),
-                      const SizedBox(height: LockoutTheme.spaceSm),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.baseline,
-                        textBaseline: TextBaseline.alphabetic,
-                        children: [
-                          Flexible(
-                            child: Text(
-                              value,
-                              maxLines: 1,
-                              style: LockoutTheme.countdown(
-                                colors,
-                                color: colors.onPrimaryContainer,
+                      if (value != null) ...[
+                        const SizedBox(height: LockoutTheme.spaceSm),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.baseline,
+                          textBaseline: TextBaseline.alphabetic,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                value!,
+                                maxLines: 1,
+                                style: LockoutTheme.countdown(
+                                  colors,
+                                  color: colors.onPrimaryContainer,
+                                ),
                               ),
                             ),
-                          ),
-                          const SizedBox(width: LockoutTheme.spaceSm),
-                          Text(
-                            unit,
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              color: colors.onPrimaryContainer,
-                            ),
-                          ),
-                        ],
-                      ),
+                            if (unit != null) ...[
+                              const SizedBox(width: LockoutTheme.spaceSm),
+                              Text(
+                                unit!,
+                                style: theme.textTheme.titleSmall?.copyWith(
+                                  color: colors.onPrimaryContainer,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),

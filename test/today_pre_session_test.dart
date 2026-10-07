@@ -175,6 +175,31 @@ void main() {
     });
   });
 
+  group('the screen says each thing once', () {
+    testWidgets('a rest day does not repeat itself', (tester) async {
+      // Device QA M1: the hero said "Nothing scheduled / 0 sets / Custom
+      // session" and the empty state directly below said the same thing
+      // again, with a second button doing the same job.
+      await tester.pumpWidget(_hostedTodayTab());
+      await settle(tester);
+
+      expect(find.textContaining('Custom session'), findsOneWidget,
+          reason: 'one way to start an off-plan session, not two');
+      expect(find.text('0'), findsNothing,
+          reason: "a rest day has no count worth the screen's one "
+              'display-scale number');
+    });
+
+    testWidgets('a training day names the day once', (tester) async {
+      // Device QA M2: the screen title and the hero title both read "Push".
+      await _seedTrainingDayToday();
+      await tester.pumpWidget(_hostedTodayTab());
+      await settle(tester);
+
+      expect(find.text('Legs'), findsOneWidget);
+    });
+  });
+
   group('the quick actions', () {
     testWidgets('each action is an icon tile', (tester) async {
       await tester.pumpWidget(_hostedTodayTab());

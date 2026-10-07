@@ -637,9 +637,13 @@ class TodayTabState extends State<TodayTab> {
               horizontal: LockoutTheme.cardPadding,
             ),
             child: NvHeroCard(
-              title: isRest ? 'Nothing scheduled' : sched.day.name,
-              value: '$setCount',
-              unit: setCount == 1 ? 'set' : 'sets',
+              // Not the day's name: the screen title above already says it,
+              // and printing it twice in two sizes is not emphasis (device
+              // QA M2). A rest day carries no count at all rather than
+              // spending the one display-scale number on a zero (M1).
+              title: isRest ? 'Nothing scheduled' : "Today's session",
+              value: isRest ? null : '$setCount',
+              unit: isRest ? null : (setCount == 1 ? 'set' : 'sets'),
               // The one subject-scale element on this screen, and the only
               // place a lobed shape belongs: the lobe count is the register,
               // 4 for rest and 6 for training.
@@ -650,18 +654,23 @@ class TodayTabState extends State<TodayTab> {
                 ),
                 child: const SizedBox(width: 56, height: 56),
               ),
+              // A rest day's single action lives in the empty state below,
+              // which already asks for it. Two buttons doing the same job on
+              // one screen was device QA M1.
               actions: [
-                if (!isRest && !isEmptyDay)
+                if (!isRest) ...[
+                  if (!isEmptyDay)
+                    NvButton(
+                      variant: NvButtonVariant.accent,
+                      label: 'Start session',
+                      onPressed: _startScheduledSession,
+                    ),
                   NvButton(
-                    variant: NvButtonVariant.accent,
-                    label: 'Start session',
-                    onPressed: _startScheduledSession,
+                    variant: NvButtonVariant.tonal,
+                    label: 'Custom session',
+                    onPressed: _startCustomSession,
                   ),
-                NvButton(
-                  variant: NvButtonVariant.tonal,
-                  label: 'Custom session',
-                  onPressed: _startCustomSession,
-                ),
+                ],
               ],
             ),
           ),
@@ -720,7 +729,7 @@ class TodayTabState extends State<TodayTab> {
       return NvEmptyState(
         headline: 'No session today',
         body: 'Nothing is scheduled. Train off-plan or take the day.',
-        actionLabel: 'Start a custom session',
+        actionLabel: 'Custom session',
         onAction: _startCustomSession,
       );
     }
@@ -1345,9 +1354,18 @@ class TodayTabState extends State<TodayTab> {
     // its target lands on a hue nobody authored. Taken through
     // `durationFor` so the fade collapses to nothing when the user has
     // asked the OS to remove animations.
+    // The row's own surface is the group's, not transparent: a set row lives
+    // inside an `NvGroupedList`, and a transparent one left its steppers and
+    // tick floating on the page background with no row behind them (device
+    // QA B2). The completion tint is composited over that surface rather
+    // than standing in for it.
+    final rowSurface = theme.colorScheme.surfaceContainer;
     final targetColor = set.completed
-        ? semantics.success.withValues(alpha: 0.12)
-        : Colors.transparent;
+        ? Color.alphaBlend(
+            semantics.success.withValues(alpha: 0.12),
+            rowSurface,
+          )
+        : rowSurface;
     return TweenAnimationBuilder<Color?>(
       key: ObjectKey(set),
       tween: ColorTween(end: targetColor),
