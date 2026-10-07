@@ -39,6 +39,41 @@ const List<String> _branchOneFiles = [
   'lib/screens/today_tab.dart',
 ];
 
+/// The files this branch rebuilds from the house component catalog.
+///
+/// Guards scoped to this list widen as screens land. They never weaken: a
+/// guard that stops asserting something is a regression, not a scope change.
+///
+/// Today this holds exactly what `_branchOneFiles` holds, so scoping the
+/// case rule to it asserts nothing the case rule did not already assert —
+/// the all-caps copy the device pass found lived in `home_hub.dart`, which
+/// no list covered. It earns its keep when the settings screen and About
+/// land here. Said plainly rather than left to look like new coverage.
+const List<String> _rebuiltFiles = [
+  ..._branchOneFiles,
+];
+
+/// The pre-rebuild widgets a rebuilt screen must not reach for.
+///
+/// Each was written for the previous design. Adapting a screen to keep one
+/// preserves that design's composition in a place no token can reach, which
+/// is the failure this branch exists to end.
+/// The screens rebuilt so far. Appended to as screens land.
+const List<String> _rebuiltScreens = [
+  'lib/screens/today_tab.dart',
+];
+
+const List<String> _preRebuildWidgets = [
+  'home_hub.dart',
+  'lockout_card.dart',
+  'hero_card.dart',
+  'calm_row.dart',
+  'action_grid.dart',
+  'stat_tile.dart',
+  'today_day_card.dart',
+  'sheet_scaffold.dart',
+];
+
 List<File> _dartFilesIn(String directory) => Directory(directory)
     .listSync(recursive: true)
     .whereType<File>()
@@ -168,7 +203,7 @@ void main() {
         'BMI', 'BMR', 'TDEE', 'KCAL', 'SQL', 'JSON', 'CSV', 'URL', 'API',
       };
 
-      for (final path in _branchOneFiles) {
+      for (final path in _rebuiltFiles) {
         final source = File(path).readAsStringSync();
         expect(source.contains('toUpperCase'), isFalse,
             reason: '$path uppercases copy; the house document forbids '
@@ -341,6 +376,82 @@ void main() {
       await gesture.up();
       await tester.pumpAndSettle();
       expect(radiusOf(shapeNow()), LockoutTheme.radiusButtonRest);
+    });
+  });
+
+  group('the house catalog', () {
+    test('every catalog component resolves colour through the theme', () {
+      for (final file in _dartFilesIn('lib/widgets/house')) {
+        final source = _withoutComments(file.readAsStringSync());
+        expect(RegExp(r'Color\(0x').hasMatch(source), isFalse,
+            reason: '${file.path} hard-codes a colour; colour resolves '
+                'through Theme.of(context) or LockoutSemantics.of(context)');
+        expect(source.contains('JinatraTokens'), isFalse,
+            reason: '${file.path} reaches for the retired token class');
+      }
+    });
+
+    test('a rebuilt screen composes from the catalog, not the old widgets',
+        () {
+      for (final path in _rebuiltScreens) {
+        final source = _withoutComments(File(path).readAsStringSync());
+        for (final widget in _preRebuildWidgets) {
+          // Matched on the import path, not the bare file name: `widgets/`
+          // anchors it to `lib/widgets/<widget>` and keeps the catalog's own
+          // `widgets/house/nv_hero_card.dart` from reading as a hit on
+          // `hero_card.dart`.
+          expect(source.contains('widgets/$widget'), isFalse,
+              reason: '$path still reaches for $widget, a widget written '
+                  'for the previous design');
+        }
+      }
+    });
+
+    test('every interactive catalog component carries a radius pair', () {
+      // A single fixed radius on an interactive surface is a contract
+      // violation. Each of these routes its press through MorphingSurface,
+      // which takes a rest and an active radius by construction — asserting
+      // the route is what makes the rule reachable rather than decorative.
+      const interactive = [
+        'lib/widgets/house/nv_button.dart',
+        'lib/widgets/house/nv_grouped_list.dart',
+      ];
+
+      for (final path in interactive) {
+        final source = _withoutComments(File(path).readAsStringSync());
+        expect(source.contains('MorphingSurface('), isTrue,
+            reason: '$path has a press state but does not morph');
+        expect(source.contains('restRadius:'), isTrue, reason: path);
+        expect(source.contains('activeRadius:'), isTrue, reason: path);
+      }
+    });
+
+    test('the hero card wears the signature outline and does not morph', () {
+      final source = _withoutComments(
+        File('lib/widgets/house/nv_hero_card.dart').readAsStringSync(),
+      );
+      expect(source.contains('LockoutTheme.heroCardShape'), isTrue,
+          reason: 'the hero card carries the family signature');
+      expect(source.contains('MorphingSurface('), isFalse,
+          reason: 'a card has no pressed state to shape-shift into');
+    });
+
+    test('every catalog component has a consumer outside the catalog', () {
+      // The defect this branch exists to end: MorphingSurface and
+      // ConnectedGroup shipped a review cycle built, tested, documented and
+      // called by nothing. A component with no consumer is not a design
+      // system, it is dead code with a doc comment.
+      final consumers = _dartFilesIn('lib')
+          .where((f) => !f.path.contains('widgets\\house'))
+          .map((f) => _withoutComments(f.readAsStringSync()))
+          .join('\n');
+
+      for (final file in _dartFilesIn('lib/widgets/house')) {
+        final name = file.uri.pathSegments.last.replaceAll('.dart', '');
+        expect(consumers.contains(name), isTrue,
+            reason: '${file.path} is built but wired to nothing outside the '
+                'catalog');
+      }
     });
   });
 
