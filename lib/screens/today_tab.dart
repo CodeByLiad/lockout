@@ -15,6 +15,7 @@ import '../services/schedule_service.dart';
 import '../widgets/action_grid.dart';
 import '../widgets/exercise_picker.dart';
 import '../widgets/home_hub.dart';
+import '../widgets/house/nv_button.dart';
 import '../widgets/lockout_card.dart';
 import '../widgets/sheet_scaffold.dart';
 import 'exercise_video_screen.dart';
@@ -548,13 +549,15 @@ class TodayTabState extends State<TodayTab> {
         heroColor: LockoutSemantics.of(context).categoryAt(isRest ? 7 : 0),
         heroActions: [
           if (!isRest && !isEmptyDay)
-            FilledButton(
+            NvButton(
+              variant: NvButtonVariant.accent,
+              label: 'Start session',
               onPressed: _startScheduledSession,
-              child: const Text('Start session'),
             ),
-          FilledButton.tonal(
+          NvButton(
+            variant: NvButtonVariant.tonal,
+            label: 'Custom session',
             onPressed: _startCustomSession,
-            child: const Text('Custom session'),
           ),
         ],
         summary: _summary,
