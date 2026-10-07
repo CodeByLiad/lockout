@@ -176,4 +176,74 @@ void main() {
       );
     }
   });
+
+  group('NvIconButton', () {
+    Widget host({bool enabled = true, VoidCallback? onPressed}) => MaterialApp(
+          theme: lockoutTestTheme(),
+          home: Scaffold(
+            body: Center(
+              child: NvIconButton(
+                icon: Icons.remove,
+                tooltip: 'One rep fewer',
+                onPressed: enabled ? (onPressed ?? () {}) : null,
+              ),
+            ),
+          ),
+        );
+
+    testWidgets('it is a 48dp pill', (tester) async {
+      await tester.pumpWidget(host());
+      await tester.pumpAndSettle();
+
+      expect(tester.getSize(find.byType(NvIconButton)).height, 48);
+      expect(tester.getSize(find.byType(NvIconButton)).width, 48);
+      expect(_radiusOf(tester), 999);
+    });
+
+    testWidgets('it rounds to 14dp while pressed', (tester) async {
+      await tester.pumpWidget(host());
+      await tester.pumpAndSettle();
+
+      final gesture =
+          await tester.startGesture(tester.getCenter(find.byType(NvIconButton)));
+      await tester.pumpAndSettle();
+      expect(_radiusOf(tester), 14);
+
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(_radiusOf(tester), 999);
+    });
+
+    testWidgets('it carries a content description', (tester) async {
+      await tester.pumpWidget(host());
+      await tester.pumpAndSettle();
+
+      // Section 9: an icon-only button always has one, so the tooltip is
+      // required rather than optional.
+      final node = tester.getSemantics(find.byType(NvIconButton));
+      expect(node.label, 'One rep fewer');
+      expect(node.flagsCollection.isButton, isTrue);
+    });
+
+    testWidgets('it reports the press', (tester) async {
+      var presses = 0;
+      await tester.pumpWidget(host(onPressed: () => presses++));
+      await tester.tap(find.byType(NvIconButton));
+      await tester.pumpAndSettle();
+      expect(presses, 1);
+    });
+
+    testWidgets('a disabled icon button does not morph', (tester) async {
+      await tester.pumpWidget(host(enabled: false));
+      await tester.pumpAndSettle();
+
+      final gesture =
+          await tester.startGesture(tester.getCenter(find.byType(NvIconButton)));
+      await tester.pumpAndSettle();
+      expect(_radiusOf(tester), 999);
+
+      await gesture.up();
+      await tester.pumpAndSettle();
+    });
+  });
 }

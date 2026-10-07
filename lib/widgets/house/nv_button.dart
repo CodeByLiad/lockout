@@ -156,3 +156,89 @@ class _NvButtonState extends State<NvButton> {
     );
   }
 }
+
+/// What an icon button's fill is saying.
+///
+/// Most icon buttons are neutral chrome. A toggle that reports a completed
+/// thing — a logged set — is the exception, and it reads through the
+/// semantics layer's success pair rather than a colour typed at the call
+/// site.
+enum NvIconButtonTone { neutral, success }
+
+/// Section 8's icon button: a 48dp pill that rounds to 14dp while pressed.
+///
+/// [tooltip] is required, not optional — section 9 says an icon-only button
+/// always carries a content description, and a required parameter is the
+/// only version of that rule a call site cannot forget.
+class NvIconButton extends StatefulWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onPressed;
+  final NvIconButtonTone tone;
+
+  const NvIconButton({
+    super.key,
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+    this.tone = NvIconButtonTone.neutral,
+  });
+
+  @override
+  State<NvIconButton> createState() => _NvIconButtonState();
+}
+
+class _NvIconButtonState extends State<NvIconButton> {
+  bool _pressed = false;
+
+  bool get _enabled => widget.onPressed != null;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final semantics = LockoutSemantics.of(context);
+
+    final (Color background, Color foreground) =
+        switch (widget.tone) {
+      NvIconButtonTone.neutral => (
+          colors.surfaceContainerHigh,
+          colors.onSurface,
+        ),
+      NvIconButtonTone.success => (semantics.success, semantics.onSuccess),
+    };
+
+    // Semantics outside Tooltip, not inside: a Tooltip introduces its own
+    // semantics node, and with the label nested under it the button's own
+    // node reaches a screen reader unlabelled.
+    return Semantics(
+      button: true,
+      enabled: _enabled,
+      label: widget.tooltip,
+      excludeSemantics: true,
+      child: Tooltip(
+        message: widget.tooltip,
+        child: GestureDetector(
+          onTapDown: _enabled ? (_) => setState(() => _pressed = true) : null,
+          onTapUp: _enabled ? (_) => setState(() => _pressed = false) : null,
+          onTapCancel: _enabled ? () => setState(() => _pressed = false) : null,
+          onTap: widget.onPressed,
+          child: MorphingSurface(
+            restRadius: LockoutTheme.radiusButtonRest,
+            activeRadius: 14,
+            active: _pressed,
+            color: background,
+            child: SizedBox(
+              width: LockoutTheme.minTouchTarget,
+              height: LockoutTheme.minTouchTarget,
+              child: Icon(
+                widget.icon,
+                size: 24,
+                color: _enabled ? foreground : colors.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

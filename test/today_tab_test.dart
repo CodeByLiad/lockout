@@ -10,6 +10,7 @@ import 'package:lockout/services/schedule_service.dart';
 import 'package:lockout/theme/cookie_border.dart';
 import 'package:lockout/theme/lockout_motion.dart';
 import 'package:lockout/theme/lockout_theme.dart';
+import 'package:lockout/widgets/house/nv_button.dart';
 import 'package:lockout/widgets/house/nv_hero_card.dart';
 import 'package:lockout/widgets/house/nv_icon_tile.dart';
 import 'package:lockout/widgets/house/nv_wavy_progress.dart';
@@ -352,7 +353,7 @@ void main() {
       for (final icon in [Icons.remove, Icons.add]) {
         for (final element in find.byIcon(icon).evaluate()) {
           final size = tester.getSize(find.byWidget(
-            element.findAncestorWidgetOfExactType<IconButton>()!,
+            element.findAncestorWidgetOfExactType<NvIconButton>()!,
           ));
           expect(size.width, greaterThanOrEqualTo(LockoutTheme.minTouchTarget));
           expect(size.height, greaterThanOrEqualTo(LockoutTheme.minTouchTarget));
@@ -592,11 +593,11 @@ void main() {
 
       // One set left: the guard disables the control rather than removing
       // the last row a session needs to log anything at all.
-      final lastDelete = tester.widget<IconButton>(
+      final lastDelete = tester.widget<NvIconButton>(
         find
             .ancestor(
               of: find.byIcon(Icons.close),
-              matching: find.byType(IconButton),
+              matching: find.byType(NvIconButton),
             )
             .first,
       );

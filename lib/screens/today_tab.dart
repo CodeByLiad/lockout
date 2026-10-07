@@ -19,6 +19,7 @@ import '../widgets/house/nv_empty_state.dart';
 import '../widgets/house/nv_grouped_list.dart';
 import '../widgets/house/nv_hero_card.dart';
 import '../widgets/house/nv_icon_tile.dart';
+import '../widgets/house/nv_status_badge.dart';
 import '../widgets/house/nv_wavy_progress.dart';
 import '../widgets/lockout_card.dart';
 import '../widgets/sheet_scaffold.dart';
@@ -1145,19 +1146,24 @@ class TodayTabState extends State<TodayTab> {
   Widget _buildLegSafetyNotice() {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    return LockoutCard(
-      color: colors.tertiaryContainer,
+    // An info card rather than a tinted card of its own: section 8 has one
+    // card for advisory content, and the warning is carried by the icon and
+    // the semantics layer's `warning` role rather than by a whole surface.
+    return NvInfoCard(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.warning_amber, color: colors.onTertiaryContainer),
+          Icon(
+            Icons.warning_amber,
+            color: LockoutSemantics.of(context).warning,
+          ),
           const SizedBox(width: LockoutTheme.spaceSm),
           Expanded(
             child: Text(
               'Pain-free movement only. Use moderate load, avoid forcing '
               'painful reps.',
               style: theme.textTheme.bodyMedium?.copyWith(
-                color: colors.onTertiaryContainer,
+                color: colors.onSurface,
               ),
             ),
           ),
@@ -1169,50 +1175,51 @@ class TodayTabState extends State<TodayTab> {
   Widget _buildExerciseCard(_LiveExercise ex, int exerciseIndex) {
     final theme = Theme.of(context);
 
+    final done = ex.completedCount;
+    final total = ex.sets.length;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: LockoutTheme.spaceMd),
-      child: LockoutCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: NvGroupedList(
+        children: [
+          // The exercise's own row leads the group, carrying its progress in
+          // the trailing badge section 8 puts there.
+          NvListItem(
+            title: ex.name,
+            supporting: ex.lastPerformance.isEmpty
+                ? 'Target ${ex.targetLabel} - no previous data'
+                : 'Target ${ex.targetLabel} - last ${ex.lastPerformance}',
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(ex.name, style: theme.textTheme.titleMedium),
-                      const SizedBox(height: LockoutTheme.spaceXs),
-                      Text(
-                        'Target ${ex.targetLabel}',
-                        style: theme.textTheme.bodySmall,
-                      ),
-                      const SizedBox(height: LockoutTheme.spaceXs),
-                      Text(
-                        ex.lastPerformance.isEmpty
-                            ? 'No previous data'
-                            : 'Last ${ex.lastPerformance}',
-                        style: theme.textTheme.labelSmall,
-                      ),
-                    ],
-                  ),
+                NvStatusBadge(
+                  label: '$done/$total',
+                  kind: _setProgressKind(done, total),
                 ),
-                IconButton(
+                const SizedBox(width: LockoutTheme.spaceSm),
+                NvIconButton(
+                  icon: Icons.play_circle_outline,
                   tooltip: 'Watch video',
                   onPressed: () => _openVideo(ex.name, ex.videoUrl),
-                  icon: const Icon(Icons.play_circle_outline),
                 ),
               ],
             ),
-            const SizedBox(height: LockoutTheme.spaceSm),
-            for (var i = 0; i < ex.sets.length; i++)
-              _buildSetRow(ex, exerciseIndex, i, ex.sets[i]),
-            Align(
+          ),
+          for (var i = 0; i < ex.sets.length; i++)
+            _buildSetRow(ex, exerciseIndex, i, ex.sets[i]),
+          Container(
+            color: theme.colorScheme.surfaceContainer,
+            padding: const EdgeInsets.symmetric(
+              horizontal: LockoutTheme.spaceSm,
+              vertical: LockoutTheme.spaceXs,
+            ),
+            child: Align(
               alignment: Alignment.centerLeft,
-              // Plain text, not `.icon` — see the "Add exercise" button above
+              // Plain text, not `.icon` - see the "Add exercise" button above
               // for why an `Icons.add` glyph does not belong here either.
-              child: TextButton(
+              child: NvButton(
+                variant: NvButtonVariant.text,
+                label: 'Add set',
                 onPressed: () {
                   final last = ex.sets.isNotEmpty ? ex.sets.last : null;
                   setState(() => ex.sets.add(_LiveSet(
@@ -1220,13 +1227,20 @@ class TodayTabState extends State<TodayTab> {
                         reps: last?.reps ?? 10,
                       )));
                 },
-                child: const Text('Add set'),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
+  }
+
+  /// What an exercise's set count is saying: nothing started, in progress,
+  /// or finished.
+  NvBadgeKind _setProgressKind(int done, int total) {
+    if (total > 0 && done >= total) return NvBadgeKind.done;
+    if (done > 0) return NvBadgeKind.accent;
+    return NvBadgeKind.neutral;
   }
 
   Widget _buildSetRow(
@@ -1282,27 +1296,22 @@ class TodayTabState extends State<TodayTab> {
                   style: theme.textTheme.labelSmall,
                 ),
               ),
-              IconButton(
+              NvIconButton(
+                icon: Icons.close,
                 tooltip: 'Remove set',
-                icon: const Icon(Icons.close),
                 onPressed: ex.sets.length > 1
                     ? () => setState(() => ex.sets.removeAt(setIndex))
                     : null,
               ),
-              IconButton.filled(
+              NvIconButton(
                 key: ValueKey('set-complete-$exerciseIndex-$setIndex'),
+                icon: Icons.check,
                 tooltip: set.completed
                     ? 'Mark set incomplete'
                     : 'Mark set complete',
-                style: IconButton.styleFrom(
-                  backgroundColor: set.completed
-                      ? semantics.success
-                      : theme.colorScheme.surfaceContainerHighest,
-                  foregroundColor: set.completed
-                      ? semantics.onSuccess
-                      : theme.colorScheme.onSurfaceVariant,
-                ),
-                icon: const Icon(Icons.check),
+                tone: set.completed
+                    ? NvIconButtonTone.success
+                    : NvIconButtonTone.neutral,
                 onPressed: () {
                   final wasDone = set.completed;
                   setState(() => set.completed = !wasDone);
@@ -1379,17 +1388,14 @@ class TodayTabState extends State<TodayTab> {
     required VoidCallback onMinus,
     required VoidCallback onPlus,
   }) {
-    const constraints = BoxConstraints(
-      minWidth: LockoutTheme.minTouchTarget,
-      minHeight: LockoutTheme.minTouchTarget,
-    );
+    // `NvIconButton` is 48dp square by construction, so the explicit
+    // constraints the framework `IconButton` needed are gone with it.
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        IconButton(
+        NvIconButton(
+          icon: Icons.remove,
           tooltip: 'Decrease $label',
-          icon: const Icon(Icons.remove),
-          constraints: constraints,
           onPressed: onMinus,
         ),
         // `Flexible` still, so this can never overflow its Row regardless
@@ -1423,10 +1429,9 @@ class TodayTabState extends State<TodayTab> {
             ),
           ),
         ),
-        IconButton(
+        NvIconButton(
+          icon: Icons.add,
           tooltip: 'Increase $label',
-          icon: const Icon(Icons.add),
-          constraints: constraints,
           onPressed: onPlus,
         ),
       ],
