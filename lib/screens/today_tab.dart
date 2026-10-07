@@ -19,10 +19,10 @@ import '../widgets/house/nv_empty_state.dart';
 import '../widgets/house/nv_grouped_list.dart';
 import '../widgets/house/nv_hero_card.dart';
 import '../widgets/house/nv_icon_tile.dart';
+import '../widgets/house/nv_dialog.dart';
+import '../widgets/house/nv_sheet.dart';
 import '../widgets/house/nv_status_badge.dart';
 import '../widgets/house/nv_wavy_progress.dart';
-import '../widgets/lockout_card.dart';
-import '../widgets/sheet_scaffold.dart';
 import '../widgets/sparkline.dart';
 import 'exercise_video_screen.dart';
 
@@ -481,46 +481,29 @@ class TodayTabState extends State<TodayTab> {
     await _loadSummary();
     if (!mounted) return;
     _endSessionState();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Session saved — ${setRows.length} sets, ${_fmtWeight(session.totalVolumeKg)} kg volume',
-        ),
-      ),
+    showNvSnackbar(
+      context: context,
+      message: 'Session saved — ${setRows.length} sets, '
+          '${_fmtWeight(session.totalVolumeKg)} kg volume',
     );
   }
 
+  /// Section 8 allows a dialog for exactly this: a destructive
+  /// confirmation. The danger ink lives inside `showNvDestructiveDialog`,
+  /// which resolves `false` on a dismissal rather than null, so a caller
+  /// cannot read "dismissed" as "confirmed".
   Future<bool?> _confirmDiscard() {
-    final semantics = LockoutSemantics.of(context);
-    return showDialog<bool>(
+    return showNvDestructiveDialog(
       context: context,
-      // No `backgroundColor`/`shape` here — `LockoutTheme.build`'s
-      // `dialogTheme` already supplies both.
-      builder: (ctx) => AlertDialog(
-        title: const Text('Discard session?'),
-        content: Text(
-          _sessionCompletedSets > 0
-              ? '$_sessionCompletedSets logged '
-                  '${_sessionCompletedSets == 1 ? 'set' : 'sets'} will be '
-                  'lost. Discard ${_sessionCompletedSets == 1 ? 'it' : 'them'}?'
-              : 'No sets were logged, so there is nothing to archive. End the session?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Keep going'),
-          ),
-          TextButton(
-            // `semantics.danger`, not `colorScheme.error` — this is a
-            // destructive confirmation, exactly what that role is reserved
-            // for (see `LockoutSemantics`'s doc on `danger` vs `error`, and
-            // `log_tab.dart`'s DELETE ENTRY for the same rule).
-            style: TextButton.styleFrom(foregroundColor: semantics.danger),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Discard'),
-          ),
-        ],
-      ),
+      title: 'Discard session?',
+      body: _sessionCompletedSets > 0
+          ? '$_sessionCompletedSets logged '
+              '${_sessionCompletedSets == 1 ? 'set' : 'sets'} will be lost. '
+              'Discard ${_sessionCompletedSets == 1 ? 'it' : 'them'}?'
+          : 'No sets were logged, so there is nothing to archive. End the '
+              'session?',
+      confirmLabel: 'Discard',
+      cancelLabel: 'Keep going',
     );
   }
 
@@ -1118,10 +1101,10 @@ class TodayTabState extends State<TodayTab> {
   /// the write rather than discovered after it. `Save` calls the existing
   /// `_finishSession` unchanged; `Discard` ends the session with no write.
   Future<void> _confirmFinishSession() async {
-    final action = await showLockoutSheet<String>(
+    final action = await showNvSheet<String>(
       context: context,
       title: 'Finish session',
-      builder: (_) => _FinishSummarySheet(
+      child: _FinishSummarySheet(
         duration: _elapsedLabel,
         volume: _fmtWeight(_sessionVolumeKg),
         sets: '$_sessionCompletedSets/$_sessionTotalSets',
