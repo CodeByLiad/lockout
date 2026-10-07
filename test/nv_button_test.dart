@@ -1,5 +1,6 @@
+import 'dart:ui' show Tristate;
+
 import 'package:flutter/material.dart';
-import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lockout/widgets/house/nv_button.dart';
 
@@ -142,8 +143,8 @@ void main() {
     await tester.pumpAndSettle();
 
     final node = tester.getSemantics(find.byType(NvButton));
-    expect(node.hasFlag(SemanticsFlag.isButton), isTrue);
-    expect(node.hasFlag(SemanticsFlag.isEnabled), isTrue);
+    expect(node.flagsCollection.isButton, isTrue);
+    expect(node.flagsCollection.isEnabled, Tristate.isTrue);
     expect(node.label, 'Start session');
   });
 
@@ -154,8 +155,10 @@ void main() {
     await tester.pumpAndSettle();
 
     final node = tester.getSemantics(find.byType(NvButton));
-    expect(node.hasFlag(SemanticsFlag.hasEnabledState), isTrue);
-    expect(node.hasFlag(SemanticsFlag.isEnabled), isFalse);
+    // `isEnabled` is null when the node carries no enabled state at all, so
+    // `isFalse` here asserts both that the state exists and that it says
+    // disabled — a screen reader must not announce it as actionable.
+    expect(node.flagsCollection.isEnabled, Tristate.isFalse);
   });
 
   testWidgets('every variant paints a colour the theme resolved',

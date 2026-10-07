@@ -71,6 +71,12 @@ class LockoutTheme {
 
   static const double screenPadding = 20;
   static const double cardPadding = 16;
+
+  /// The hero card's own padding, section 8. It is the one card the house
+  /// document pads differently from the rest, so it needs its own token: a
+  /// 22 typed at the call site is exactly what the raw-padding guard exists
+  /// to catch.
+  static const double heroCardPadding = 22;
   static const double sectionGap = 28;
 
   /// The gap between a section heading and its content.

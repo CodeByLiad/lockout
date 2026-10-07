@@ -135,10 +135,17 @@ class _NvButtonState extends State<NvButton> {
                   Icon(widget.icon, size: 20, color: foreground),
                   const SizedBox(width: LockoutTheme.spaceSm),
                 ],
-                Text(
-                  widget.label,
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    color: foreground,
+                // Flexible, not bare: a button in a `Wrap` or a grid cell can
+                // be handed less width than its label wants, and an
+                // unshrinkable label overflows the row rather than eliding.
+                Flexible(
+                  child: Text(
+                    widget.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      color: foreground,
+                    ),
                   ),
                 ),
               ],

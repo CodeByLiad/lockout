@@ -12,12 +12,16 @@ import '../services/energy_estimator.dart';
 import '../services/goal_service.dart';
 import '../services/numeric_guard.dart';
 import '../services/schedule_service.dart';
-import '../widgets/action_grid.dart';
 import '../widgets/exercise_picker.dart';
-import '../widgets/home_hub.dart';
 import '../widgets/house/nv_button.dart';
+import '../widgets/house/nv_cards.dart';
+import '../widgets/house/nv_empty_state.dart';
+import '../widgets/house/nv_grouped_list.dart';
+import '../widgets/house/nv_hero_card.dart';
+import '../widgets/house/nv_icon_tile.dart';
 import '../widgets/lockout_card.dart';
 import '../widgets/sheet_scaffold.dart';
+import '../widgets/sparkline.dart';
 import 'exercise_video_screen.dart';
 
 /// One set inside a running session.
@@ -57,6 +61,56 @@ class _LiveExercise {
       .fold(0.0, (sum, s) => sum + s.weightKg * s.reps);
 }
 
+/// Everything Today's "numbers" rows need, resolved by the screen.
+///
+/// Nulls are meaningful: they mean "not on record", and a row renders a
+/// prompt instead of a number. A zero would be a lie.
+///
+/// Local to this screen rather than `_TodaySummary`: `home_hub.dart` was
+/// written for the previous design, and a rebuilt screen composes from
+/// `lib/widgets/house/` and the theme only.
+class _TodaySummary {
+  final int kcalEaten;
+
+  /// The daily calorie target. Nullable so a widget test can exercise the
+  /// "no target set" prompt with no database.
+  final int? kcalTarget;
+
+  final double? weightKg;
+  final double? weightDeltaKg;
+
+  /// Total estimated kcal burned today. Null means no session was logged
+  /// today at all. A non-null value of zero or less means a session *was*
+  /// logged but no estimate could be made for it, which reads as "estimate
+  /// unavailable" rather than denying the session happened.
+  final double? burnedTodayKcal;
+
+  /// The goal weight. Null when no goal is configured, in which case the
+  /// weight row states the weight without inventing a gap.
+  final double? targetWeightKg;
+
+  final double proteinEatenG;
+
+  /// Null until a nutrition plan exists to derive one from.
+  final int? proteinTargetG;
+
+  /// Recent weights, oldest first, for the trend line. Fewer than two points
+  /// cannot make a line.
+  final List<double> weightSeries;
+
+  const _TodaySummary({
+    required this.kcalEaten,
+    required this.kcalTarget,
+    required this.weightKg,
+    required this.weightDeltaKg,
+    required this.burnedTodayKcal,
+    this.targetWeightKg,
+    this.proteinEatenG = 0,
+    this.proteinTargetG,
+    this.weightSeries = const [],
+  });
+}
+
 class TodayTab extends StatefulWidget {
   /// Switches tabs by id — 'routines', 'food', 'body', 'log'. Supplied by
   /// MainScreen; null in tests that pump this tab on its own.
@@ -88,7 +142,7 @@ class TodayTabState extends State<TodayTab> {
   ScheduledDay? _scheduled;
   bool _isLoading = true;
 
-  HomeHubSummary _summary = const HomeHubSummary(
+  _TodaySummary _summary = const _TodaySummary(
     kcalEaten: 0,
     kcalTarget: null,
     weightKg: null,
@@ -183,7 +237,7 @@ class TodayTabState extends State<TodayTab> {
 
     if (!mounted) return;
     setState(() {
-      _summary = HomeHubSummary(
+      _summary = _TodaySummary(
         kcalEaten: eaten,
         kcalTarget: snapshot.calorieTarget,
         weightKg: snapshot.currentWeightKg,
@@ -510,11 +564,12 @@ class TodayTabState extends State<TodayTab> {
       // its own inset, and this tab's content should scroll under it.
       body: SafeArea(
         bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.all(LockoutTheme.screenPadding),
-          child:
-              _sessionActive ? _buildActiveSession() : _buildPreSession(context),
-        ),
+        child: _sessionActive
+            ? Padding(
+                padding: const EdgeInsets.all(LockoutTheme.screenPadding),
+                child: _buildActiveSession(),
+              )
+            : _buildPreSession(context),
       ),
       // Kept visible while the exercise list scrolls, rather than inline in
       // the body. This is TodayTab's own Scaffold (nested inside MainScreen's
@@ -524,9 +579,29 @@ class TodayTabState extends State<TodayTab> {
     );
   }
 
-  // --- PRE-SESSION (the HOME hub) ---
+  // --- PRE-SESSION (Today's landing surface) ---
+  //
+  // Rebuilt from the house component catalog rather than adapted from
+  // `HomeHub`. The hub was written for the previous design, and adapting it
+  // kept that design's decisions — a stack of uniform cards, an all-caps
+  // caption, a neutral hero — in places no token could reach.
+
+  /// One tile in the quick-action grid.
+  ///
+  /// Local to this screen rather than `ActionItem` from `action_grid.dart`:
+  /// a rebuilt screen composes from `lib/widgets/house/` and the theme only.
+  Widget _quickActionTile({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return NvIconTile(icon: icon, color: color, label: label, onTap: onTap);
+  }
 
   Widget _buildPreSession(BuildContext context) {
+    final theme = Theme.of(context);
+    final semantics = LockoutSemantics.of(context);
     final sched = _scheduled;
     final code = ScheduleService.weekdayCode(DateTime.now());
     final isRest = sched == null;
@@ -535,108 +610,335 @@ class TodayTabState extends State<TodayTab> {
     // start live — offer guidance to the Routines tab instead of a session
     // that would open with zero exercises.
     final isEmptyDay = sched != null && sched.exercises.isEmpty;
+    final setCount =
+        sched?.exercises.fold<int>(0, (sum, e) => sum + e.targetSets) ?? 0;
 
     return SingleChildScrollView(
-      child: HomeHub(
-        eyebrow: 'Today · $code',
-        title: isRest ? 'Rest day' : sched.day.name,
-        subtitle: isRest
-            ? 'Nothing scheduled. Train off-plan or take the day.'
-            : isEmptyDay
-                ? 'This training day has no exercises yet. Add them on the '
-                    'Routines tab, then come back to start the session.'
-                : _scheduleSubtitle(sched),
-        heroColor: LockoutSemantics.of(context).categoryAt(isRest ? 7 : 0),
-        heroActions: [
-          if (!isRest && !isEmptyDay)
-            NvButton(
-              variant: NvButtonVariant.accent,
-              label: 'Start session',
-              onPressed: _startScheduledSession,
+      padding: const EdgeInsets.only(
+        bottom: LockoutTheme.scrollBottomPadding,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Section 7.1: a tab screen starts with a large title, not a top
+          // app bar.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              LockoutTheme.screenPadding,
+              LockoutTheme.screenPadding,
+              LockoutTheme.screenPadding,
+              0,
             ),
-          NvButton(
-            variant: NvButtonVariant.tonal,
-            label: 'Custom session',
-            onPressed: _startCustomSession,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isRest ? 'Rest day' : sched.day.name,
+                  style: theme.textTheme.displayMedium,
+                ),
+                const SizedBox(height: LockoutTheme.spaceXs),
+                Text(
+                  'Today · $code',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: LockoutTheme.headingGap),
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: LockoutTheme.cardPadding,
+            ),
+            child: NvHeroCard(
+              title: isRest ? 'Nothing scheduled' : sched.day.name,
+              value: '$setCount',
+              unit: setCount == 1 ? 'set' : 'sets',
+              // The one subject-scale element on this screen, and the only
+              // place a lobed shape belongs: the lobe count is the register,
+              // 4 for rest and 6 for training.
+              marker: DecoratedBox(
+                decoration: ShapeDecoration(
+                  shape: isRest ? CookieBorder.rest : CookieBorder.training,
+                  color: semantics.categoryAt(isRest ? 7 : 0),
+                ),
+                child: const SizedBox(width: 56, height: 56),
+              ),
+              actions: [
+                if (!isRest && !isEmptyDay)
+                  NvButton(
+                    variant: NvButtonVariant.accent,
+                    label: 'Start session',
+                    onPressed: _startScheduledSession,
+                  ),
+                NvButton(
+                  variant: NvButtonVariant.tonal,
+                  label: 'Custom session',
+                  onPressed: _startCustomSession,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: LockoutTheme.sectionGap),
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: LockoutTheme.cardPadding,
+            ),
+            child: _buildDayBody(context, sched, isRest: isRest),
+          ),
+          const SizedBox(height: LockoutTheme.sectionGap),
+          _buildSectionHeading(context, "Today's numbers"),
+          const SizedBox(height: LockoutTheme.headingGap),
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: LockoutTheme.cardPadding,
+            ),
+            child: NvGroupedList(children: _summaryRows(context)),
+          ),
+          const SizedBox(height: LockoutTheme.sectionGap),
+          _buildSectionHeading(context, 'Quick actions'),
+          const SizedBox(height: LockoutTheme.headingGap),
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: LockoutTheme.cardPadding,
+            ),
+            child: GridView.count(
+              crossAxisCount: 4,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              childAspectRatio: 0.85,
+              children: _quickActions(context),
+            ),
           ),
         ],
-        summary: _summary,
-        foodTabEnabled: widget.foodTabEnabled,
-        onOpenFood: widget.foodTabEnabled
-            ? () => widget.onNavigate?.call('food')
-            : null,
-        onOpenBody: () =>
-            widget.onNavigate?.call('progress', segment: ProgressSegment.weight),
-        onOpenLog: () =>
-            widget.onNavigate?.call('progress', segment: ProgressSegment.history),
-        actions: _quickActions(context),
       ),
     );
   }
 
-  String _scheduleSubtitle(ScheduledDay sched) {
-    final sets = sched.exercises.fold<int>(0, (s, e) => s + e.targetSets);
-    final plural = sched.exercises.length == 1 ? 'exercise' : 'exercises';
-    return '${sched.exercises.length} $plural · $sets sets';
+  Widget _buildSectionHeading(BuildContext context, String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: LockoutTheme.screenPadding,
+      ),
+      child: Text(text, style: Theme.of(context).textTheme.titleMedium),
+    );
   }
 
-  List<ActionItem> _quickActions(BuildContext context) {
+  /// The day's own block: the exercise list, or the honest empty case.
+  Widget _buildDayBody(
+    BuildContext context,
+    ScheduledDay? sched, {
+    required bool isRest,
+  }) {
+    if (isRest) {
+      return NvEmptyState(
+        headline: 'No session today',
+        body: 'Nothing is scheduled. Train off-plan or take the day.',
+        actionLabel: 'Start a custom session',
+        onAction: _startCustomSession,
+      );
+    }
+
+    if (sched!.exercises.isEmpty) {
+      return const NvTbaCard(
+        message: 'This training day has no exercises yet. Add them on the '
+            'Routines tab, then come back to start the session.',
+      );
+    }
+
+    return NvGroupedList(
+      children: [
+        for (final exercise in sched.exercises)
+          NvListItem(
+            title: exercise.name,
+            supporting: '${exercise.targetSets} '
+                '${exercise.targetSets == 1 ? 'set' : 'sets'}',
+          ),
+      ],
+    );
+  }
+
+  /// What the hub's weight and nutrition cards used to say, as grouped-list
+  /// rows.
+  ///
+  /// The composition changed; the information did not. A null still means
+  /// "not on record" and renders a prompt rather than a zero.
+  List<Widget> _summaryRows(BuildContext context) {
+    final semantics = LockoutSemantics.of(context);
+    final rows = <Widget>[];
+
+    final series = _summary.weightSeries;
+    rows.add(
+      NvListItem(
+        title: 'Weight',
+        supporting: _weightSupporting(),
+        // Fewer than two points cannot make a line, and a flat stub would
+        // read as a trend that is not there.
+        trailing: series.length >= 2
+            ? SizedBox(
+                width: 72,
+                child: Sparkline(
+                  values: series,
+                  lineColor: semantics.chartLine,
+                  height: 28,
+                ),
+              )
+            : null,
+        onTap: () => widget.onNavigate?.call(
+          'progress',
+          segment: ProgressSegment.weight,
+        ),
+      ),
+    );
+
+    if (widget.foodTabEnabled) {
+      rows.add(
+        NvListItem(
+          title: 'Calories',
+          supporting: _caloriesSupporting(),
+          onTap: () => widget.onNavigate?.call('food'),
+        ),
+      );
+      rows.add(
+        NvListItem(
+          title: 'Protein',
+          supporting: _proteinSupporting(),
+          onTap: () => widget.onNavigate?.call('food'),
+        ),
+      );
+    }
+
+    rows.add(
+      NvListItem(
+        title: 'Burned today',
+        supporting: _burnSupporting(),
+        onTap: () => widget.onNavigate?.call(
+          'progress',
+          segment: ProgressSegment.history,
+        ),
+      ),
+    );
+
+    return rows;
+  }
+
+  String _weightSupporting() {
+    final weight = _summary.weightKg;
+    if (weight == null) return 'No weight on record yet';
+
+    final parts = <String>['${weight.toStringAsFixed(1)} kg'];
+
+    final delta = _summary.weightDeltaKg;
+    if (delta != null && delta != 0) {
+      final sign = delta > 0 ? '+' : '-';
+      parts.add('$sign${delta.abs().toStringAsFixed(1)} kg');
+    }
+
+    final target = _summary.targetWeightKg;
+    if (target != null) {
+      final gap = (weight - target).abs();
+      parts.add(
+        gap < 0.05
+            ? 'target reached'
+            : '${gap.toStringAsFixed(1)} kg to go',
+      );
+    }
+
+    return parts.join(' · ');
+  }
+
+  String _caloriesSupporting() {
+    final target = _summary.kcalTarget;
+    if (target == null) return '${_summary.kcalEaten} kcal · no target set';
+
+    final left = target - _summary.kcalEaten;
+    // Never a negative "left": past the target it reads as over, which is
+    // the arithmetic a reader can do in their head.
+    final tail = left >= 0 ? '$left kcal left' : '${left.abs()} kcal over';
+    return '${_summary.kcalEaten} of $target kcal · $tail';
+  }
+
+  String _proteinSupporting() {
+    final eaten = _summary.proteinEatenG.round();
+    final target = _summary.proteinTargetG;
+    if (target == null) return '$eaten g';
+
+    final left = target - eaten;
+    final tail = left >= 0 ? '$left g left' : '${left.abs()} g over';
+    return '$eaten of $target g · $tail';
+  }
+
+  String _burnSupporting() {
+    final burned = _summary.burnedTodayKcal;
+    // Null means no session was logged today at all. A value of zero or less
+    // means a session *was* logged but no estimate could be made for it, and
+    // saying "no session yet" there would deny something that happened.
+    if (burned == null) return 'No session logged yet';
+    if (burned <= 0) return 'Estimate unavailable';
+    return '${burned.round()} kcal';
+  }
+
+  List<Widget> _quickActions(BuildContext context) {
     final go = widget.onNavigate;
+    final semantics = LockoutSemantics.of(context);
+
     return [
-      // Hidden entirely when the Food tab is off, rather than left as a
-      // tile that taps to nowhere: `_goToTab` already no-ops for a hidden
-      // tab id, so a visible "LOG FOOD" tile would silently do nothing.
+      // Hidden entirely when the Food tab is off, rather than left as a tile
+      // that taps to nowhere: `_goToTab` already no-ops for a hidden tab id,
+      // so a visible "Log food" tile would silently do nothing.
       if (widget.foodTabEnabled)
-        ActionItem(
+        _quickActionTile(
           label: 'Log food',
           icon: Icons.restaurant,
-          color: LockoutSemantics.of(context).categoryAt(0),
+          color: semantics.categoryAt(0),
           onTap: () => go?.call('food'),
         ),
-      ActionItem(
+      _quickActionTile(
         label: 'Weigh in',
         icon: Icons.monitor_weight,
-        color: LockoutSemantics.of(context).categoryAt(1),
+        color: semantics.categoryAt(1),
         onTap: () => go?.call('progress', segment: ProgressSegment.weight),
       ),
-      ActionItem(
+      _quickActionTile(
         label: 'Workout',
         icon: Icons.fitness_center,
-        color: LockoutSemantics.of(context).categoryAt(2),
+        color: semantics.categoryAt(2),
         onTap: () => go?.call('workout'),
       ),
-      ActionItem(
+      _quickActionTile(
         label: 'History',
         icon: Icons.calendar_month,
-        color: LockoutSemantics.of(context).categoryAt(3),
+        color: semantics.categoryAt(3),
         onTap: () => go?.call('progress', segment: ProgressSegment.history),
       ),
-      ActionItem(
+      _quickActionTile(
         label: 'Custom',
         icon: Icons.add,
-        color: LockoutSemantics.of(context).categoryAt(4),
+        color: semantics.categoryAt(4),
         onTap: _startCustomSession,
       ),
-      ActionItem(
+      _quickActionTile(
         label: 'Streak',
         icon: Icons.local_fire_department,
-        color: LockoutSemantics.of(context).categoryAt(5),
+        color: semantics.categoryAt(5),
         onTap: () => go?.call('progress', segment: ProgressSegment.history),
       ),
-      ActionItem(
+      _quickActionTile(
         label: 'Plan',
         icon: Icons.insights,
-        color: LockoutSemantics.of(context).categoryAt(6),
+        color: semantics.categoryAt(6),
         onTap: () => go?.call('progress', segment: ProgressSegment.weight),
       ),
-      ActionItem(
+      _quickActionTile(
         label: 'Exercises',
         icon: Icons.list,
-        color: LockoutSemantics.of(context).categoryAt(7),
+        color: semantics.categoryAt(7),
         onTap: () => go?.call('workout'),
       ),
     ];
   }
+
 
   // --- ACTIVE SESSION ---
 

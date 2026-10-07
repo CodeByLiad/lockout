@@ -10,8 +10,8 @@ import 'package:lockout/services/schedule_service.dart';
 import 'package:lockout/theme/cookie_border.dart';
 import 'package:lockout/theme/lockout_motion.dart';
 import 'package:lockout/theme/lockout_theme.dart';
-import 'package:lockout/widgets/action_grid.dart';
-import 'package:lockout/widgets/hero_card.dart';
+import 'package:lockout/widgets/house/nv_hero_card.dart';
+import 'package:lockout/widgets/house/nv_icon_tile.dart';
 
 import 'test_helpers.dart';
 
@@ -174,10 +174,11 @@ void main() {
       await tester.pumpWidget(MaterialApp(theme: lockoutTestTheme(), home: TodayTab()));
       await settle(tester);
 
-      // Burn now rides on the day card's own subtitle rather than a
-      // standalone row, so "no session today" is the absence of any burn
-      // figure, not a sentence of its own.
-      expect(find.textContaining('kcal'), findsNothing);
+      // Burn is a row of its own again now that Today composes from grouped
+      // lists, so "no session today" is that row saying so — not the absence
+      // of the word kcal, which the calories row also carries.
+      expect(find.text('No session logged yet'), findsOneWidget);
+      expect(find.textContaining('Estimate unavailable'), findsNothing);
 
       await tester.tap(find.text('Start session'));
       await settle(tester);
@@ -262,13 +263,13 @@ void main() {
       await settle(tester);
 
       // A single weigh-in: a value, but no delta yet.
-      expect(find.text('Log a weight'), findsNothing);
-      // The weight card states the figure and its unit separately, so the
-      // number can carry the display type scale.
-      expect(find.text('80.0'), findsOneWidget);
-      expect(find.text('kg'), findsOneWidget);
+      expect(find.textContaining('No weight'), findsNothing);
+      // The weight row states the figure and its unit in one supporting
+      // line now; the display-scale number on this screen is the hero's set
+      // count, and section 8 allows only one of those.
+      expect(find.textContaining('80.0 kg'), findsOneWidget);
       expect(find.textContaining('Estimate unavailable'), findsNothing);
-      expect(find.textContaining('~300 kcal'), findsOneWidget);
+      expect(find.textContaining('300 kcal'), findsOneWidget);
 
       // Verifying the two loads race-free in the single frame right after
       // `_isLoading` clears would need a controlled clock around the two
@@ -677,16 +678,16 @@ void main() {
       await tester.pumpWidget(hostedTodayTab());
       await settle(tester);
 
-      final card = tester.widget<Card>(
+      final material = tester.widget<Material>(
         find
             .descendant(
-              of: find.byType(HeroCard),
-              matching: find.byType(Card),
+              of: find.byType(NvHeroCard),
+              matching: find.byType(Material),
             )
             .first,
       );
-      final radius =
-          (card.shape! as RoundedRectangleBorder).borderRadius as BorderRadius;
+      final radius = ((material.shape! as RoundedRectangleBorder).borderRadius)
+          as BorderRadius;
 
       expect(radius.topLeft.x, 36);
       expect(radius.topRight.x, 36);
@@ -700,31 +701,41 @@ void main() {
       await settle(tester);
 
       Object? shapeNow() => tester
-          .widget<Card>(
+          .widget<Material>(
             find
                 .descendant(
-                  of: find.byType(HeroCard),
-                  matching: find.byType(Card),
+                  of: find.byType(NvHeroCard),
+                  matching: find.byType(Material),
                 )
                 .first,
           )
           .shape;
 
       final before = shapeNow();
-      final gesture =
-          await tester.startGesture(tester.getCenter(find.byType(HeroCard)));
+      final gesture = await tester
+          .startGesture(tester.getCenter(find.byType(NvHeroCard)));
       await tester.pump(const Duration(milliseconds: 120));
       expect(shapeNow(), before, reason: 'a card has no pressed state');
       await gesture.up();
       await settle(tester);
     });
 
-    testWidgets('the eyebrow is sentence case', (tester) async {
+    testWidgets('the day line is sentence case', (tester) async {
       await tester.pumpWidget(hostedTodayTab());
       await settle(tester);
 
-      final hero = tester.widget<HeroCard>(find.byType(HeroCard));
-      expect(hero.eyebrow, isNot(hero.eyebrow.toUpperCase()),
+      // The hub's eyebrow became the screen's own supporting line when
+      // Today was rebuilt from the catalog; the rule it was asserting —
+      // section 4.2 forbids all-caps labels — did not change. The weekday
+      // code inside it is stored data, not display copy, so the check is
+      // that the line as a whole is not shouting.
+      final line = tester.widget<Text>(
+        find.byWidgetPredicate(
+          (w) => w is Text && (w.data ?? '').startsWith('Today · '),
+        ),
+      );
+      final text = line.data!;
+      expect(text, isNot(text.toUpperCase()),
           reason: 'the house document forbids all-caps labels (section 4.2)');
     });
 
@@ -775,9 +786,9 @@ void main() {
       await tester.pumpWidget(hostedTodayTab());
       await settle(tester);
 
-      final gridShapes = tester
+      final tileShapes = tester
           .widgetList<Container>(find.descendant(
-            of: find.byType(ActionGrid),
+            of: find.byType(NvIconTile),
             matching: find.byType(Container),
           ))
           .map((c) => c.decoration)
@@ -785,9 +796,22 @@ void main() {
           .map((d) => d.shape)
           .whereType<CookieBorder>();
 
-      expect(gridShapes, isEmpty,
+      expect(tileShapes, isEmpty,
           reason: 'repeated small icon containers take one consistent '
               'squircle; colour already carries category');
+
+      // And it really is one squircle, not eight that happen to agree: every
+      // tile resolves the same corner radius.
+      final radii = tester
+          .widgetList<Container>(find.descendant(
+            of: find.byType(NvIconTile),
+            matching: find.byType(Container),
+          ))
+          .map((c) => c.decoration)
+          .whereType<BoxDecoration>()
+          .map((d) => (d.borderRadius! as BorderRadius).topLeft.x)
+          .toSet();
+      expect(radii, hasLength(1));
     });
   });
 }
