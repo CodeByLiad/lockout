@@ -9,6 +9,7 @@ class NvTextField extends StatelessWidget {
   final TextEditingController controller;
   final TextInputType? keyboardType;
   final String? errorText;
+  final String? hintText;
   final ValueChanged<String>? onChanged;
 
   const NvTextField({
@@ -17,6 +18,7 @@ class NvTextField extends StatelessWidget {
     required this.controller,
     this.keyboardType,
     this.errorText,
+    this.hintText,
     this.onChanged,
   });
 
@@ -43,6 +45,7 @@ class NvTextField extends StatelessWidget {
             onChanged: onChanged,
             decoration: InputDecoration(
               isDense: true,
+              hintText: hintText,
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: LockoutTheme.spaceMd,
               ),

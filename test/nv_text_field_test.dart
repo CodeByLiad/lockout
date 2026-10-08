@@ -64,4 +64,44 @@ void main() {
       greaterThan(tester.getTopLeft(find.byType(TextField)).dy),
     );
   });
+
+  testWidgets('a hint renders inside the field', (tester) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: lockoutTestTheme(),
+        home: Scaffold(
+          body: NvTextField(
+            label: 'Reps',
+            controller: controller,
+            hintText: '5',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('5'), findsOneWidget);
+  });
+
+  testWidgets('no hint renders no hint', (tester) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: lockoutTestTheme(),
+        home: Scaffold(
+          body: NvTextField(label: 'Reps', controller: controller),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final decoration =
+        tester.widget<TextField>(find.byType(TextField)).decoration;
+    expect(decoration?.hintText, isNull);
+  });
 }

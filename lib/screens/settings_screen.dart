@@ -721,6 +721,7 @@ class SettingsBodyState extends State<SettingsBody> {
                 child: NvTextField(
                   label: 'Height (ft)',
                   controller: _heightFtCtrl,
+                  hintText: '5',
                   keyboardType: TextInputType.number,
                 ),
               ),
@@ -729,6 +730,7 @@ class SettingsBodyState extends State<SettingsBody> {
                 child: NvTextField(
                   label: 'Height (in)',
                   controller: _heightInCtrl,
+                  hintText: '9',
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
                 ),
@@ -863,6 +865,7 @@ class SettingsBodyState extends State<SettingsBody> {
               child: NvTextField(
                 label: 'Age',
                 controller: _ageCtrl,
+                hintText: '28',
                 keyboardType: TextInputType.number,
               ),
             ),
@@ -871,6 +874,7 @@ class SettingsBodyState extends State<SettingsBody> {
               child: NvTextField(
                 label: 'Target weight (kg)',
                 controller: _targetWeightCtrl,
+                hintText: '72',
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
               ),
@@ -890,6 +894,7 @@ class SettingsBodyState extends State<SettingsBody> {
         NvTextField(
           label: 'Timeframe (weeks)',
           controller: _weeksCtrl,
+          hintText: '12',
           keyboardType: TextInputType.number,
         ),
         const SizedBox(height: LockoutTheme.spaceMd),
