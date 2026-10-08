@@ -9,10 +9,10 @@ import '../services/units.dart';
 import '../theme/accents.dart';
 import '../theme/cookie_border.dart';
 import '../theme/lockout_motion.dart';
-import '../theme/lockout_semantics.dart';
 import '../theme/lockout_theme.dart';
 import '../theme/theme_controller.dart';
 import '../widgets/house/nv_button.dart';
+import '../widgets/house/nv_dialog.dart';
 import '../widgets/house/nv_grouped_list.dart';
 import '../widgets/house/nv_segmented_button.dart';
 import '../widgets/house/nv_sheet.dart';
@@ -421,39 +421,23 @@ class SettingsBodyState extends State<SettingsBody> {
   }
 
   Future<void> _import() async {
-    final semantics = LockoutSemantics.of(context);
-    final confirmed = await showDialog<bool>(
+    // Routed through the house destructive dialog (section 8: a dialog is
+    // allowed for one thing only, a destructive confirmation). The trigger
+    // that opens it is a neutral `NvButtonVariant.outlined` — "Neutral
+    // alternatives" per the design doc's button table — so the `danger` ink
+    // lives only on this confirmation, not on the button that merely offers
+    // it.
+    final confirmed = await showNvDestructiveDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Replace all data?'),
-        content: const Text(
-          'Importing a backup deletes every routine, workout, meal and body '
-          'entry currently on this device and replaces them with the file\'s '
-          'contents. This cannot be undone — export a backup first if you are '
-          'not sure.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            // `semantics.danger`, not `colorScheme.error` — replacing every
-            // row in the database is a destructive confirmation, the role
-            // `LockoutSemantics` reserves `danger` for (see that class's
-            // doc, and today_tab's discard dialog for the same rule). The
-            // Import button that opens this dialog carries the same role:
-            // the trigger and its confirmation are one action, so they
-            // cannot resolve to two different reds.
-            style: TextButton.styleFrom(foregroundColor: semantics.danger),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Choose file'),
-          ),
-        ],
-      ),
+      title: 'Replace all data?',
+      body: 'Importing a backup deletes every routine, workout, meal and '
+          'body entry currently on this device and replaces them with the '
+          'file\'s contents. This cannot be undone — export a backup first '
+          'if you are not sure.',
+      confirmLabel: 'Choose file',
     );
 
-    if (confirmed != true) return;
+    if (!confirmed) return;
 
     setState(() => _busy = true);
     final result = await BackupService.instance.pickAndImport();
@@ -1035,7 +1019,6 @@ class SettingsBodyState extends State<SettingsBody> {
 
   Widget _buildDataCard(BuildContext context) {
     final theme = Theme.of(context);
-    final semantics = LockoutSemantics.of(context);
 
     return _section(
       context,
@@ -1049,32 +1032,25 @@ class SettingsBodyState extends State<SettingsBody> {
           style: theme.textTheme.bodySmall,
         ),
         const SizedBox(height: LockoutTheme.spaceMd),
-        FilledButton(
+        NvButton(
+          variant: NvButtonVariant.filled,
+          label: _busy ? 'Working…' : 'Export backup JSON',
           onPressed: _busy ? null : _export,
-          child: Text(_busy ? 'Working…' : 'Export backup JSON'),
         ),
         const SizedBox(height: LockoutTheme.spaceSm),
-        // Destructive: this replaces every row on the device. It sits at
-        // the bottom of the section, behind the confirmation dialog in
-        // `_import`, and carries `semantics.danger` — the same role as
-        // that dialog's confirm button.
-        //
-        // `danger` rather than `colorScheme.error` because the two say
-        // different things: `error` reports that something has already
-        // gone wrong, while `danger` warns that this control is about to
-        // destroy data if the user goes through with it. They are free to
-        // diverge — `LockoutSemantics` owns one and the scheme owns the
-        // other — so colouring the trigger `error` and its confirmation
-        // `danger` would split one action across two roles and, the
-        // moment they ever differ, across two visibly different reds.
-        OutlinedButton(
+        // Neutral, not `danger`: this button only offers to replace every
+        // row on the device — it does not do it. The destructive ink lives
+        // on `showNvDestructiveDialog`'s confirm button inside `_import`,
+        // the one control that actually fires the replacement, per the
+        // design doc's button table ("Outlined: neutral alternatives" vs.
+        // "Danger: Remove, Delete"). Splitting it this way is also what
+        // gives `NvButtonVariant.outlined` its one real consumer in the
+        // house catalog.
+        NvButton(
           key: const Key('importBackupButton'),
+          variant: NvButtonVariant.outlined,
+          label: _busy ? 'Working…' : 'Import backup JSON',
           onPressed: _busy ? null : _import,
-          style: OutlinedButton.styleFrom(
-            foregroundColor: semantics.danger,
-            side: BorderSide(color: semantics.danger),
-          ),
-          child: Text(_busy ? 'Working…' : 'Import backup JSON'),
         ),
       ],
     );

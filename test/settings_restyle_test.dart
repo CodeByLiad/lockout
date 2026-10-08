@@ -550,7 +550,8 @@ void main() {
     });
 
     testWidgets(
-        'the import trigger and its confirmation are both danger-coloured',
+        'the destructive ink sits on the confirmation, not the trigger that '
+        'only offers it',
         (tester) async {
       // Every shipped appearance happens to set `danger` to the same value as
       // `ColorScheme.error`, so a test against the shipped theme could not
@@ -565,23 +566,23 @@ void main() {
       await pumpSettings(tester, theme: theme);
       final colors = theme.colorScheme;
 
-      // The trigger, not only the confirmation. `danger` and
-      // `colorScheme.error` are separate roles that happen to agree in every
-      // shipped appearance, so a button painted `error` and the dialog it
-      // opens painted `danger` would put one destructive action in two
-      // colours the moment they ever diverge. The sentinel above is what
-      // makes that difference visible here.
-      final importButton = tester.widget<OutlinedButton>(
-        find.byKey(const Key('importBackupButton')),
+      // The Import row only offers to replace every row on the device — it
+      // does not do it — so it carries `NvButtonVariant.outlined`'s neutral
+      // label, not `danger`. Per the design doc's button table, `outlined`
+      // is for "neutral alternatives" and `danger` is reserved for the
+      // control that actually fires ("Remove, Delete"): here, the dialog's
+      // confirm button.
+      final importLabel = tester.widget<Text>(
+        find.descendant(
+          of: find.byKey(const Key('importBackupButton')),
+          matching: find.text('Import backup JSON'),
+        ),
       );
       expect(
-        importButton.style?.foregroundColor?.resolve(<WidgetState>{}),
-        sentinel,
-      );
-      expect(
-        importButton.style?.side?.resolve(<WidgetState>{})?.color,
-        sentinel,
-        reason: 'the outline carries the same role as the label',
+        importLabel.style?.color,
+        isNot(sentinel),
+        reason: 'the trigger is a neutral alternative, not the destructive '
+            'action itself',
       );
 
       await tester.tap(find.byKey(const Key('importBackupButton')));
@@ -594,13 +595,8 @@ void main() {
       // confirmation, which is the role `LockoutSemantics` reserves `danger`
       // for (today_tab's discard dialog and log_tab's DELETE ENTRY already
       // read it that way).
-      final confirmButton = tester.widget<TextButton>(
-        find.widgetWithText(TextButton, 'Choose file'),
-      );
-      expect(
-        confirmButton.style?.foregroundColor?.resolve(<WidgetState>{}),
-        sentinel,
-      );
+      final confirmLabel = tester.widget<Text>(find.text('Choose file'));
+      expect(confirmLabel.style?.color, sentinel);
       expect(sentinel, isNot(colors.error));
     });
 
