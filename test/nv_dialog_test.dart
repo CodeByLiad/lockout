@@ -4,7 +4,10 @@ import 'package:lockout/widgets/house/nv_dialog.dart';
 
 import 'test_helpers.dart';
 
-Future<bool?> _open(WidgetTester tester) async {
+Future<bool?> _open(
+  WidgetTester tester, {
+  Future<void> Function(WidgetTester tester)? dismiss,
+}) async {
   bool? result;
   await tester.pumpWidget(
     MaterialApp(
@@ -29,6 +32,10 @@ Future<bool?> _open(WidgetTester tester) async {
   );
   await tester.tap(find.text('open'));
   await tester.pumpAndSettle();
+  if (dismiss != null) {
+    await dismiss(tester);
+    await tester.pumpAndSettle();
+  }
   return result;
 }
 
@@ -41,15 +48,37 @@ void main() {
   });
 
   testWidgets('cancelling resolves false', (tester) async {
-    await _open(tester);
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
+    final result = await _open(
+      tester,
+      dismiss: (tester) => tester.tap(find.text('Cancel')),
+    );
     expect(find.byType(Dialog), findsNothing);
+    expect(result, isFalse);
   });
 
   testWidgets('confirming names the action it performs', (tester) async {
     await _open(tester);
     expect(find.text('Clear data'), findsOneWidget,
         reason: 'the confirm label is a verb that says what happens');
+  });
+
+  testWidgets('confirming resolves true', (tester) async {
+    final result = await _open(
+      tester,
+      dismiss: (tester) => tester.tap(find.text('Clear data')),
+    );
+    expect(find.byType(Dialog), findsNothing);
+    expect(result, isTrue);
+  });
+
+  testWidgets('dismissing via the barrier resolves false, not null',
+      (tester) async {
+    final result = await _open(
+      tester,
+      dismiss: (tester) => tester.tapAt(const Offset(10, 10)),
+    );
+    expect(find.byType(Dialog), findsNothing);
+    expect(result, isFalse);
+    expect(result, isNot(isNull));
   });
 }
