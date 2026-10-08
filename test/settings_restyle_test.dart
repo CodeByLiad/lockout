@@ -15,7 +15,10 @@ import 'package:lockout/services/goal_service.dart';
 import 'package:lockout/services/nutrition_planner.dart';
 import 'package:lockout/theme/accents.dart';
 import 'package:lockout/theme/lockout_theme.dart';
-import 'package:lockout/widgets/lockout_field.dart';
+import 'package:lockout/widgets/house/nv_grouped_list.dart';
+import 'package:lockout/widgets/house/nv_switch.dart';
+import 'package:lockout/widgets/house/nv_text_field.dart';
+import 'package:lockout/widgets/lockout_card.dart';
 
 import 'test_helpers.dart';
 
@@ -81,7 +84,7 @@ void main() {
       await settle(tester);
 
       final field = find.descendant(
-        of: find.widgetWithText(LockoutField, 'Target weight (kg)'),
+        of: find.widgetWithText(NvTextField, 'Target weight (kg)'),
         matching: find.byType(TextField),
       );
       await tester.enterText(field, typed);
@@ -224,7 +227,7 @@ void main() {
   String fieldText(WidgetTester tester, String label) {
     final field = tester.widget<TextField>(
       find.descendant(
-        of: find.widgetWithText(LockoutField, label),
+        of: find.widgetWithText(NvTextField, label),
         matching: find.byType(TextField),
       ),
     );
@@ -238,7 +241,7 @@ void main() {
       await pumpSettings(tester);
 
       final field = find.descendant(
-        of: find.widgetWithText(LockoutField, 'Height (cm)'),
+        of: find.widgetWithText(NvTextField, 'Height (cm)'),
         matching: find.byType(TextField),
       );
       await tester.enterText(field, typed);
@@ -470,12 +473,27 @@ void main() {
     });
   });
 
-  group('M3 grouped settings chrome', () {
-    testWidgets('every settings group is a Card', (tester) async {
+  group('grouped settings sections', () {
+    // Supersedes the retired "every settings group is a Card" guard: the
+    // house rebuild replaces the uniform `Card` stack with `_section`'s
+    // heading + grouped-list frame, so there is no longer one bounding
+    // container per section to count. What the old guard actually protected
+    // — that all seven groups are visually distinguishable from one another
+    // — is what this asserts instead, against the heading each now carries.
+    testWidgets('every settings section has its own heading', (tester) async {
       await pumpSettings(tester);
 
-      // Appearance, Units, Training, Food, Notifications, Data, About.
-      expect(find.byType(Card).evaluate().length, greaterThanOrEqualTo(7));
+      for (final heading in [
+        'Look and feel',
+        'Units',
+        'Training',
+        'Food',
+        'Notifications',
+        'Data',
+        'About',
+      ]) {
+        expect(find.text(heading), findsOneWidget, reason: heading);
+      }
     });
 
     testWidgets('a tappable row clears the 48dp touch target', (tester) async {
@@ -486,7 +504,7 @@ void main() {
       await pumpSettings(tester);
 
       final switchTile = tester.getSize(find.widgetWithText(
-        SwitchListTile,
+        NvSwitchRow,
         'Enable nutrition tab',
       ));
       expect(switchTile.height, greaterThanOrEqualTo(LockoutTheme.minTouchTarget));
@@ -495,10 +513,14 @@ void main() {
           tester.getSize(find.byKey(const Key('importBackupButton')));
       expect(importButton.height, greaterThanOrEqualTo(LockoutTheme.minTouchTarget));
 
-      // The two hand-built stepper buttons and the accent swatches take their
-      // size from `LockoutTheme` too, but by their own `constraints:` /
-      // `width:`/`height:`, not from a component theme the two checks above
-      // already pin — so they need their own assertion.
+      // The training-days stepper now lives behind a sheet (section 8
+      // prefers a sheet to a dialog for a choice); open it to reach its
+      // hand-built buttons, which still take their size from `LockoutTheme`
+      // by their own `constraints:`, not from a component theme the two
+      // checks above already pin — so they need their own assertion.
+      await tester.tap(find.text('Days per week'));
+      await settle(tester);
+
       final decrementButton = tester.getSize(
         find.widgetWithIcon(IconButton, Icons.remove_circle_outline),
       );
@@ -510,6 +532,11 @@ void main() {
       );
       expect(incrementButton.width, greaterThanOrEqualTo(LockoutTheme.minTouchTarget));
       expect(incrementButton.height, greaterThanOrEqualTo(LockoutTheme.minTouchTarget));
+
+      // Dismiss the sheet by tapping its scrim before checking what sits
+      // behind it.
+      await tester.tapAt(const Offset(10, 10));
+      await settle(tester);
 
       for (final accent in LockoutAccent.all) {
         final size = tester.getSize(find.bySemanticsLabel(accent.name));
@@ -590,11 +617,11 @@ void main() {
       expect(find.textContaining('WATCH'), findsNothing);
     });
 
-    testWidgets('both appearance axes sit under an Appearance caption',
+    testWidgets('both appearance axes sit under a Look and feel caption',
         (tester) async {
       final semantics = tester.ensureSemantics();
       await pumpSettings(tester);
-      expect(find.text('Appearance'), findsOneWidget);
+      expect(find.text('Look and feel'), findsOneWidget);
 
       // This would still pass with the whole picker deleted, unless it also
       // asserts the controls its own name promises are actually there —
@@ -610,6 +637,26 @@ void main() {
       }
 
       semantics.dispose();
+    });
+  });
+
+  group('settings sections as grouped lists', () {
+    testWidgets('every settings section is a grouped list, not a card',
+        (tester) async {
+      await tester.pumpWidget(hostedProfileTab());
+      await settle(tester);
+
+      expect(find.byType(NvGroupedList), findsWidgets);
+      expect(find.byType(LockoutCard), findsNothing,
+          reason: 'grouped lists replace the stack of uniform cards');
+    });
+
+    testWidgets('a section caption is sentence case', (tester) async {
+      await tester.pumpWidget(hostedProfileTab());
+      await settle(tester);
+
+      expect(find.text('Look and feel'), findsOneWidget);
+      expect(find.text('LOOK AND FEEL'), findsNothing);
     });
   });
 
@@ -638,9 +685,16 @@ void main() {
       );
       await settle(tester);
 
-      // Default is 4; bump it once.
+      // Default is 4; the stepper now lives behind a sheet (section 8
+      // prefers a sheet to a dialog for a choice).
       expect(find.text('4'), findsOneWidget);
+      await tester.tap(find.text('Days per week'));
+      await settle(tester);
       await tester.tap(find.byIcon(Icons.add_circle_outline));
+      await settle(tester);
+
+      // Dismiss the sheet by tapping its scrim.
+      await tester.tapAt(const Offset(10, 10));
       await settle(tester);
       expect(find.text('5'), findsOneWidget);
 

@@ -12,12 +12,13 @@ import '../theme/lockout_motion.dart';
 import '../theme/lockout_semantics.dart';
 import '../theme/lockout_theme.dart';
 import '../theme/theme_controller.dart';
-import '../widgets/calm_row.dart';
-import '../widgets/connected_group.dart';
+import '../widgets/house/nv_button.dart';
+import '../widgets/house/nv_grouped_list.dart';
 import '../widgets/house/nv_segmented_button.dart';
+import '../widgets/house/nv_sheet.dart';
+import '../widgets/house/nv_status_badge.dart';
 import '../widgets/house/nv_switch.dart';
-import '../widgets/lockout_card.dart';
-import '../widgets/lockout_field.dart';
+import '../widgets/house/nv_text_field.dart';
 
 /// The settings content, independent of how it is presented.
 ///
@@ -547,25 +548,12 @@ class SettingsBodyState extends State<SettingsBody> {
             children: [
               _buildHeader(context),
               const SizedBox(height: LockoutTheme.sectionGap),
-              _sectionCaption(context, 'Appearance'),
               _buildAppearanceCard(context),
-              const SizedBox(height: LockoutTheme.sectionGap),
-              _sectionCaption(context, 'Units'),
               _buildUnitsCard(context),
-              const SizedBox(height: LockoutTheme.sectionGap),
-              _sectionCaption(context, 'Training'),
               _buildTrainingCard(context),
-              const SizedBox(height: LockoutTheme.sectionGap),
-              _sectionCaption(context, 'Food'),
               _buildFoodCard(context),
-              const SizedBox(height: LockoutTheme.sectionGap),
-              _sectionCaption(context, 'Notifications'),
               _buildNotificationsCard(context),
-              const SizedBox(height: LockoutTheme.sectionGap),
-              _sectionCaption(context, 'Data'),
               _buildDataCard(context),
-              const SizedBox(height: LockoutTheme.sectionGap),
-              _sectionCaption(context, 'About'),
               _buildAboutCard(context),
             ],
           ),
@@ -574,10 +562,48 @@ class SettingsBodyState extends State<SettingsBody> {
     );
   }
 
-  Widget _sectionCaption(BuildContext context, String label) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: LockoutTheme.spaceSm),
-      child: Text(label, style: Theme.of(context).textTheme.labelSmall),
+  /// The frame every section shares: a sentence-case heading, the rows that
+  /// are genuinely rows inside an [NvGroupedList], and anything else — a
+  /// field, a calculated summary, the section's own save button — below the
+  /// group but still inside the section's frame.
+  ///
+  /// Replaces the old `LockoutCard` wrapper and the all-caps
+  /// `_sectionCaption` this screen used to call ahead of every card: a
+  /// grouped list reads as one object on its own, so the section no longer
+  /// needs a bounding card to say the same thing twice.
+  Widget _section(
+    BuildContext context, {
+    required String heading,
+    required List<Widget> rows,
+    List<Widget> extras = const [],
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: LockoutTheme.screenPadding,
+          ),
+          child: Text(heading, style: Theme.of(context).textTheme.titleMedium),
+        ),
+        const SizedBox(height: LockoutTheme.headingGap),
+        Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: LockoutTheme.cardPadding,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (rows.isNotEmpty) NvGroupedList(children: rows),
+              if (extras.isNotEmpty) ...[
+                const SizedBox(height: LockoutTheme.spaceMd),
+                ...extras,
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: LockoutTheme.sectionGap),
+      ],
     );
   }
 
@@ -624,185 +650,187 @@ class SettingsBodyState extends State<SettingsBody> {
     final theme = Theme.of(context);
     final controller = ThemeController.instance;
 
-    return LockoutCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Applies instantly.', style: theme.textTheme.bodySmall),
-          const SizedBox(height: LockoutTheme.headingGap),
-          NvSegmentedButton<LockoutBrightnessChoice>(
-            segments: const [
-              NvSegment(
-                value: LockoutBrightnessChoice.system,
-                label: 'System',
+    return _section(
+      context,
+      heading: 'Look and feel',
+      rows: const [],
+      extras: [
+        Text('Applies instantly.', style: theme.textTheme.bodySmall),
+        const SizedBox(height: LockoutTheme.headingGap),
+        NvSegmentedButton<LockoutBrightnessChoice>(
+          segments: const [
+            NvSegment(
+              value: LockoutBrightnessChoice.system,
+              label: 'System',
+            ),
+            NvSegment(
+              value: LockoutBrightnessChoice.light,
+              label: 'Light',
+            ),
+            NvSegment(
+              value: LockoutBrightnessChoice.dark,
+              label: 'Dark',
+            ),
+          ],
+          selected: controller.brightnessChoice,
+          onChanged: _applyBrightness,
+        ),
+        const SizedBox(height: LockoutTheme.sectionGap),
+        Text('Accent', style: theme.textTheme.titleLarge),
+        const SizedBox(height: LockoutTheme.headingGap),
+        // A `Wrap`, not a `Row`: five 48dp targets plus their gaps clear
+        // 360dp only just, and a device at a large display scale has less
+        // room than that. Wrapping onto a second line is the one failure
+        // mode here that is not an overflow stripe.
+        Wrap(
+          spacing: LockoutTheme.spaceSm,
+          runSpacing: LockoutTheme.spaceSm,
+          children: [
+            for (final accent in LockoutAccent.all)
+              _AccentSwatch(
+                accent: accent,
+                selected: controller.accent == accent,
+                onTap: () => _applyAccent(accent),
               ),
-              NvSegment(
-                value: LockoutBrightnessChoice.light,
-                label: 'Light',
-              ),
-              NvSegment(
-                value: LockoutBrightnessChoice.dark,
-                label: 'Dark',
-              ),
-            ],
-            selected: controller.brightnessChoice,
-            onChanged: _applyBrightness,
-          ),
-          const SizedBox(height: LockoutTheme.sectionGap),
-          Text('Accent', style: theme.textTheme.titleLarge),
-          const SizedBox(height: LockoutTheme.headingGap),
-          // A `Wrap`, not a `Row`: five 48dp targets plus their gaps clear
-          // 360dp only just, and a device at a large display scale has less
-          // room than that. Wrapping onto a second line is the one failure
-          // mode here that is not an overflow stripe.
-          Wrap(
-            spacing: LockoutTheme.spaceSm,
-            runSpacing: LockoutTheme.spaceSm,
-            children: [
-              for (final accent in LockoutAccent.all)
-                _AccentSwatch(
-                  accent: accent,
-                  selected: controller.accent == accent,
-                  onTap: () => _applyAccent(accent),
-                ),
-            ],
-          ),
-        ],
-      ),
+          ],
+        ),
+      ],
     );
   }
 
   Widget _buildUnitsCard(BuildContext context) {
-    return LockoutCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: double.infinity,
-            child: SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(value: 'cm', label: Text('Centimetres')),
-                ButtonSegment(value: 'ft', label: Text('Feet / inches')),
-              ],
-              selected: {_heightUnit},
-              showSelectedIcon: false,
-              onSelectionChanged: (s) => _switchHeightUnit(s.first),
-            ),
-          ),
-          const SizedBox(height: LockoutTheme.spaceMd),
-          if (_heightUnit == 'ft')
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: LockoutField(
-                    label: 'Height (ft)',
-                    controller: _heightFtCtrl,
-                    hint: '5',
-                    keyboardType: TextInputType.number,
-                  ),
+    return _section(
+      context,
+      heading: 'Units',
+      rows: const [],
+      extras: [
+        NvSegmentedButton<String>(
+          segments: const [
+            NvSegment(value: 'cm', label: 'Centimetres'),
+            NvSegment(value: 'ft', label: 'Feet / inches'),
+          ],
+          selected: _heightUnit,
+          onChanged: _switchHeightUnit,
+        ),
+        const SizedBox(height: LockoutTheme.spaceMd),
+        if (_heightUnit == 'ft')
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: NvTextField(
+                  label: 'Height (ft)',
+                  controller: _heightFtCtrl,
+                  keyboardType: TextInputType.number,
                 ),
-                const SizedBox(width: LockoutTheme.spaceSm),
-                Expanded(
-                  child: LockoutField(
-                    label: 'Height (in)',
-                    controller: _heightInCtrl,
-                    hint: '9',
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                  ),
+              ),
+              const SizedBox(width: LockoutTheme.spaceSm),
+              Expanded(
+                child: NvTextField(
+                  label: 'Height (in)',
+                  controller: _heightInCtrl,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
                 ),
-              ],
-            )
-          else
-            LockoutField(
-              label: 'Height (cm)',
-              controller: _heightCmCtrl,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-            ),
-          const SizedBox(height: LockoutTheme.spaceSm),
-          FilledButton(
-            onPressed: _saveHeightSettings,
-            child: const Text('Save height'),
+              ),
+            ],
+          )
+        else
+          NvTextField(
+            label: 'Height (cm)',
+            controller: _heightCmCtrl,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
           ),
-        ],
-      ),
+        const SizedBox(height: LockoutTheme.spaceMd),
+        NvButton(
+          variant: NvButtonVariant.filled,
+          label: 'Save height',
+          onPressed: _saveHeightSettings,
+        ),
+      ],
     );
   }
 
   Widget _buildTrainingCard(BuildContext context) {
     final theme = Theme.of(context);
 
-    return LockoutCard(
-      padding: EdgeInsets.zero,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              LockoutTheme.cardPadding,
-              LockoutTheme.cardPadding,
-              LockoutTheme.cardPadding,
-              LockoutTheme.spaceSm,
-            ),
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: LockoutTheme.spaceMd,
-                vertical: LockoutTheme.spaceSm,
-              ),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(LockoutTheme.radiusField),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Training days per week',
-                      style: theme.textTheme.titleSmall,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: _daysPerWeek > 2
-                        ? () => _setDaysPerWeek(_daysPerWeek - 1)
-                        : null,
-                    icon: const Icon(Icons.remove_circle_outline),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: LockoutTheme.minTouchTarget,
-                      minHeight: LockoutTheme.minTouchTarget,
-                    ),
-                  ),
-                  Text('$_daysPerWeek', style: theme.textTheme.titleMedium),
-                  IconButton(
-                    onPressed: _daysPerWeek < 6
-                        ? () => _setDaysPerWeek(_daysPerWeek + 1)
-                        : null,
-                    icon: const Icon(Icons.add_circle_outline),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: LockoutTheme.minTouchTarget,
-                      minHeight: LockoutTheme.minTouchTarget,
-                    ),
+    return _section(
+      context,
+      heading: 'Training',
+      rows: [
+        NvListItem(
+          title: 'Days per week',
+          supporting: '$_daysPerWeek',
+          onTap: () => _openDaysPerWeekSheet(context),
+        ),
+        for (final a in ActivityLevel.values)
+          NvListItem(
+            title: a.label,
+            supporting: a.blurb,
+            onTap: () => _setActivity(a),
+            trailing: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text('x${a.multiplier}', style: theme.textTheme.labelMedium),
+                if (a == _activity) ...[
+                  const SizedBox(height: LockoutTheme.spaceXs),
+                  const NvStatusBadge(
+                    label: 'Selected',
+                    kind: NvBadgeKind.accent,
                   ),
                 ],
-              ),
+              ],
             ),
           ),
-          for (final a in ActivityLevel.values)
-            RadioListTile<ActivityLevel>(
-              value: a,
-              groupValue: _activity,
-              onChanged: (v) => _setActivity(v ?? _activity),
-              title: Text(a.label),
-              subtitle: Text(a.blurb),
-              secondary: Text('x${a.multiplier}', style: theme.textTheme.labelMedium),
+      ],
+    );
+  }
+
+  /// The "Days per week" stepper, opened from its row rather than drawn
+  /// inline — section 8 prefers a sheet for a choice over a row that grows
+  /// its own controls.
+  Future<void> _openDaysPerWeekSheet(BuildContext context) {
+    return showNvSheet<void>(
+      context: context,
+      title: 'Days per week',
+      child: StatefulBuilder(
+        builder: (context, setSheetState) => Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            IconButton(
+              onPressed: _daysPerWeek > 2
+                  ? () {
+                      _setDaysPerWeek(_daysPerWeek - 1);
+                      setSheetState(() {});
+                    }
+                  : null,
+              icon: const Icon(Icons.remove_circle_outline),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(
+                minWidth: LockoutTheme.minTouchTarget,
+                minHeight: LockoutTheme.minTouchTarget,
+              ),
             ),
-          const SizedBox(height: LockoutTheme.spaceXs),
-        ],
+            const SizedBox(width: LockoutTheme.spaceMd),
+            Text('$_daysPerWeek', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(width: LockoutTheme.spaceMd),
+            IconButton(
+              onPressed: _daysPerWeek < 6
+                  ? () {
+                      _setDaysPerWeek(_daysPerWeek + 1);
+                      setSheetState(() {});
+                    }
+                  : null,
+              icon: const Icon(Icons.add_circle_outline),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(
+                minWidth: LockoutTheme.minTouchTarget,
+                minHeight: LockoutTheme.minTouchTarget,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -811,230 +839,192 @@ class SettingsBodyState extends State<SettingsBody> {
     final theme = Theme.of(context);
     final plan = _plan;
 
-    return LockoutCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Calories are calculated from these, not guessed — BMR by the '
-            'Mifflin-St Jeor equation, then activity, then the deficit or '
-            'surplus your goal needs.',
+    return _section(
+      context,
+      heading: 'Food',
+      rows: [
+        NvSwitchRow(
+          title: 'Enable nutrition tab',
+          value: _foodTabEnabled,
+          onChanged: (val) => setState(() => _foodTabEnabled = val),
+        ),
+      ],
+      extras: [
+        Text(
+          'Calories are calculated from these, not guessed — BMR by the '
+          'Mifflin-St Jeor equation, then activity, then the deficit or '
+          'surplus your goal needs.',
+          style: theme.textTheme.bodySmall,
+        ),
+        const SizedBox(height: LockoutTheme.spaceMd),
+        Row(
+          children: [
+            Expanded(
+              child: NvTextField(
+                label: 'Age',
+                controller: _ageCtrl,
+                keyboardType: TextInputType.number,
+              ),
+            ),
+            const SizedBox(width: LockoutTheme.spaceSm),
+            Expanded(
+              child: NvTextField(
+                label: 'Target weight (kg)',
+                controller: _targetWeightCtrl,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: LockoutTheme.spaceMd),
+        NvSegmentedButton<Sex>(
+          segments: const [
+            NvSegment(value: Sex.male, label: 'Male'),
+            NvSegment(value: Sex.female, label: 'Female'),
+          ],
+          selected: _sex,
+          onChanged: (sex) => setState(() => _sex = sex),
+        ),
+        const SizedBox(height: LockoutTheme.spaceMd),
+        NvTextField(
+          label: 'Timeframe (weeks)',
+          controller: _weeksCtrl,
+          keyboardType: TextInputType.number,
+        ),
+        const SizedBox(height: LockoutTheme.spaceMd),
+        // The section's primary action — the one filled button section 8
+        // allows per section. "Save food settings" below is the second
+        // action this section needs, so it takes the tonal variant instead.
+        NvButton(
+          variant: NvButtonVariant.filled,
+          label: 'Calculate my target',
+          onPressed: _saveGoalAndRecalculate,
+        ),
+        if (plan != null) ...[
+          const SizedBox(height: LockoutTheme.spaceMd),
+          Container(
+            padding: const EdgeInsets.all(LockoutTheme.cardPadding),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primaryContainer,
+              borderRadius: BorderRadius.circular(LockoutTheme.radiusCard),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Daily target',
+                      style: theme.textTheme.labelMedium
+                          ?.copyWith(color: theme.colorScheme.onPrimaryContainer),
+                    ),
+                    NvStatusBadge(
+                      label: plan.directionLabel,
+                      kind: NvBadgeKind.neutral,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: LockoutTheme.spaceXs),
+                Text(
+                  '${plan.targetKcal} kcal',
+                  style: theme.textTheme.headlineSmall
+                      ?.copyWith(color: theme.colorScheme.onPrimaryContainer),
+                ),
+                const SizedBox(height: LockoutTheme.spaceSm),
+                Text(
+                  'BMR ${plan.bmr.round()} -> TDEE ${plan.tdee.round()} -> '
+                  '${plan.dailyDeltaKcal >= 0 ? '+' : ''}${plan.dailyDeltaKcal} kcal/day',
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.onPrimaryContainer),
+                ),
+                const SizedBox(height: LockoutTheme.spaceXs),
+                Text(
+                  'P ${plan.proteinG}g  ·  C ${plan.carbG}g  ·  F ${plan.fatG}g',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onPrimaryContainer,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (plan.warning != null) ...[
+            const SizedBox(height: LockoutTheme.spaceSm),
+            Container(
+              padding: const EdgeInsets.all(LockoutTheme.spaceMd),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.tertiaryContainer,
+                borderRadius: BorderRadius.circular(LockoutTheme.radiusField),
+              ),
+              child: Text(
+                plan.warning!,
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.onTertiaryContainer),
+              ),
+            ),
+          ],
+        ],
+        const Divider(height: LockoutTheme.sectionGap),
+        NvTextField(
+          label: 'Daily calorie target (kcal)',
+          controller: _calorieCtrl,
+          keyboardType: TextInputType.number,
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: LockoutTheme.spaceSm),
+          child: Text(
+            'Set automatically by "Calculate my target" above. Override it '
+            'here only if you already know what you are doing.',
             style: theme.textTheme.bodySmall,
           ),
-          const SizedBox(height: LockoutTheme.spaceMd),
-          Row(
-            children: [
-              Expanded(
-                child: LockoutField(
-                  label: 'Age',
-                  controller: _ageCtrl,
-                  hint: '28',
-                  keyboardType: TextInputType.number,
-                ),
-              ),
-              const SizedBox(width: LockoutTheme.spaceSm),
-              Expanded(
-                child: LockoutField(
-                  label: 'Target weight (kg)',
-                  controller: _targetWeightCtrl,
-                  hint: '72',
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: LockoutTheme.spaceSm),
-          SizedBox(
-            width: double.infinity,
-            child: SegmentedButton<Sex>(
-              segments: const [
-                ButtonSegment(value: Sex.male, label: Text('Male')),
-                ButtonSegment(value: Sex.female, label: Text('Female')),
-              ],
-              selected: {_sex},
-              showSelectedIcon: false,
-              onSelectionChanged: (s) => setState(() => _sex = s.first),
-            ),
-          ),
-          const SizedBox(height: LockoutTheme.spaceMd),
-          LockoutField(
-            label: 'Timeframe (weeks)',
-            controller: _weeksCtrl,
-            hint: '12',
-            keyboardType: TextInputType.number,
-          ),
-          const SizedBox(height: LockoutTheme.spaceSm),
-          FilledButton(
-            onPressed: _saveGoalAndRecalculate,
-            child: const Text('Calculate my target'),
-          ),
-          if (plan != null) ...[
-            const SizedBox(height: LockoutTheme.spaceMd),
-            Container(
-              padding: const EdgeInsets.all(LockoutTheme.cardPadding),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primaryContainer,
-                borderRadius: BorderRadius.circular(LockoutTheme.radiusCard),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Daily target',
-                        style: theme.textTheme.labelMedium
-                            ?.copyWith(color: theme.colorScheme.onPrimaryContainer),
-                      ),
-                      Chip(label: Text(plan.directionLabel)),
-                    ],
-                  ),
-                  const SizedBox(height: LockoutTheme.spaceXs),
-                  Text(
-                    '${plan.targetKcal} kcal',
-                    style: theme.textTheme.headlineSmall
-                        ?.copyWith(color: theme.colorScheme.onPrimaryContainer),
-                  ),
-                  const SizedBox(height: LockoutTheme.spaceSm),
-                  Text(
-                    'BMR ${plan.bmr.round()} -> TDEE ${plan.tdee.round()} -> '
-                    '${plan.dailyDeltaKcal >= 0 ? '+' : ''}${plan.dailyDeltaKcal} kcal/day',
-                    style: theme.textTheme.bodySmall
-                        ?.copyWith(color: theme.colorScheme.onPrimaryContainer),
-                  ),
-                  const SizedBox(height: LockoutTheme.spaceXs),
-                  Text(
-                    'P ${plan.proteinG}g  ·  C ${plan.carbG}g  ·  F ${plan.fatG}g',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onPrimaryContainer,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (plan.warning != null) ...[
-              const SizedBox(height: LockoutTheme.spaceSm),
-              Container(
-                padding: const EdgeInsets.all(LockoutTheme.spaceMd),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.tertiaryContainer,
-                  borderRadius: BorderRadius.circular(LockoutTheme.radiusField),
-                ),
-                child: Text(
-                  plan.warning!,
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.onTertiaryContainer),
-                ),
-              ),
-            ],
-          ],
-          const Divider(height: LockoutTheme.sectionGap),
-          LockoutField(
-            label: 'Daily calorie target (kcal)',
-            controller: _calorieCtrl,
-            keyboardType: TextInputType.number,
-          ),
-          Padding(
-            padding: const EdgeInsets.only(bottom: LockoutTheme.spaceSm),
-            child: Text(
-              'Set automatically by "Calculate my target" above. Override it '
-              'here only if you already know what you are doing.',
-              style: theme.textTheme.bodySmall,
-            ),
-          ),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Enable nutrition tab'),
-            value: _foodTabEnabled,
-            onChanged: (val) => setState(() => _foodTabEnabled = val),
-          ),
-          const SizedBox(height: LockoutTheme.spaceSm),
-          FilledButton(
-            onPressed: _saveFoodSettings,
-            child: const Text('Save food settings'),
-          ),
-        ],
-      ),
+        ),
+        NvButton(
+          variant: NvButtonVariant.tonal,
+          label: 'Save food settings',
+          onPressed: _saveFoodSettings,
+        ),
+      ],
     );
   }
 
   Widget _buildNotificationsCard(BuildContext context) {
-    final theme = Theme.of(context);
-    return LockoutCard(
-      padding: EdgeInsets.zero,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // A connected group rather than a stack of separate rows: the
-          // house document (section 5.2) reads these as one object, with the
-          // large outer corners on the first and last child and 3dp between
-          // them. The surface tone is what makes the grouping visible, so
-          // each row carries it rather than the group.
-          ConnectedGroup(
-            children: [
-              // The house catalog's own switch row — section 8 — rather than
-              // the Material `SwitchListTile` its two siblings below still
-              // use. Converting those is Task 8's job (the rest of this
-              // card's grouped-list rebuild); this one moves now only
-              // because it is `NvSwitchRow`'s sole consumer outside
-              // `lib/widgets/house`, which the house-catalog contract
-              // requires every component in that directory to have.
-              NvSwitchRow(
-                title: 'Daily training nudge',
-                supporting:
-                    'Scheduled on this device. Nothing is sent anywhere.',
-                value: _remindersEnabled,
-                onChanged: _toggleReminders,
-              ),
-              if (_remindersEnabled) ...[
-                Material(
-                  color: theme.colorScheme.surfaceContainerHigh,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: LockoutTheme.cardPadding,
-                    ),
-                    child: CalmRow(
-                      icon: Icons.schedule,
-                      title: 'Reminder time',
-                      value: _reminderTime.format(context),
-                      onTap: _pickReminderTime,
-                    ),
-                  ),
-                ),
-                Material(
-                  color: theme.colorScheme.surfaceContainerHigh,
-                  child: SwitchListTile(
-                    title: const Text('Streak warning at 21:00'),
-                    value: _streakAlertsEnabled,
-                    onChanged: _toggleStreakAlerts,
-                  ),
-                ),
-              ],
-            ],
+    return _section(
+      context,
+      heading: 'Notifications',
+      rows: [
+        NvSwitchRow(
+          title: 'Daily training nudge',
+          supporting: 'Scheduled on this device. Nothing is sent anywhere.',
+          value: _remindersEnabled,
+          onChanged: _toggleReminders,
+        ),
+        if (_remindersEnabled) ...[
+          NvListItem(
+            title: 'Reminder time',
+            supporting: _reminderTime.format(context),
+            onTap: _pickReminderTime,
           ),
-          if (_remindersEnabled) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                LockoutTheme.cardPadding,
-                0,
-                LockoutTheme.cardPadding,
-                LockoutTheme.cardPadding,
-              ),
-              child: OutlinedButton(
+          NvSwitchRow(
+            title: 'Streak warning at 21:00',
+            value: _streakAlertsEnabled,
+            onChanged: _toggleStreakAlerts,
+          ),
+        ],
+      ],
+      extras: _remindersEnabled
+          ? [
+              NvButton(
+                variant: NvButtonVariant.tonal,
+                label: 'Send test notification',
                 onPressed: () async {
                   await NotificationService.instance.showTestNotification();
                   _toast('Test notification sent.');
                 },
-                child: const Text('Send test notification'),
               ),
-            ),
-          ] else
-            const SizedBox(height: LockoutTheme.spaceXs),
-        ],
-      ),
+            ]
+          : const [],
     );
   }
 
@@ -1042,61 +1032,66 @@ class SettingsBodyState extends State<SettingsBody> {
     final theme = Theme.of(context);
     final semantics = LockoutSemantics.of(context);
 
-    return LockoutCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Export writes every routine, workout, set, meal, body entry and '
-            'setting to a single JSON file. Import replaces everything on this '
-            'device with the contents of a backup.',
-            style: theme.textTheme.bodySmall,
+    return _section(
+      context,
+      heading: 'Data',
+      rows: const [],
+      extras: [
+        Text(
+          'Export writes every routine, workout, set, meal, body entry and '
+          'setting to a single JSON file. Import replaces everything on this '
+          'device with the contents of a backup.',
+          style: theme.textTheme.bodySmall,
+        ),
+        const SizedBox(height: LockoutTheme.spaceMd),
+        FilledButton(
+          onPressed: _busy ? null : _export,
+          child: Text(_busy ? 'Working…' : 'Export backup JSON'),
+        ),
+        const SizedBox(height: LockoutTheme.spaceSm),
+        // Destructive: this replaces every row on the device. It sits at
+        // the bottom of the section, behind the confirmation dialog in
+        // `_import`, and carries `semantics.danger` — the same role as
+        // that dialog's confirm button.
+        //
+        // `danger` rather than `colorScheme.error` because the two say
+        // different things: `error` reports that something has already
+        // gone wrong, while `danger` warns that this control is about to
+        // destroy data if the user goes through with it. They are free to
+        // diverge — `LockoutSemantics` owns one and the scheme owns the
+        // other — so colouring the trigger `error` and its confirmation
+        // `danger` would split one action across two roles and, the
+        // moment they ever differ, across two visibly different reds.
+        OutlinedButton(
+          key: const Key('importBackupButton'),
+          onPressed: _busy ? null : _import,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: semantics.danger,
+            side: BorderSide(color: semantics.danger),
           ),
-          const SizedBox(height: LockoutTheme.spaceMd),
-          FilledButton(
-            onPressed: _busy ? null : _export,
-            child: Text(_busy ? 'Working…' : 'Export backup JSON'),
-          ),
-          const SizedBox(height: LockoutTheme.spaceSm),
-          // Destructive: this replaces every row on the device. It sits at
-          // the bottom of the card, behind the confirmation dialog in
-          // `_import`, and carries `semantics.danger` — the same role as
-          // that dialog's confirm button.
-          //
-          // `danger` rather than `colorScheme.error` because the two say
-          // different things: `error` reports that something has already
-          // gone wrong, while `danger` warns that this control is about to
-          // destroy data if the user goes through with it. They are free to
-          // diverge — `LockoutSemantics` owns one and the scheme owns the
-          // other — so colouring the trigger `error` and its confirmation
-          // `danger` would split one action across two roles and, the
-          // moment they ever differ, across two visibly different reds.
-          OutlinedButton(
-            key: const Key('importBackupButton'),
-            onPressed: _busy ? null : _import,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: semantics.danger,
-              side: BorderSide(color: semantics.danger),
-            ),
-            child: Text(_busy ? 'Working…' : 'Import backup JSON'),
-          ),
-        ],
-      ),
+          child: Text(_busy ? 'Working…' : 'Import backup JSON'),
+        ),
+      ],
     );
   }
 
   Widget _buildAboutCard(BuildContext context) {
     final theme = Theme.of(context);
 
-    return LockoutCard(
-      child: Text(
-        'LOCKOUT v1.1.0\nPublished by Jinatra Ltd. under GPL-3.0-or-later.\n'
-        'Offline-first: routines, workout logs, nutrition and body data are '
-        'stored only on this device in SQLite. No analytics, no ads, no '
-        'account.\nThe network is used for one thing — streaming exercise '
-        'form videos from YouTube when you tap Watch.',
-        style: theme.textTheme.bodyMedium,
-      ),
+    return _section(
+      context,
+      heading: 'About',
+      rows: const [],
+      extras: [
+        Text(
+          'LOCKOUT v1.1.0\nPublished by Jinatra Ltd. under GPL-3.0-or-later.\n'
+          'Offline-first: routines, workout logs, nutrition and body data are '
+          'stored only on this device in SQLite. No analytics, no ads, no '
+          'account.\nThe network is used for one thing — streaming exercise '
+          'form videos from YouTube when you tap Watch.',
+          style: theme.textTheme.bodyMedium,
+        ),
+      ],
     );
   }
 }
