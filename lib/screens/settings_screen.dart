@@ -14,6 +14,8 @@ import '../theme/lockout_theme.dart';
 import '../theme/theme_controller.dart';
 import '../widgets/calm_row.dart';
 import '../widgets/connected_group.dart';
+import '../widgets/house/nv_segmented_button.dart';
+import '../widgets/house/nv_switch.dart';
 import '../widgets/lockout_card.dart';
 import '../widgets/lockout_field.dart';
 
@@ -543,6 +545,8 @@ class SettingsBodyState extends State<SettingsBody> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              _buildHeader(context),
+              const SizedBox(height: LockoutTheme.sectionGap),
               _sectionCaption(context, 'Appearance'),
               _buildAppearanceCard(context),
               const SizedBox(height: LockoutTheme.sectionGap),
@@ -577,6 +581,38 @@ class SettingsBodyState extends State<SettingsBody> {
     );
   }
 
+  /// Section 12.2's header: a large cookie avatar and the app name.
+  ///
+  /// The house spec also asks for a name, an email and a Pro badge, but this
+  /// app has no account and no Pro tier (deviation D2) — there is nothing
+  /// for either to say, so inventing one would be fiction rather than data.
+  /// The 12-lobe register is section 5.3's "Profile avatar (large)".
+  Widget _buildHeader(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    return Row(
+      children: [
+        Container(
+          width: 72,
+          height: 72,
+          alignment: Alignment.center,
+          decoration: ShapeDecoration(
+            color: colors.secondaryContainer,
+            shape: const CookieBorder(lobes: 12, amplitude: 0.04),
+          ),
+          child: Icon(
+            Icons.fitness_center,
+            size: 32,
+            color: colors.onSecondaryContainer,
+          ),
+        ),
+        const SizedBox(width: LockoutTheme.spaceMd),
+        Text('Lockout', style: theme.textTheme.headlineSmall),
+      ],
+    );
+  }
+
   /// The appearance picker: two independent axes, nothing else.
   ///
   /// Brightness is a segmented button rather than a switch because "system"
@@ -594,28 +630,23 @@ class SettingsBodyState extends State<SettingsBody> {
         children: [
           Text('Applies instantly.', style: theme.textTheme.bodySmall),
           const SizedBox(height: LockoutTheme.headingGap),
-          SizedBox(
-            width: double.infinity,
-            child: SegmentedButton<LockoutBrightnessChoice>(
-              segments: const [
-                ButtonSegment(
-                  value: LockoutBrightnessChoice.system,
-                  label: Text('System'),
-                ),
-                ButtonSegment(
-                  value: LockoutBrightnessChoice.light,
-                  label: Text('Light'),
-                ),
-                ButtonSegment(
-                  value: LockoutBrightnessChoice.dark,
-                  label: Text('Dark'),
-                ),
-              ],
-              selected: {controller.brightnessChoice},
-              showSelectedIcon: false,
-              onSelectionChanged: (selection) =>
-                  _applyBrightness(selection.first),
-            ),
+          NvSegmentedButton<LockoutBrightnessChoice>(
+            segments: const [
+              NvSegment(
+                value: LockoutBrightnessChoice.system,
+                label: 'System',
+              ),
+              NvSegment(
+                value: LockoutBrightnessChoice.light,
+                label: 'Light',
+              ),
+              NvSegment(
+                value: LockoutBrightnessChoice.dark,
+                label: 'Dark',
+              ),
+            ],
+            selected: controller.brightnessChoice,
+            onChanged: _applyBrightness,
           ),
           const SizedBox(height: LockoutTheme.sectionGap),
           Text('Accent', style: theme.textTheme.titleLarge),
@@ -944,15 +975,19 @@ class SettingsBodyState extends State<SettingsBody> {
           // each row carries it rather than the group.
           ConnectedGroup(
             children: [
-              Material(
-                color: theme.colorScheme.surfaceContainerHigh,
-                child: SwitchListTile(
-                  title: const Text('Daily training nudge'),
-                  subtitle: const Text(
-                      'Scheduled on this device. Nothing is sent anywhere.'),
-                  value: _remindersEnabled,
-                  onChanged: _toggleReminders,
-                ),
+              // The house catalog's own switch row — section 8 — rather than
+              // the Material `SwitchListTile` its two siblings below still
+              // use. Converting those is Task 8's job (the rest of this
+              // card's grouped-list rebuild); this one moves now only
+              // because it is `NvSwitchRow`'s sole consumer outside
+              // `lib/widgets/house`, which the house-catalog contract
+              // requires every component in that directory to have.
+              NvSwitchRow(
+                title: 'Daily training nudge',
+                supporting:
+                    'Scheduled on this device. Nothing is sent anywhere.',
+                value: _remindersEnabled,
+                onChanged: _toggleReminders,
               ),
               if (_remindersEnabled) ...[
                 Material(
