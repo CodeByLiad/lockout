@@ -159,7 +159,10 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    final about = find.textContaining('Published by Jinatra Ltd.');
+    // The About card's licence/version body moved onto its own route in
+    // Task 10 (see about_screen_test.dart); what is left at the bottom of
+    // this scroll is the row that pushes it.
+    final about = find.text('About Lockout');
     expect(about, findsOneWidget);
 
     expect(tester.getBottomLeft(about).dy, lessThanOrEqualTo(1000.0 - 48.0));
@@ -600,18 +603,10 @@ void main() {
       expect(sentinel, isNot(colors.error));
     });
 
-    // The About card is the one place the app explains what leaves the
-    // device, and it points at a control by name. That name has to be the
-    // label the user actually sees on the control — 'Watch', in the routine
-    // editor — in the case it is actually written in, since the house
-    // document forbids all-caps labels (section 4.2, register entry D8).
-    testWidgets('the About card names the Watch control as it is labelled',
-        (tester) async {
-      await pumpSettings(tester);
-
-      expect(find.textContaining('when you tap Watch'), findsOneWidget);
-      expect(find.textContaining('WATCH'), findsNothing);
-    });
+    // The About card's body — including the Watch-control wording this test
+    // used to pin — moved onto its own route in Task 10. The equivalent
+    // assertion now lives in about_screen_test.dart, pumping AboutScreen
+    // directly rather than Settings.
 
     testWidgets('both appearance axes sit under a Look and feel caption',
         (tester) async {

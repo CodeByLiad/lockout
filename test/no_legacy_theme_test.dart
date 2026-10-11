@@ -55,11 +55,13 @@ String _rel(File f) => f.path.replaceAll(r'\', '/');
 ///     chose that palette silently loses their setting on upgrade. (It used
 ///     to live in `schemes.dart`, which was deleted with the named-scheme
 ///     model; the map moved here rather than going with it.)
-///   * `settings_screen.dart` carries the legal publisher attribution shown
-///     in the About card. It names the company, not a theme.
+///   * `about_screen.dart` carries the legal publisher attribution. It used
+///     to sit inline in `settings_screen.dart`'s About card; Task 10 lifted
+///     that body onto its own screen, and the attribution moved with it. It
+///     names the company, not a theme.
 const _allowedJinatraText = <String, List<String>>{
   'lib/theme/theme_controller.dart': ["'jinatra_cream': 'paper',"],
-  'lib/screens/settings_screen.dart': ['Published by Jinatra Ltd.'],
+  'lib/screens/about_screen.dart': ['Published by Jinatra Ltd.'],
 };
 
 void main() {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'about_screen.dart';
 import '../services/backup_service.dart';
 import '../services/database_service.dart';
 import '../services/goal_service.dart';
@@ -1056,21 +1057,21 @@ class SettingsBodyState extends State<SettingsBody> {
     );
   }
 
+  /// The licence, version and data-handling notes used to sit inline here.
+  /// Task 10 lifted that body onto its own route — [AboutScreen] — so this
+  /// section is now a single row that pushes it, same as any other
+  /// navigation row the house catalog defines.
   Widget _buildAboutCard(BuildContext context) {
-    final theme = Theme.of(context);
-
     return _section(
       context,
       heading: 'About',
-      rows: const [],
-      extras: [
-        Text(
-          'LOCKOUT v1.1.0\nPublished by Jinatra Ltd. under GPL-3.0-or-later.\n'
-          'Offline-first: routines, workout logs, nutrition and body data are '
-          'stored only on this device in SQLite. No analytics, no ads, no '
-          'account.\nThe network is used for one thing — streaming exercise '
-          'form videos from YouTube when you tap Watch.',
-          style: theme.textTheme.bodyMedium,
+      rows: [
+        NvListItem(
+          title: 'About Lockout',
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const AboutScreen()),
+          ),
         ),
       ],
     );
