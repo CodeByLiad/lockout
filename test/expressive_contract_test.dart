@@ -44,13 +44,13 @@ const List<String> _branchOneFiles = [
 /// Guards scoped to this list widen as screens land. They never weaken: a
 /// guard that stops asserting something is a regression, not a scope change.
 ///
-/// Today this holds exactly what `_branchOneFiles` holds, so scoping the
-/// case rule to it asserts nothing the case rule did not already assert —
-/// the all-caps copy the device pass found lived in `home_hub.dart`, which
-/// no list covered. It earns its keep when the settings screen and About
-/// land here. Said plainly rather than left to look like new coverage.
+/// About has landed, so this is no longer `_branchOneFiles` under another
+/// name: `about_screen.dart` is covered by the case rule here and by nothing
+/// else. A screen absent from this list is a screen the next edit can walk a
+/// pre-rebuild widget into unopposed, which is how the rebuild rots back.
 const List<String> _rebuiltFiles = [
   ..._branchOneFiles,
+  'lib/screens/about_screen.dart',
 ];
 
 /// The pre-rebuild widgets a rebuilt screen must not reach for.
@@ -61,6 +61,7 @@ const List<String> _rebuiltFiles = [
 /// The screens rebuilt so far. Appended to as screens land.
 const List<String> _rebuiltScreens = [
   'lib/screens/today_tab.dart',
+  'lib/screens/about_screen.dart',
 ];
 
 const List<String> _preRebuildWidgets = [

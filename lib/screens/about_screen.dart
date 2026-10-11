@@ -17,8 +17,24 @@ class AboutScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('About')),
-      body: Padding(
-        padding: const EdgeInsets.all(LockoutTheme.screenPadding),
+      // Scrollable, matching SettingsScreen, which is where this copy used
+      // to live. `Text` clips by default, so an unscrollable body drops the
+      // tail of a long paragraph without an exception or an indicator: at
+      // 320dp wide and text scale 1.15 — inside the 1.0-1.15 range config.md
+      // pins layouts to — the card needs 861dp against about 600 available.
+      //
+      // The bottom inset is the same arithmetic SettingsScreen documents:
+      // this route has an AppBar but no bottomNavigationBar, so on an
+      // edge-to-edge window it runs to the physical bottom of the screen and
+      // a fixed padding alone cannot clear the navigation bar. `paddingOf`,
+      // not `viewPaddingOf`, so it collapses to 0 when the keyboard is up.
+      body: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          LockoutTheme.screenPadding,
+          LockoutTheme.screenPadding,
+          LockoutTheme.screenPadding,
+          LockoutTheme.screenPadding + MediaQuery.paddingOf(context).bottom,
+        ),
         child: NvInfoCard(
           child: Text(
             'LOCKOUT v1.1.0\nPublished by Jinatra Ltd. under '

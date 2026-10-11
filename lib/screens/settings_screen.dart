@@ -539,7 +539,7 @@ class SettingsBodyState extends State<SettingsBody> {
               _buildFoodCard(context),
               _buildNotificationsCard(context),
               _buildDataCard(context),
-              _buildAboutCard(context),
+              _buildAboutSection(context),
             ],
           ),
         ),
@@ -1059,9 +1059,19 @@ class SettingsBodyState extends State<SettingsBody> {
 
   /// The licence, version and data-handling notes used to sit inline here.
   /// Task 10 lifted that body onto its own route — [AboutScreen] — so this
-  /// section is now a single row that pushes it, same as any other
-  /// navigation row the house catalog defines.
-  Widget _buildAboutCard(BuildContext context) {
+  /// section is now a single row that pushes it.
+  ///
+  /// It is the FIRST such row in the app: `Icons.chevron_right` appears
+  /// nowhere else under `lib/screens/`, and the house catalog has no
+  /// navigation-row component yet. Treat this as the thing a second one
+  /// should be factored out of, not as an established convention — the
+  /// shape it sets is a title, a chevron and a push, nothing more.
+  ///
+  /// Named a section, not a card: it returns a `_section`, and every
+  /// `_buildXCard` sibling around it has been one of these for a while now.
+  /// Renaming the rest is out of this task's scope; shipping a fresh one
+  /// under the wrong noun is not.
+  Widget _buildAboutSection(BuildContext context) {
     return _section(
       context,
       heading: 'About',

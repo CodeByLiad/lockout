@@ -8,6 +8,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:lockout/models/models.dart';
+import 'package:lockout/screens/about_screen.dart';
 import 'package:lockout/screens/profile_tab.dart';
 import 'package:lockout/screens/settings_screen.dart';
 import 'package:lockout/services/database_service.dart';
@@ -162,7 +163,17 @@ void main() {
     // The About card's licence/version body moved onto its own route in
     // Task 10 (see about_screen_test.dart); what is left at the bottom of
     // this scroll is the row that pushes it.
-    final about = find.text('About Lockout');
+    //
+    // Measured on the ROW, not on its title. `find.text` probes the text's
+    // own box, which sits about 25dp above the row's bottom edge —
+    // NvListItem's 16dp bottom padding plus the slack its 72dp minimum
+    // height leaves when one line of title is centred in it. That slack is
+    // wider than the regression: with the inset dropped the title bottom
+    // lands at 931 while the row's real bottom is 956, four dp under a nav
+    // bar whose top is 952. Probing the title would report that as clear.
+    final title = find.text('About Lockout');
+    expect(title, findsOneWidget);
+    final about = find.ancestor(of: title, matching: find.byType(NvListItem));
     expect(about, findsOneWidget);
 
     expect(tester.getBottomLeft(about).dy, lessThanOrEqualTo(1000.0 - 48.0));
@@ -225,6 +236,23 @@ void main() {
       weightKg: 100.0,
     ).toMap());
   }
+
+  // Step 5 of the brief is the task's only new user-facing capability, and
+  // replacing this row's `onTap` with `() {}` — About unreachable from the
+  // whole app — left the full suite green. A row rendering with the right
+  // title is not a route; this taps it and looks for the screen.
+  testWidgets('the About row pushes the About screen', (tester) async {
+    await pumpSettings(tester);
+
+    expect(find.byType(AboutScreen), findsNothing,
+        reason: 'About must arrive by the tap, not by already being there');
+
+    await tester.tap(find.text('About Lockout'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AboutScreen), findsOneWidget,
+        reason: 'the About row is the only way into the About screen');
+  });
 
   /// The text sitting in the field labelled [label].
   String fieldText(WidgetTester tester, String label) {
