@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'about_screen.dart';
 import '../services/backup_service.dart';
 import '../services/database_service.dart';
 import '../services/goal_service.dart';
@@ -20,6 +19,7 @@ import '../widgets/house/nv_sheet.dart';
 import '../widgets/house/nv_status_badge.dart';
 import '../widgets/house/nv_switch.dart';
 import '../widgets/house/nv_text_field.dart';
+import 'about_screen.dart';
 
 /// The settings content, independent of how it is presented.
 ///
@@ -1066,11 +1066,6 @@ class SettingsBodyState extends State<SettingsBody> {
   /// navigation-row component yet. Treat this as the thing a second one
   /// should be factored out of, not as an established convention — the
   /// shape it sets is a title, a chevron and a push, nothing more.
-  ///
-  /// Named a section, not a card: it returns a `_section`, and every
-  /// `_buildXCard` sibling around it has been one of these for a while now.
-  /// Renaming the rest is out of this task's scope; shipping a fresh one
-  /// under the wrong noun is not.
   Widget _buildAboutSection(BuildContext context) {
     return _section(
       context,

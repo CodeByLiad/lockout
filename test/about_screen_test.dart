@@ -110,8 +110,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // The scrolling body, which excludes the AppBar and its back button.
-    final body = find.byType(SingleChildScrollView);
+    // The card holding the copy, which excludes the AppBar and its back
+    // button. Anchored on the card rather than on the scroll view that
+    // happens to wrap it, so a later change of scrolling widget does not
+    // fail a test about links.
+    final body = find.byType(NvInfoCard);
     expect(body, findsOneWidget,
         reason: 'this anchors every assertion below; without it they would '
             'range over the whole screen and prove nothing about the copy');
@@ -119,18 +122,25 @@ void main() {
     Finder inBody(Finder matching) =>
         find.descendant(of: body, matching: matching);
 
-    // Material ink, house gestures and a tap recognizer buried in a span are
-    // three different ways to ship a link; none of them belongs here.
-    expect(inBody(find.byType(InkResponse)), findsNothing,
-        reason: 'the app is zero-network at runtime; a dead link is worse '
-            'than none');
-
+    // Two ways to ship a link: a tap handler on a widget, and a recognizer
+    // buried in a span. Neither belongs here.
+    //
+    // The handler check is deliberately not `find.byType(InkWell)` or
+    // `InkResponse`. Material ink builds a GestureDetector of its own, and
+    // the house components build one directly (NvListItem, NvButton, through
+    // MorphingSurface), so asking what is tappable catches both — where
+    // asking for a widget type catches only the exact type named.
     final tappable = tester
         .widgetList<GestureDetector>(inBody(find.byType(GestureDetector)))
-        .where((g) => g.onTap != null || g.onDoubleTap != null)
+        .where((g) =>
+            g.onTap != null ||
+            g.onTapUp != null ||
+            g.onDoubleTap != null ||
+            g.onLongPress != null)
         .toList();
     expect(tappable, isEmpty,
-        reason: 'a house-built link is a GestureDetector, not an InkWell');
+        reason: 'the app is zero-network at runtime; a dead link is worse '
+            'than none');
 
     final recognizers = tester
         .widgetList<RichText>(inBody(find.byType(RichText)))

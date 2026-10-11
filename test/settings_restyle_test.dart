@@ -631,11 +631,6 @@ void main() {
       expect(sentinel, isNot(colors.error));
     });
 
-    // The About card's body — including the Watch-control wording this test
-    // used to pin — moved onto its own route in Task 10. The equivalent
-    // assertion now lives in about_screen_test.dart, pumping AboutScreen
-    // directly rather than Settings.
-
     testWidgets('both appearance axes sit under a Look and feel caption',
         (tester) async {
       final semantics = tester.ensureSemantics();
