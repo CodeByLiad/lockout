@@ -48,6 +48,12 @@ const List<String> _branchOneFiles = [
 /// name: `about_screen.dart` is covered by the case rule here and by nothing
 /// else. A screen absent from this list is a screen the next edit can walk a
 /// pre-rebuild widget into unopposed, which is how the rebuild rots back.
+///
+/// `settings_screen.dart` is deliberately NOT repeated here. It has been in
+/// `_branchOneFiles` since the restyle, so the spread above already hands it
+/// to the case rule; naming it twice would read as two guards where there is
+/// one. Checked by mutation, not by inspection — an all-caps literal in that
+/// screen turns the case rule red through this list as it stands.
 const List<String> _rebuiltFiles = [
   ..._branchOneFiles,
   'lib/screens/about_screen.dart',
@@ -58,10 +64,31 @@ const List<String> _rebuiltFiles = [
 /// Each was written for the previous design. Adapting a screen to keep one
 /// preserves that design's composition in a place no token can reach, which
 /// is the failure this branch exists to end.
+///
+/// Two widgets `today_tab.dart` imports are deliberately NOT on this list, and
+/// the distinction between them is the point:
+///
+///   * `sparkline.dart` is exempt, permanently. It is a `CustomPainter` that
+///     draws a line from a list of numbers; it owns no layout, no spacing and
+///     no surface, and takes its colour from the caller. There is no previous
+///     design preserved inside it, so there is nothing for the rebuild to end.
+///     A chart primitive is not a composition.
+///   * `exercise_picker.dart` is a real breach, recorded rather than fixed.
+///     It is an old-composition sheet, and `today_tab.dart` — a rebuilt
+///     screen — imports it. Adding it here turns this suite red on shipping
+///     code. It is owed to the branch that rebuilds `routines_tab.dart`, its
+///     other consumer; see `docs/spine/orphaned-widgets.md`. Do not add it
+///     here until that rebuild lands, and do not let its absence read as a
+///     clean bill of health.
 /// The screens rebuilt so far. Appended to as screens land.
+///
+/// `settings_screen.dart` joins at branch end. It reaches for no pre-rebuild
+/// widget today, so the entry catches no present bug — it is here so that the
+/// next edit to a 1171-line screen cannot quietly re-import one.
 const List<String> _rebuiltScreens = [
   'lib/screens/today_tab.dart',
   'lib/screens/about_screen.dart',
+  'lib/screens/settings_screen.dart',
 ];
 
 const List<String> _preRebuildWidgets = [

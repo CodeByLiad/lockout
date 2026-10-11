@@ -142,11 +142,51 @@ indicator (§8 forbids a spinner for local data, and all of Lockout's data is lo
 them as deliberately absent is the rule from §4 working: a component with no consumer does not
 get written.
 
+**Variants built but never pressed (recorded at branch end).** The three components above were
+never written at all. These two *are* written — they are branches inside a file that did land —
+and reached branch end with no call site anywhere in `lib/`:
+
+| Variant | Where it lives | Why nothing uses it |
+| --- | --- | --- |
+| `NvBadgeKind.unknown` | `nv_status_badge.dart` | badges on the rebuilt screens resolve to `accent`, `done` or `neutral`; no row on either screen is in an indeterminate state |
+| `NvButton(large: true)` | `nv_button.dart` | the 60 dp hero size with the 16 dp active radius. Today's "start session" is the obvious candidate and is built at the default size — `large` is never passed at any call site, not even as `false` |
+
+Derived mechanically: the variant enums under `lib/widgets/house/` (`NvButtonVariant`,
+`NvIconButtonTone`, `NvBadgeKind`) read out of the source, then each member grepped across all
+of `lib/`, excluding only the file that declares it. Every other member has a consumer.
+
+Counting intra-catalog consumers is the part that has to be got right, and the first pass got it
+wrong. Excluding `lib/widgets/house/` from the grep — the way the file-level orphan check does —
+reports `NvButtonVariant.danger` as unbuilt. It is not: `nv_dialog.dart` builds the confirm
+button of `showNvDestructiveDialog` with it, and both rebuilt screens call that dialog, so
+`danger` paints on a real screen. `NvButtonVariant.tonal` reaches `nv_empty_state.dart` the same
+way. The catalog composes on itself, so a variant's consumer may legitimately be another
+catalog file; what makes it *built* is that the chain ends at a screen.
+
+This is the limit of the contract guard, and the limit is the reason this list is written by
+hand. `expressive_contract_test.dart`'s "every catalog component has a consumer outside the
+catalog" test matches the component's **file name** against the concatenated source of every
+non-catalog file in `lib/`. So it proves each catalog *file* is named somewhere outside the
+catalog — an import line alone satisfies it. It says nothing about which of the several classes
+in a multi-class file is built (`nv_button.dart` holds `NvButton` and `NvIconButton`;
+`nv_cards.dart` holds `NvInfoCard` and `NvTbaCard`), nothing about enum members, and nothing
+about an optional flag like `large`. Those three rows above are invisible to it by construction.
+Keeping them is the deliberate call: unlike an unbuilt component, deleting a branch of an enum
+that the house document specifies would have to be undone the moment a screen needs it.
+
 Existing widgets that the rebuilt screens no longer reach (`lockout_card`, `calm_row`,
-`morphing_surface`, `connected_group`, `hero_card`, `today_day_card`, `stat_tile`, `action_grid`,
-`home_hub`, and others) are **not deleted on this branch** — the five out-of-scope screens still
+`hero_card`, `today_day_card`, `stat_tile`, `action_grid`, `home_hub`, and others) are **not
+deleted on this branch** — the five out-of-scope screens still
 consume them. Each rebuilt screen's task ends by listing which widgets it orphaned; deletion
 happens on the branch that removes the last consumer.
+
+`morphing_surface` and `connected_group` are **not** in that list, though an earlier draft of
+this section put them there. They are reached — through the catalog rather than directly from a
+screen: `nv_button.dart` and `nv_grouped_list.dart` both import `morphing_surface`, and
+`nv_grouped_list.dart` imports `connected_group`. That is the intended shape of the dependency,
+not an orphan. A deletion pass reading this section literally would have cut two live
+primitives; `docs/spine/orphaned-widgets.md` records them under "catalog-internal" for the same
+reason.
 
 Catalog components read colour, type, shape and motion through `Theme.of(context)` and
 `LockoutMotion` only. No compile-time colour constant, no static token class.
