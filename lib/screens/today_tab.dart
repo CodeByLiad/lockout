@@ -127,6 +127,17 @@ class TodayTab extends StatefulWidget {
   /// not offer a tap target that silently does nothing.
   final bool foodTabEnabled;
 
+  /// The wall clock every live-session reading goes through.
+  ///
+  /// Injectable for one case the ticker cannot reach on its own: Android
+  /// freezes a cached app mid-workout, so the process gets no timer
+  /// callbacks for minutes and then resumes with real time having moved.
+  /// A test can reproduce that exactly — advance this clock without
+  /// advancing the ticker — which is the only way to tell a self-correcting
+  /// clock apart from a tick-counted one. `DateTime.now` in production, and
+  /// nothing outside `lib/screens/today_tab.dart` passes it.
+  final DateTime Function() clock;
+
   // Non-const constructor: see "Why some constructors in this app are
   // not const" at the top of lib/widgets/day_block.dart.
   // ignore: prefer_const_constructors_in_immutables
@@ -134,6 +145,7 @@ class TodayTab extends StatefulWidget {
     super.key,
     this.onNavigate,
     this.foodTabEnabled = true,
+    this.clock = DateTime.now,
   });
 
   @override
@@ -158,10 +170,21 @@ class TodayTabState extends State<TodayTab> {
   List<_LiveExercise> _liveExercises = [];
 
   int _elapsedSeconds = 0;
+
+  /// Seconds still to rest. Derived from [_restEndsAt] by `_syncRest`, never
+  /// counted down; it is a field only because the label and the bar both
+  /// read it on every build.
   int _restSeconds = 0;
-  // The rest duration `_beginRest` was called with, kept only so
-  // `_buildRestBar` can paint a remaining-time progress bar; the countdown
-  // itself is still driven solely by `_restSeconds`/`_restRunning` below.
+
+  /// When the running rest ends, in wall-clock time.
+  ///
+  /// The countdown's single source of truth, the way `_startedAt` is the
+  /// elapsed clock's. The +/-15s controls move this, not the counter.
+  DateTime? _restEndsAt;
+
+  /// The rest duration `_beginRest` was called with, kept so `_buildRestBar`
+  /// can paint a remaining-time progress bar. Moves with the +/-15s controls
+  /// so the bar's denominator never goes stale.
   int _restTotalSeconds = 0;
   bool _restRunning = false;
   Timer? _ticker;
@@ -177,6 +200,9 @@ class TodayTabState extends State<TodayTab> {
     _ticker?.cancel();
     super.dispose();
   }
+
+  /// The session's wall clock. See `TodayTab.clock`.
+  DateTime _now() => widget.clock();
 
   /// Called by MainScreen when the user returns to this tab, so a routine
   /// edited on the Routines tab, or a log entered on another tab, shows up
@@ -319,9 +345,10 @@ class TodayTabState extends State<TodayTab> {
       _sessionActive = true;
       _sessionTitle = title;
       _liveExercises = exercises;
-      _startedAt = DateTime.now();
+      _startedAt = _now();
       _elapsedSeconds = 0;
       _restSeconds = 0;
+      _restEndsAt = null;
       _restTotalSeconds = 0;
       _restRunning = false;
     });
@@ -343,24 +370,48 @@ class TodayTabState extends State<TodayTab> {
       if (!mounted) return;
       setState(() {
         if (_startedAt != null) {
-          _elapsedSeconds = DateTime.now().difference(_startedAt!).inSeconds;
+          _elapsedSeconds = _now().difference(_startedAt!).inSeconds;
         }
-        if (_restRunning) {
-          if (_restSeconds > 0) {
-            _restSeconds--;
-          } else {
-            _restRunning = false;
-          }
-        }
+        if (_restRunning) _syncRest();
       });
     });
   }
 
+  /// Recomputes the rest countdown from [_restEndsAt], exactly the way the
+  /// line above recomputes elapsed time from `_startedAt`.
+  ///
+  /// Decrementing a counter once per tick instead made the two clocks on
+  /// this screen disagree the moment the ticker missed a beat — and the case
+  /// where it misses is not an edge case, it is Android freezing a cached
+  /// app mid-workout. On resume elapsed snapped back to the truth and rest
+  /// did not: a 90s rest still read 60s after three real minutes.
+  ///
+  /// Call inside `setState`.
+  void _syncRest() {
+    final endsAt = _restEndsAt;
+    if (endsAt == null) {
+      _restSeconds = 0;
+      _restRunning = false;
+      return;
+    }
+    final msLeft = endsAt.difference(_now()).inMilliseconds;
+    if (msLeft <= 0) {
+      _restSeconds = 0;
+      _restRunning = false;
+      _restEndsAt = null;
+      return;
+    }
+    // Rounded up: a tick arriving a few milliseconds late still reads the
+    // second it is in. Truncating would skip a number on a slow frame.
+    _restSeconds = (msLeft / 1000).ceil();
+  }
+
   void _beginRest(int seconds) {
     setState(() {
-      _restSeconds = seconds;
+      _restEndsAt = _now().add(Duration(seconds: seconds));
       _restTotalSeconds = seconds;
       _restRunning = true;
+      _syncRest();
     });
   }
 
@@ -411,8 +462,8 @@ class TodayTabState extends State<TodayTab> {
     }
 
     final sessionId = DateTime.now().millisecondsSinceEpoch.toString();
-    final started = _startedAt ?? DateTime.now();
-    final duration = DateTime.now().difference(started).inSeconds;
+    final started = _startedAt ?? _now();
+    final duration = _now().difference(started).inSeconds;
     final sched = _scheduled;
 
     // Only completed sets are archived — an untouched set is not a data point.
@@ -471,8 +522,27 @@ class TodayTabState extends State<TodayTab> {
     // it, which nothing downstream can tell apart from a legitimately
     // detail-free entry. Same argument `deleteSessionLog` and
     // `restoreSessionLog` were given transactions for.
-    await DatabaseService.instance
-        .insertSessionWithSets(session.toMap(), setRows);
+    try {
+      await DatabaseService.instance
+          .insertSessionWithSets(session.toMap(), setRows);
+    } catch (_) {
+      // Nothing is cleared and the session stays live. This is the one
+      // moment the whole workout exists only in this widget's state, so
+      // ending the session on a failed write would destroy exactly the data
+      // the write failed to keep. Unguarded, the throw escaped this async
+      // callback: `_endSessionState` never ran, no snackbar appeared, and in
+      // release the user tapped Save and nothing happened at all.
+      //
+      // `ThemeController.load` guards a write whose loss costs nothing; this
+      // one costs a workout, so it is the one that has to say so out loud.
+      if (!mounted) return;
+      showNvSnackbar(
+        context: context,
+        message: 'Session not saved — the write failed. Your sets are still '
+            'here; tap Finish to try again.',
+      );
+      return;
+    }
 
     if (!mounted) return;
     // Refresh BURNED TODAY (and the rest of the summary) so the hub the user
@@ -515,6 +585,7 @@ class TodayTabState extends State<TodayTab> {
       _startedAt = null;
       _restRunning = false;
       _restSeconds = 0;
+      _restEndsAt = null;
       _restTotalSeconds = 0;
       _elapsedSeconds = 0;
     });
@@ -875,7 +946,24 @@ class TodayTabState extends State<TodayTab> {
 
   List<Widget> _quickActions(BuildContext context) {
     final go = widget.onNavigate;
-    final semantics = LockoutSemantics.of(context);
+    // One fill for all eight, not `semantics.categoryAt(0..7)`.
+    //
+    // `categoryRamp` exists to keep *categories* apart, and there are no
+    // categories here: index 0 was "Log food" only because it was first.
+    // The ramp is also double-booked — the same eight values mean "routine
+    // day category" on the Workout tab, so "Log food" and some Tuesday
+    // shared a colour asserting a relationship neither has, in eight fully
+    // saturated tones under a restrained system (QA ruling 2). The icon and
+    // the label already identify the action.
+    //
+    // `inverseSurface` rather than a container tone: `NvIconTile` paints its
+    // glyph `colorScheme.surface`, and `inverseSurface` is the one role
+    // whose authored foreground *is* `surface` (`onInverseSurface`, the
+    // snackbar pairing), so the glyph is legible by the scheme's own
+    // definition instead of by coincidence. A `surfaceContainerHigh` tile
+    // would put that glyph at about 1.2:1. It also leaves the accent for
+    // the two or three elements per screen `accents.dart` reserves it for.
+    final tileColor = Theme.of(context).colorScheme.inverseSurface;
 
     return [
       // Hidden entirely when the Food tab is off, rather than left as a tile
@@ -885,49 +973,49 @@ class TodayTabState extends State<TodayTab> {
         _quickActionTile(
           label: 'Log food',
           icon: Icons.restaurant,
-          color: semantics.categoryAt(0),
+          color: tileColor,
           onTap: () => go?.call('food'),
         ),
       _quickActionTile(
         label: 'Weigh in',
         icon: Icons.monitor_weight,
-        color: semantics.categoryAt(1),
+        color: tileColor,
         onTap: () => go?.call('progress', segment: ProgressSegment.weight),
       ),
       _quickActionTile(
         label: 'Workout',
         icon: Icons.fitness_center,
-        color: semantics.categoryAt(2),
+        color: tileColor,
         onTap: () => go?.call('workout'),
       ),
       _quickActionTile(
         label: 'History',
         icon: Icons.calendar_month,
-        color: semantics.categoryAt(3),
+        color: tileColor,
         onTap: () => go?.call('progress', segment: ProgressSegment.history),
       ),
       _quickActionTile(
         label: 'Custom',
         icon: Icons.add,
-        color: semantics.categoryAt(4),
+        color: tileColor,
         onTap: _startCustomSession,
       ),
       _quickActionTile(
         label: 'Streak',
         icon: Icons.local_fire_department,
-        color: semantics.categoryAt(5),
+        color: tileColor,
         onTap: () => go?.call('progress', segment: ProgressSegment.history),
       ),
       _quickActionTile(
         label: 'Plan',
         icon: Icons.insights,
-        color: semantics.categoryAt(6),
+        color: tileColor,
         onTap: () => go?.call('progress', segment: ProgressSegment.weight),
       ),
       _quickActionTile(
         label: 'Exercises',
         icon: Icons.list,
-        color: semantics.categoryAt(7),
+        color: tileColor,
         onTap: () => go?.call('workout'),
       ),
     ];
@@ -937,19 +1025,19 @@ class TodayTabState extends State<TodayTab> {
   // --- ACTIVE SESSION ---
 
   Widget _buildActiveSession() {
-    final totalExercises = _liveExercises.length;
-    final completedExercises = totalExercises == 0
-        ? 0
-        : _liveExercises
-            .where((e) => e.sets.isNotEmpty && e.completedCount == e.sets.length)
-            .length;
-    final exerciseProgress =
-        totalExercises == 0 ? 0.0 : completedExercises / totalExercises;
+    // Sets, not exercises (QA ruling 1). The bar is painted as the last
+    // element of the same card whose 88pt numeral counts sets, and it
+    // carries no label, so it inherits that numeral's denominator in the
+    // reader's head. Per exercise it also sat at exactly 0.0 for the first
+    // third of a workout — least informative when feedback matters most.
+    final setProgress = _sessionTotalSets == 0
+        ? 0.0
+        : _sessionCompletedSets / _sessionTotalSets;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSessionHeader(exerciseProgress),
+        _buildSessionHeader(setProgress),
         const SizedBox(height: LockoutTheme.spaceMd),
         Expanded(child: _buildExerciseList()),
       ],
@@ -977,10 +1065,6 @@ class TodayTabState extends State<TodayTab> {
           );
         }
         if (index == lastIndex) {
-          // Plain text, not `.icon` — an `Icons.add` glyph here would sit
-          // alongside the weight/rep stepper's own plus buttons and get
-          // swept into any test that walks every `Icons.add` on screen
-          // expecting a stepper.
           return OutlinedButton(
             onPressed: _addExerciseMidSession,
             child: const Text('Add exercise'),
@@ -1005,10 +1089,13 @@ class TodayTabState extends State<TodayTab> {
 
   /// The header leads with one big number — the sets still to go — beside a
   /// lobed register marker, then a Duration / Volume row, a Finish action,
-  /// and the exercise-completion bar. The sets figure is deliberately not
-  /// repeated in the stat row: one big number per screen, stated once. See
-  /// `_FinishSummarySheet` for what tapping Finish opens.
-  Widget _buildSessionHeader(double exerciseProgress) {
+  /// and the set-completion bar. The sets figure is deliberately not
+  /// repeated in the stat row: one big number per screen, stated once —
+  /// which is also why the bar counts sets rather than exercises and is left
+  /// unlabelled, instead of making a second, differently-denominated
+  /// progress claim inside one card. See `_FinishSummarySheet` for what
+  /// tapping Finish opens.
+  Widget _buildSessionHeader(double setProgress) {
     final theme = Theme.of(context);
     return NvInfoCard(
       child: Column(
@@ -1099,7 +1186,7 @@ class TodayTabState extends State<TodayTab> {
             ],
           ),
           const SizedBox(height: LockoutTheme.spaceMd),
-          NvWavyProgress(value: exerciseProgress),
+          NvWavyProgress(value: setProgress),
         ],
       ),
     );
@@ -1207,8 +1294,6 @@ class TodayTabState extends State<TodayTab> {
             ),
             child: Align(
               alignment: Alignment.centerLeft,
-              // Plain text, not `.icon` - see the "Add exercise" button above
-              // for why an `Icons.add` glyph does not belong here either.
               child: NvButton(
                 variant: NvButtonVariant.text,
                 label: 'Add set',
@@ -1474,21 +1559,30 @@ class TodayTabState extends State<TodayTab> {
                         variant: NvButtonVariant.text,
                         label: '-15s',
                         onPressed: () => setState(() {
+                          // The end time, not the counter: a control that
+                          // only moved `_restSeconds` would read right until
+                          // the next tick recomputed it away.
+                          //
                           // `_restTotalSeconds` is the progress bar's
-                          // denominator, so it has to shrink by the same
-                          // amount `_restSeconds` does — otherwise the bar
-                          // reads a stale, too-large total. And when this
-                          // adjustment reaches zero, `_restRunning` clears
-                          // immediately rather than waiting up to a second
-                          // for the next ticker frame to notice.
-                          final next =
-                              _restSeconds > 15 ? _restSeconds - 15 : 0;
-                          final spent = _restSeconds - next;
-                          final remainingTotal = _restTotalSeconds - spent;
+                          // denominator, so it shrinks by the same amount
+                          // the remaining time does — otherwise the bar
+                          // reads a stale, too-large total. Taking the last
+                          // 15 seconds off ends the rest now rather than
+                          // pushing the end time into the past, and
+                          // `_syncRest` clears `_restRunning` with it
+                          // instead of leaving a finished rest on screen
+                          // for up to a second.
+                          final endsAt = _restEndsAt;
+                          if (endsAt == null) return;
+                          final before = _restSeconds;
+                          _restEndsAt = before > 15
+                              ? endsAt.subtract(const Duration(seconds: 15))
+                              : _now();
+                          _syncRest();
+                          final remainingTotal =
+                              _restTotalSeconds - (before - _restSeconds);
                           _restTotalSeconds =
                               remainingTotal < 0 ? 0 : remainingTotal;
-                          _restSeconds = next;
-                          if (_restSeconds == 0) _restRunning = false;
                         }),
                       ),
                       NvButton(
@@ -1499,14 +1593,21 @@ class TodayTabState extends State<TodayTab> {
                           // rest also extends what "full" means for the bar,
                           // or +15s would pin it at 100% until the clock
                           // fell back under the original total.
-                          _restSeconds += 15;
+                          final endsAt = _restEndsAt;
+                          if (endsAt == null) return;
+                          _restEndsAt =
+                              endsAt.add(const Duration(seconds: 15));
                           _restTotalSeconds += 15;
+                          _syncRest();
                         }),
                       ),
                       NvButton(
                         variant: NvButtonVariant.text,
                         label: 'Skip',
-                        onPressed: () => setState(() => _restRunning = false),
+                        onPressed: () => setState(() {
+                          _restRunning = false;
+                          _restEndsAt = null;
+                        }),
                       ),
                     ],
                   ),

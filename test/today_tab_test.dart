@@ -11,6 +11,7 @@ import 'package:lockout/theme/cookie_border.dart';
 import 'package:lockout/theme/lockout_motion.dart';
 import 'package:lockout/theme/lockout_theme.dart';
 import 'package:lockout/widgets/house/nv_button.dart';
+import 'package:lockout/widgets/house/nv_cards.dart';
 import 'package:lockout/widgets/house/nv_hero_card.dart';
 import 'package:lockout/widgets/house/nv_icon_tile.dart';
 import 'package:lockout/widgets/house/nv_wavy_progress.dart';
@@ -20,13 +21,67 @@ import 'test_helpers.dart';
 /// Hosts `TodayTab` under the app's real theme — every test below opens a
 /// live session, which reads `LockoutSemantics`/`LockoutTheme`, so a bare
 /// `MaterialApp` is not enough.
-Widget hostedTodayTab() =>
-    MaterialApp(theme: lockoutTestTheme(), home: TodayTab());
+Widget hostedTodayTab({DateTime Function()? clock}) => MaterialApp(
+      theme: lockoutTestTheme(),
+      home: TodayTab(clock: clock ?? DateTime.now),
+    );
+
+/// A wall clock the test moves by hand.
+///
+/// `tester.pump(Duration)` advances the *ticker* — it does not move
+/// `DateTime.now()`, and nothing else in this repo has ever advanced a
+/// clock, which is why the session timers shipped unverified. Driving the
+/// two independently is the whole point: a frozen Android process gets no
+/// timer callbacks for minutes while real time keeps running, and only a
+/// clock that can move without the ticker reproduces it.
+class _TestClock {
+  DateTime _now = DateTime(2026, 10, 26, 9);
+
+  DateTime call() => _now;
+
+  void advance(Duration by) => _now = _now.add(by);
+}
+
+/// The `mm:ss` elapsed figure in the session header.
+String _durationValue(WidgetTester tester) => tester
+    .widgetList<Text>(find.byType(Text))
+    .map((t) => t.data ?? '')
+    .firstWhere(RegExp(r'^\d{2}:\d{2}$').hasMatch);
+
+/// The rest bar's remaining-seconds figure, or null when no rest is running.
+String? _restLabel(WidgetTester tester) {
+  final matches = tester
+      .widgetList<Text>(find.byType(Text))
+      .map((t) => t.data ?? '')
+      .where(RegExp(r'^\d+s$').hasMatch);
+  return matches.isEmpty ? null : matches.first;
+}
+
+/// The header's one 88pt numeral — the sets still to go.
+String _bigNumber(WidgetTester tester) => tester
+    .widgetList<Text>(find.byType(Text))
+    .firstWhere((t) => t.style?.fontSize == 88)
+    .data!;
+
+/// The wave inside the session header, scoped to the card that carries
+/// `Finish`. Unscoped, this would also match the rest bar's wave.
+NvWavyProgress _headerWave(WidgetTester tester) => tester.widget<NvWavyProgress>(
+      find.descendant(
+        of: find.ancestor(
+          of: find.widgetWithText(NvButton, 'Finish'),
+          matching: find.byType(NvInfoCard),
+        ),
+        matching: find.byType(NvWavyProgress),
+      ),
+    );
 
 /// Seeds one active weekday routine with a training day scheduled for today
 /// and a single exercise, so `_startScheduledSession` has something to start.
 /// Shared by every live-session test below rather than repeated per test.
-Future<void> seedActiveWeekdayRoutineForToday({double targetWeightKg = 0}) async {
+Future<void> seedActiveWeekdayRoutineForToday({
+  double targetWeightKg = 0,
+  int restSeconds = 60,
+}) async {
   final db = DatabaseService.instance;
   await db.insertRoutine(Routine(
     id: 'r1',
@@ -49,6 +104,7 @@ Future<void> seedActiveWeekdayRoutineForToday({double targetWeightKg = 0}) async
     targetRepsMin: 8,
     targetRepsMax: 8,
     targetWeightKg: targetWeightKg,
+    restDefaultS: restSeconds,
   ).toMap());
   await db.setActiveRoutine('r1');
 }
@@ -213,13 +269,14 @@ void main() {
   // indistinguishable from a legitimately detail-free entry.
   //
   // The rollback itself is proved against a forced mid-transaction failure
-  // in `database_service_test.dart`; driving the same failure through this
-  // screen cannot be done, because the rejection surfaces as an unhandled
-  // async error out of the button callback and `flutter_test` fails a test
-  // the moment one is raised, before any assertion can run. This reads the
-  // call site instead — the same structural idiom `settings_restyle_test`
-  // uses for the v2 style sweep — so re-splitting the write into two
-  // unguarded calls fails here even though every behavioural test passes.
+  // in `database_service_test.dart`. This reads the call site — the same
+  // structural idiom `settings_restyle_test` uses for the v2 style sweep —
+  // so re-splitting the write into two unguarded calls fails here even
+  // though every behavioural test passes. What the *user* sees when that
+  // write fails is a separate question, and is driven through the screen in
+  // `a failed save` below: until the call was wrapped, the rejection
+  // surfaced as an unhandled async error out of the button callback, which
+  // is precisely why no test here could reach past it.
   group('_finishSession writes atomically', () {
     test('the finish path goes through the transactional write', () {
       final source = File('lib/screens/today_tab.dart').readAsStringSync();
@@ -231,6 +288,74 @@ void main() {
           reason: 'a second, separate set write reopens the gap');
       expect(source, isNot(contains('insertSessionLog(')),
           reason: 'a bare header write reopens the gap');
+    });
+  });
+
+  // The one write that persists a whole workout had no error handling at
+  // all, and the whole screen contained no `catch`. On a failed write the
+  // throw escaped the async callback, `_endSessionState()` never ran and no
+  // snackbar appeared: in release the user taps Save and nothing happens,
+  // silently, with the session still live and nothing saying so.
+  group('a failed save', () {
+    /// Makes every insert into `set_logs` abort, so the one transaction
+    /// `_finishSession` runs is rejected by the database rather than by a
+    /// mock. Dropped again afterwards; `wipeDatabaseAndReseed` drops it too,
+    /// so a killed run cannot poison the shared database file.
+    Future<void> rejectEverySetWrite() async {
+      final database = await DatabaseService.instance.database;
+      addTearDown(() async {
+        final db = await DatabaseService.instance.database;
+        await db.execute('DROP TRIGGER IF EXISTS test_fail_set_logs');
+      });
+      await database.execute('DROP TRIGGER IF EXISTS test_fail_set_logs');
+      await database.execute(
+        'CREATE TRIGGER test_fail_set_logs BEFORE INSERT ON set_logs '
+        "BEGIN SELECT RAISE(ABORT, 'rejected by test trigger'); END;",
+      );
+    }
+
+    testWidgets('says so and leaves the session running', (tester) async {
+      await seedActiveWeekdayRoutineForToday();
+      await rejectEverySetWrite();
+
+      await tester.pumpWidget(hostedTodayTab());
+      await settle(tester);
+      await tester.tap(find.text('Start session'));
+      await settle(tester);
+      await tester.tap(find.byKey(const ValueKey('set-complete-0-0')));
+      await settle(tester, maxPumps: 4);
+      await tester.tap(find.text('Finish'));
+      await settle(tester);
+      await tester.tap(find.text('Save'));
+      await settle(tester);
+
+      expect(tester.takeException(), isNull,
+          reason: 'the rejection must be handled, not thrown out of the '
+              'button callback');
+
+      final message = tester
+          .widget<Text>(
+            find
+                .descendant(
+                  of: find.byType(SnackBar),
+                  matching: find.byType(Text),
+                )
+                .first,
+          )
+          .data!;
+      expect(message, startsWith('Session not saved'));
+      expect(message, isNot(message.toUpperCase()),
+          reason: 'the house document forbids all-caps labels (section 4.2)');
+
+      // Still live, with the logged set still on screen: the one thing the
+      // user would lose is the thing a failed write must not take.
+      expect(find.text('Finish'), findsOneWidget);
+      expect(find.byKey(const ValueKey('set-complete-0-0')), findsOneWidget);
+      expect(_bigNumber(tester), '1', reason: 'one of two sets still logged');
+
+      expect(await DatabaseService.instance.getSessionLogsForDate(today),
+          isEmpty,
+          reason: 'the transaction rolled back, so the header went with it');
     });
   });
 
@@ -328,10 +453,16 @@ void main() {
   });
 
   group('the live session screen', () {
-    testWidgets('session header shows elapsed time and exercise progress',
+    // This test used to assert only that *an* `NvWavyProgress` and *a*
+    // check icon were somewhere on screen - neither the elapsed time nor
+    // the progress value its name promises. Nothing in the repo read
+    // `NvWavyProgress.value`, which is how the header's wave shipped
+    // counting completed exercises underneath a numeral counting sets.
+    testWidgets('session header shows elapsed time and set progress',
         (tester) async {
+      final clock = _TestClock();
       await seedActiveWeekdayRoutineForToday();
-      await tester.pumpWidget(hostedTodayTab());
+      await tester.pumpWidget(hostedTodayTab(clock: clock.call));
       await settle(tester);
 
       await tester.tap(find.text('Start session'));
@@ -339,7 +470,25 @@ void main() {
 
       expect(find.byType(NvWavyProgress), findsWidgets,
           reason: 'section 8 gives long-running work the wavy indicator');
-      expect(find.byIcon(Icons.check), findsWidgets);
+      expect(_durationValue(tester), '00:00');
+      expect(_bigNumber(tester), '2', reason: 'two sets, none logged');
+      expect(_headerWave(tester).value, 0.0);
+
+      clock.advance(const Duration(seconds: 65));
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(_durationValue(tester), '01:05');
+
+      await tester.tap(find.byKey(const ValueKey('set-complete-0-0')));
+      await tester.pump();
+
+      // The wave sits in the same card as the 88pt numeral and carries no
+      // label of its own, so it must count what that numeral counts. One
+      // of two sets logged is half way, whatever that does to the single
+      // exercise's own completion.
+      expect(_bigNumber(tester), '1');
+      expect(_headerWave(tester).value, 0.5,
+          reason: 'an unlabelled bar under a sets figure reads as sets');
     });
 
     testWidgets('weight and rep steppers meet the 48dp touch target',
@@ -350,13 +499,27 @@ void main() {
       await tester.tap(find.text('Start session'));
       await settle(tester);
 
-      for (final icon in [Icons.remove, Icons.add]) {
-        for (final element in find.byIcon(icon).evaluate()) {
-          final size = tester.getSize(find.byWidget(
-            element.findAncestorWidgetOfExactType<NvIconButton>()!,
-          ));
-          expect(size.width, greaterThanOrEqualTo(LockoutTheme.minTouchTarget));
-          expect(size.height, greaterThanOrEqualTo(LockoutTheme.minTouchTarget));
+      // Scoped to one set row, rather than walking every `Icons.add` on
+      // screen and climbing out of each with a null-asserted
+      // `findAncestorWidgetOfExactType`. The unscoped form crashed with a
+      // null error instead of failing with a message whenever the tree
+      // shifted, and it put the whole screen under a constraint that is
+      // only about steppers - two comments in `today_tab.dart` existed
+      // solely to keep an `Icons.add` glyph away from it.
+      final row = find.byKey(const ValueKey('set-row-0-0'));
+      for (final icon in const [Icons.remove, Icons.add]) {
+        final controls = find.descendant(
+          of: row,
+          matching: find.widgetWithIcon(NvIconButton, icon),
+        );
+        expect(controls, findsNWidgets(2),
+            reason: 'the weight and rep steppers each carry one of these');
+        for (final element in controls.evaluate()) {
+          final box = element.renderObject! as RenderBox;
+          expect(box.size.width,
+              greaterThanOrEqualTo(LockoutTheme.minTouchTarget));
+          expect(box.size.height,
+              greaterThanOrEqualTo(LockoutTheme.minTouchTarget));
         }
       }
     });
@@ -559,18 +722,106 @@ void main() {
           reason: 'the house document forbids all-caps labels (section 4.2)');
     });
 
+    // This test used to assert that three labels existed and tap none of
+    // them, under a name promising the opposite. It now drives both
+    // directions and then lets the clock run, because a +15s that moves the
+    // label without moving the end time is the same defect as a tick-counted
+    // countdown: it reads right until the next tick corrects it.
     testWidgets('the rest bar adjusts in both directions', (tester) async {
-      await seedActiveWeekdayRoutineForToday();
-      await tester.pumpWidget(hostedTodayTab());
+      final clock = _TestClock();
+      await seedActiveWeekdayRoutineForToday(restSeconds: 90);
+      await tester.pumpWidget(hostedTodayTab(clock: clock.call));
       await settle(tester);
       await tester.tap(find.text('Start session'));
       await settle(tester);
       await tester.tap(find.byKey(const ValueKey('set-complete-0-0')));
       await tester.pump();
 
-      expect(find.text('-15s'), findsOneWidget);
-      expect(find.text('+15s'), findsOneWidget);
-      expect(find.text('Skip'), findsOneWidget);
+      expect(_restLabel(tester), '90s');
+
+      await tester.tap(find.text('+15s'));
+      await tester.pump();
+      expect(_restLabel(tester), '105s');
+
+      await tester.tap(find.text('-15s'));
+      await tester.pump();
+      expect(_restLabel(tester), '90s');
+
+      await tester.tap(find.text('+15s'));
+      await tester.pump();
+      clock.advance(const Duration(seconds: 20));
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(_restLabel(tester), '85s',
+          reason: 'the adjustment moved the end time, so 20 real seconds '
+              'took 20 off 105 - not one off per tick');
+
+      await tester.tap(find.text('Skip'));
+      await tester.pump();
+      expect(find.text('Skip'), findsNothing);
+    });
+
+    // Nothing in this repo had ever advanced a clock, so neither timer on
+    // this screen was verified at all: not that the elapsed label moves,
+    // not that the countdown counts, and not that either survives the app
+    // being frozen. The two tests below are that coverage.
+    testWidgets('the rest countdown counts real seconds down', (tester) async {
+      final clock = _TestClock();
+      await seedActiveWeekdayRoutineForToday(restSeconds: 90);
+      await tester.pumpWidget(hostedTodayTab(clock: clock.call));
+      await settle(tester);
+      await tester.tap(find.text('Start session'));
+      await settle(tester);
+      await tester.tap(find.byKey(const ValueKey('set-complete-0-0')));
+      await tester.pump();
+
+      expect(_restLabel(tester), '90s');
+
+      clock.advance(const Duration(seconds: 1));
+      await tester.pump(const Duration(seconds: 1));
+      expect(_restLabel(tester), '89s');
+
+      clock.advance(const Duration(seconds: 1));
+      await tester.pump(const Duration(seconds: 1));
+      expect(_restLabel(tester), '88s');
+    });
+
+    testWidgets(
+        'a session frozen by the OS resumes on the wall clock, not the tick '
+        'count', (tester) async {
+      // Android freezes a cached app mid-workout: the process gets no timer
+      // callbacks at all for minutes, then takes one tick when it resumes.
+      // The elapsed clock already survived that (it recomputes from
+      // `_startedAt`); the rest countdown did not, because it decremented
+      // once per tick. After three frozen minutes a 90s rest still read 60s.
+      final clock = _TestClock();
+      await seedActiveWeekdayRoutineForToday(restSeconds: 90);
+      await tester.pumpWidget(hostedTodayTab(clock: clock.call));
+      await settle(tester);
+      await tester.tap(find.text('Start session'));
+      await settle(tester);
+      await tester.tap(find.byKey(const ValueKey('set-complete-0-0')));
+      await tester.pump();
+
+      expect(_restLabel(tester), '90s');
+
+      // 30 real seconds pass; exactly one tick fires.
+      clock.advance(const Duration(seconds: 30));
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(_restLabel(tester), '60s',
+          reason: 'one tick across 30 frozen seconds - a tick-counted '
+              'countdown would read 89s here');
+      expect(_durationValue(tester), '00:30',
+          reason: 'the two clocks on this screen must agree');
+
+      // Past the end of the rest, still on a single tick.
+      clock.advance(const Duration(seconds: 70));
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(_restLabel(tester), isNull);
+      expect(find.text('Skip'), findsNothing,
+          reason: 'the rest ended 10 real seconds ago');
     });
 
     // Restores the v1 per-set delete affordance: `Add set` gained a way
