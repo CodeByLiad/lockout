@@ -59,6 +59,17 @@ const List<String> _rebuiltFiles = [
   'lib/screens/about_screen.dart',
 ];
 
+/// The screens rebuilt so far. Appended to as screens land.
+///
+/// `settings_screen.dart` joins at branch end. It reaches for no pre-rebuild
+/// widget today, so the entry catches no present bug — it is here so that the
+/// next edit to a 1171-line screen cannot quietly re-import one.
+const List<String> _rebuiltScreens = [
+  'lib/screens/today_tab.dart',
+  'lib/screens/about_screen.dart',
+  'lib/screens/settings_screen.dart',
+];
+
 /// The pre-rebuild widgets a rebuilt screen must not reach for.
 ///
 /// Each was written for the previous design. Adapting a screen to keep one
@@ -80,17 +91,6 @@ const List<String> _rebuiltFiles = [
 ///     other consumer; see `docs/spine/orphaned-widgets.md`. Do not add it
 ///     here until that rebuild lands, and do not let its absence read as a
 ///     clean bill of health.
-/// The screens rebuilt so far. Appended to as screens land.
-///
-/// `settings_screen.dart` joins at branch end. It reaches for no pre-rebuild
-/// widget today, so the entry catches no present bug — it is here so that the
-/// next edit to a 1171-line screen cannot quietly re-import one.
-const List<String> _rebuiltScreens = [
-  'lib/screens/today_tab.dart',
-  'lib/screens/about_screen.dart',
-  'lib/screens/settings_screen.dart',
-];
-
 const List<String> _preRebuildWidgets = [
   'home_hub.dart',
   'lockout_card.dart',
@@ -102,11 +102,55 @@ const List<String> _preRebuildWidgets = [
   'sheet_scaffold.dart',
 ];
 
+/// True when [path] names a file inside the house component catalog.
+///
+/// Separators are normalised first. `Directory.listSync` yields `\`
+/// separators on Windows and `/` on the ubuntu runner that gates the APK, so
+/// a filter that compares against either one directly is a filter that runs
+/// on one machine. This one ran on neither the right one: written as a
+/// `widgets\house` fragment, it matched nothing on CI, the catalog stayed
+/// inside its own consumer corpus, and every component counted as consumed
+/// by a sibling. `no_legacy_theme_test.dart:40` and
+/// `numeric_guard_test.dart:189` normalise for the same reason.
+bool _inHouseCatalog(String path) =>
+    _posixPath(path).contains('widgets/house/');
+
+/// [path] with POSIX separators, whatever platform produced it.
+String _posixPath(String path) => path.replaceAll(r'\', '/');
+
 List<File> _dartFilesIn(String directory) => Directory(directory)
     .listSync(recursive: true)
     .whereType<File>()
     .where((f) => f.path.endsWith('.dart'))
     .toList();
+
+/// Blanks every `SnackBar(...)` argument list.
+///
+/// `SnackBar.duration` is how long a message stays legible, not how long
+/// something moves — `nv_sheet.dart:70`'s 3s is a dismissal timeout with no
+/// animation behind it. The motion rule matches on the `duration:` argument,
+/// so without this the widened rule reports a snackbar as an unmotioned
+/// surface and the real violation is never reached.
+String _withoutSnackBars(String source) {
+  var out = source;
+  while (true) {
+    final start = out.indexOf('SnackBar(');
+    if (start < 0) return out;
+    var depth = 0;
+    var end = start + 'SnackBar'.length;
+    for (; end < out.length; end++) {
+      if (out[end] == '(') depth++;
+      if (out[end] == ')') {
+        depth--;
+        if (depth == 0) {
+          end++;
+          break;
+        }
+      }
+    }
+    out = out.substring(0, start) + out.substring(end);
+  }
+}
 
 /// Blanks `//` comments so a guard does not trip over prose that names the
 /// very thing it forbids.
@@ -470,7 +514,7 @@ void main() {
       // called by nothing. A component with no consumer is not a design
       // system, it is dead code with a doc comment.
       final consumers = _dartFilesIn('lib')
-          .where((f) => !f.path.contains('widgets\\house'))
+          .where((f) => !_inHouseCatalog(f.path))
           .map((f) => _withoutComments(f.readAsStringSync()))
           .join('\n');
 
@@ -483,11 +527,73 @@ void main() {
     });
   });
 
+  group('the path filters do not depend on the platform', () {
+    // CI is `runs-on: ubuntu-latest` (`.github/workflows/build-apk.yml:16`)
+    // and development is Windows, so every path filter in this file meets
+    // both separator styles. A filter written against one of them runs on
+    // one of the two machines, and the one it skips is the one that gates
+    // integration.
+    test('the catalog filter matches both separator styles', () {
+      // Built by substitution rather than written as a literal: the
+      // scan below forbids a backslash-separated path fragment
+      // anywhere in this file, and an input is not an exception.
+      String windows(String posix) => posix.replaceAll('/', r'\');
+
+      expect(_inHouseCatalog(windows('lib/widgets/house/nv_button.dart')),
+          isTrue,
+          reason: 'Directory.listSync yields this shape on Windows');
+      expect(_inHouseCatalog('lib/widgets/house/nv_button.dart'), isTrue,
+          reason: 'and this shape on the ubuntu runner that gates the APK');
+      expect(_inHouseCatalog(windows('lib/screens/today_tab.dart')), isFalse);
+      expect(_inHouseCatalog('lib/widgets/morphing_surface.dart'), isFalse,
+          reason: 'a widget outside the catalog is a real consumer');
+    });
+
+    test('no guard in this file hard-codes a Windows separator', () {
+      // The failure this group exists to stop recurring: the orphan guard
+      // filtered on a backslash-separated fragment, which matches nothing
+      // on POSIX, so the catalog stayed inside its own consumer corpus and
+      // every component read as consumed by a sibling. Comments are
+      // stripped, so prose naming a Windows path does not trip the scan.
+      final source = _withoutComments(
+        File('test/expressive_contract_test.dart').readAsStringSync(),
+      );
+      final offenders =
+          RegExp(r'(lib|test|widgets|screens|theme|house|dart)\\')
+              .allMatches(source)
+              .map((m) => m.group(0)!)
+              .toList();
+      expect(offenders, isEmpty,
+          reason: 'a path fragment is separated with a backslash. Normalise '
+              'the path first and compare against `/`, as '
+              'no_legacy_theme_test.dart:40 and numeric_guard_test.dart:189 '
+              'already do');
+    });
+  });
+
   group('motion', () {
-    test('there are exactly three tiers', () {
+    test('there are exactly three interaction tiers', () {
       expect(LockoutMotion.springFast.duration.inMilliseconds, 250);
       expect(LockoutMotion.springDefault.duration.inMilliseconds, 450);
       expect(LockoutMotion.effects.duration.inMilliseconds, 200);
+    });
+
+    test('the one ambient tier is named, and the vocabulary stays closed', () {
+      // The wave is the only thing in the app that moves unprompted (house
+      // section 6), so it gets a named tier rather than a literal at its
+      // call site. Linear: an eased loop hesitates once per period.
+      expect(LockoutMotion.ambientDrift.duration.inMilliseconds, 2400);
+      expect(LockoutMotion.ambientDrift.curve, Curves.linear);
+
+      // Counted from the source, because the point of a vocabulary is that
+      // it is closed. A fifth tier is not forbidden — it is required to
+      // come through this assertion and say what it is for.
+      final declared = RegExp(r'static const LockoutMotionTier (\w+)')
+          .allMatches(File('lib/theme/lockout_motion.dart').readAsStringSync())
+          .map((m) => m.group(1))
+          .toList();
+      expect(declared,
+          ['springFast', 'springDefault', 'effects', 'ambientDrift']);
     });
 
     test('no animated surface this branch owns hand-rolls a duration', () {
@@ -497,12 +603,23 @@ void main() {
       // Matched on the duration argument itself. The previous form passed if
       // the file mentioned `LockoutMotion.` anywhere, so one correct call
       // site licensed every hand-rolled duration sitting beside it.
+      // Scoped to the rebuilt files AND the house catalog. It used to run
+      // over `_branchOneFiles`, which names no catalog file, so the branch's
+      // signature rule never reached the branch's main artefact:
+      // `nv_wavy_progress.dart` hand-rolled a 2400ms controller and the
+      // suite stayed green.
       final handRolled = RegExp(r'duration:\s*(const\s+)?Duration\(');
-      for (final path in _branchOneFiles) {
+      final scanned = <String>[
+        ..._rebuiltFiles,
+        ..._dartFilesIn('lib/widgets/house').map((f) => f.path),
+      ];
+      for (final path in scanned) {
         if (path.endsWith('lockout_motion.dart')) continue;
-        final source = _withoutComments(File(path).readAsStringSync());
+        final source =
+            _withoutSnackBars(_withoutComments(File(path).readAsStringSync()));
         expect(handRolled.hasMatch(source), isFalse,
-            reason: '$path passes a literal Duration to an animation; every '
+            reason: '${_posixPath(path)} passes a literal Duration to an '
+                'animation; every '
                 'animated surface reads a LockoutMotion tier');
       }
     });

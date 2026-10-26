@@ -237,16 +237,24 @@ class _UndoBannerState extends State<_UndoBanner> {
                               // `colors.primary`, but nothing in this app
                               // builds a `SnackBarAction`, so the pairing
                               // had never painted: borrowed here it
-                              // measures 1.37:1 on graphite and no better
-                              // than ~2.1:1 on any scheme, under even the
-                              // 3:1 non-text floor, for the banner's only
-                              // control. Every scheme now authors
-                              // `inversePrimary` outright rather than
-                              // taking the `onPrimary` fallback, which was
-                              // the message's own tone here;
-                              // `schemes_test.dart` holds it at >= 4.5:1
-                              // on `inverseSurface` and >= 1.5:1 away from
-                              // `onInverseSurface` across all six.
+                              // measures 1.12:1 to 1.77:1 across the ten
+                              // brightness-and-accent combinations, under
+                              // even the 3:1 non-text floor, for the
+                              // banner's only control. Re-measured
+                              // 2026-10-26 — the old "no better than
+                              // ~2.1:1" was taken against the six deleted
+                              // schemes and no longer describes anything.
+                              // `palette_test.dart`'s "the snackbar
+                              // pairing" group holds `inversePrimary` at
+                              // >= 4.5:1 on `inverseSurface` for all ten.
+                              //
+                              // The second bar that old file carried —
+                              // >= 1.5:1 between this label and the
+                              // message tone, so the banner's only action
+                              // is not distinguished by weight alone — did
+                              // not survive the palette change. It
+                              // measures 1.41:1 in dark and 1.27:1 on
+                              // light lime today, and no test holds it.
                               style: theme.textTheme.labelLarge?.copyWith(
                                 color: colors.inversePrimary,
                                 fontWeight: FontWeight.w700,

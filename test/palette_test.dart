@@ -163,10 +163,17 @@ void main() {
     });
   });
 
-  // These two groups carry over the guarantees `schemes_test.dart` held
-  // across six schemes. That file is deleted in Task 6, so they live here
-  // now, widened from six schemes to the ten brightness-and-accent
-  // combinations that replace them.
+  // These groups carry over the guarantees `schemes_test.dart` held across
+  // six schemes. That file is deleted in Task 6, so they live here now,
+  // widened from six schemes to the ten brightness-and-accent combinations
+  // that replace them.
+  //
+  // The `LockoutSemantics.onCategoryColor` group below is part of that
+  // carry-over and was missed the first time: the function is live in
+  // `day_block.dart:154`, colouring every routine-day label, and for one
+  // review cycle it had no test at all. Ported assertion-for-assertion from
+  // the deleted file rather than re-derived, because the pin it carries is
+  // the whole reason the group existed.
   group('contrast across all ten combinations', () {
     test('primary and its foreground clear 4.5:1 everywhere', () {
       for (final brightness in Brightness.values) {
@@ -197,6 +204,70 @@ void main() {
               greaterThanOrEqualTo(4.5));
         }
       }
+    });
+  });
+
+  group('LockoutSemantics.onCategoryColor', () {
+    // Ported from `schemes_test.dart`, which took it from
+    // `theme_tokens_test.dart` when `JinatraTokens.onAccentColor` became
+    // this. It ran over six schemes' ramps; it now runs over the two this
+    // palette authors — the ramp is per brightness and identical across
+    // accents, which the group above pins — so the coverage is the same
+    // set of colours.
+    //
+    // A luminance-direction check against two literal backgrounds, which is
+    // all `day_colours_test.dart` carries, would not catch a mid-tone accent
+    // resolving the wrong way. That is what these four hold.
+    List<Color> rampFor(Brightness brightness) =>
+        LockoutPalette.semanticsFor(brightness, LockoutAccent.lime)
+            .categoryRamp;
+
+    test('every ramp accent of every scheme can carry a readable label', () {
+      for (final brightness in Brightness.values) {
+        for (final accent in rampFor(brightness)) {
+          expect(
+            _contrast(accent, LockoutSemantics.onCategoryColor(accent)),
+            greaterThanOrEqualTo(3.0),
+            reason: '$brightness ${accent.toARGB32().toRadixString(16)}',
+          );
+        }
+      }
+    });
+
+    test('the label is the real-contrast argmax over every ramp accent', () {
+      for (final brightness in Brightness.values) {
+        for (final accent in rampFor(brightness)) {
+          final onDark = _contrast(accent, const Color(0xFF111111));
+          final onLight = _contrast(accent, const Color(0xFFFFFFFF));
+          final expected = onDark >= onLight
+              ? const Color(0xFF111111)
+              : const Color(0xFFFFFFFF);
+          expect(
+            LockoutSemantics.onCategoryColor(accent),
+            expected,
+            reason: '$brightness ${accent.toARGB32().toRadixString(16)} '
+                'onDark=$onDark onLight=$onLight',
+          );
+        }
+      }
+    });
+
+    test('picks the higher-contrast of near-black and white, not a threshold',
+        () {
+      expect(LockoutSemantics.onCategoryColor(const Color(0xFFFFE24A)),
+          const Color(0xFF111111));
+      expect(LockoutSemantics.onCategoryColor(const Color(0xFF1E44D6)),
+          const Color(0xFFFFFFFF));
+    });
+
+    /// Ported from `theme_tokens_test.dart` via `schemes_test.dart`. No
+    /// scheme authors #E23A2E, so this is not a palette case — it is kept as
+    /// a pure-function pin, because it is the mid-tone a luminance-threshold
+    /// implementation resolves to white and the argmax resolves to
+    /// near-black, and that is the mistake being guarded.
+    test('regression: #E23A2E resolves to near-black, not white', () {
+      expect(LockoutSemantics.onCategoryColor(const Color(0xFFE23A2E)),
+          const Color(0xFF111111));
     });
   });
 

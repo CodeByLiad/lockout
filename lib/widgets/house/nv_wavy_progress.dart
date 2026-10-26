@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../theme/lockout_motion.dart';
+
 /// Section 8's wavy linear progress — the only ambient motion in the app.
 ///
 /// The wave drifts on its own. Section 6 stops it entirely when the user has
@@ -23,7 +25,10 @@ class _NvWavyProgressState extends State<NvWavyProgress>
     with SingleTickerProviderStateMixin {
   late final AnimationController _drift = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 2400),
+    // The named ambient tier, not a literal: the wave's period is part of
+    // the motion vocabulary, and `expressive_contract_test.dart`'s motion
+    // rule covers this file.
+    duration: LockoutMotion.ambientDrift.duration,
   );
 
   @override
