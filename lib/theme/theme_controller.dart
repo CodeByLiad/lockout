@@ -130,13 +130,20 @@ class ThemeController extends ChangeNotifier {
     _pendingBrightness = choice;
     try {
       await _persist(choice, _pendingAccent ?? _accent);
+      // Commit only while this call is still the latest selection — the same
+      // question the `finally` below asks, now actually acted on. A newer tap
+      // owns the choice, and its own write is either already stored or about
+      // to be; committing here would repaint the whole app in a choice the
+      // user has already moved away from. sqflite's FIFO write ordering hides
+      // the end state, so the flash was the only symptom.
+      if (_pendingBrightness != choice) return;
+      _brightness = choice;
+      notifyListeners();
     } finally {
       // Cleared only if this call is still the latest; a newer selection owns
       // the slot and will clear it when its own write returns.
       if (_pendingBrightness == choice) _pendingBrightness = null;
     }
-    _brightness = choice;
-    notifyListeners();
   }
 
   Future<void> selectAccent(LockoutAccent accent) async {
@@ -144,11 +151,12 @@ class ThemeController extends ChangeNotifier {
     _pendingAccent = accent;
     try {
       await _persist(_pendingBrightness ?? _brightness, accent);
+      if (_pendingAccent != accent) return;
+      _accent = accent;
+      notifyListeners();
     } finally {
       if (_pendingAccent == accent) _pendingAccent = null;
     }
-    _accent = accent;
-    notifyListeners();
   }
 
   /// Takes the pair explicitly rather than reading the fields, so it cannot

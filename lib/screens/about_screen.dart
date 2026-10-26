@@ -16,7 +16,7 @@ class AboutScreen extends StatelessWidget {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('About')),
+      appBar: AppBar(title: const Text('About Lockout')),
       // Scrollable, matching SettingsScreen, which is where this copy used
       // to live. `Text` clips by default, so an unscrollable body drops the
       // tail of a long paragraph without an exception or an indicator: at

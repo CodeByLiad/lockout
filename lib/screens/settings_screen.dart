@@ -42,6 +42,22 @@ class SettingsBody extends StatefulWidget {
     this.showAppBar = true,
   });
 
+  /// True while [_import] is replacing the database.
+  ///
+  /// The busy lock inside this screen is an `AbsorbPointer` around the body
+  /// it owns, and that is as far as it can reach: `BottomNav` is a sibling of
+  /// this body one level up in `MainScreen`, so a user could switch tabs
+  /// mid-import and land on a tab reading a half-restored database. This is
+  /// the smaller of the two repairs the review offered — a notifier plus one
+  /// `AbsorbPointer` at the nav, against threading a busy flag up through
+  /// `ProfileTab` into `MainScreen`'s state, which would add a parameter to
+  /// two widgets and a `setState` hop to keep in step with this one.
+  ///
+  /// Raised only for the import. Export is not destructive: leaving the
+  /// screen while a backup is written costs nothing, and locking the nav for
+  /// it would be a lock the user cannot explain.
+  static final ValueNotifier<bool> importInFlight = ValueNotifier<bool>(false);
+
   @override
   State<SettingsBody> createState() => SettingsBodyState();
 }
@@ -104,6 +120,43 @@ class SettingsBodyState extends State<SettingsBody> {
     super.dispose();
   }
 
+  /// What [_loadSettings] last put into each text controller.
+  ///
+  /// Saving any one card calls `widget.onSettingsUpdated()`, which is
+  /// `MainScreen._loadSettings` -> `_refreshVisibleTab()` ->
+  /// `ProfileTabState.reload()` -> [reload] -> [_loadSettings]: the screen
+  /// asks the app to refresh and the app refreshes the screen that asked.
+  /// With every controller overwritten unconditionally, that discarded
+  /// unsaved typing in every other field — one long scroll, seven
+  /// controllers and several save buttons, so being mid-type in one card
+  /// while saving another is ordinary use, not a corner.
+  ///
+  /// Of the two repairs the review offered, this is the one that does not
+  /// depend on who asked. Ignoring a self-triggered reload would still let
+  /// the reload `MainScreen` fires on every tab switch wipe the same text,
+  /// and would leave the next caller to remember the rule. Comparing the
+  /// field against what was last loaded into it answers the question the
+  /// code actually needs answered — did the user change this, or did the
+  /// database change underneath it — so an import still refreshes every
+  /// field nobody is editing.
+  final Map<TextEditingController, String> _loadedText = {};
+
+  /// Writes a freshly read value into [controller], unless the user has
+  /// edited it since it was last loaded.
+  void _loadInto(TextEditingController controller, String value) {
+    final loaded = _loadedText[controller];
+    if (loaded != null && controller.text != loaded) return;
+    _setField(controller, value);
+  }
+
+  /// Writes text this screen chose itself — a recalculated target, not a
+  /// read. It moves the baseline with it, so the next reload does not
+  /// mistake the screen's own edit for the user's.
+  void _setField(TextEditingController controller, String value) {
+    controller.text = value;
+    _loadedText[controller] = value;
+  }
+
   /// Re-reads every setting. Public so `ProfileTab` can refresh the hosted
   /// body the same way the other tabs are refreshed on the way in.
   Future<void> reload() => _loadSettings();
@@ -141,11 +194,12 @@ class SettingsBodyState extends State<SettingsBody> {
 
     if (!mounted) return;
     setState(() {
-      _heightCmCtrl.text = cm.toStringAsFixed(cm % 1 == 0 ? 0 : 1);
-      _heightFtCtrl.text = split.feet.toString();
-      _heightInCtrl.text =
-          split.inches.toStringAsFixed(split.inches % 1 == 0 ? 0 : 1);
-      _calorieCtrl.text = c;
+      // `_loadInto`, not a bare assignment: see [_loadedText].
+      _loadInto(_heightCmCtrl, cm.toStringAsFixed(cm % 1 == 0 ? 0 : 1));
+      _loadInto(_heightFtCtrl, split.feet.toString());
+      _loadInto(_heightInCtrl,
+          split.inches.toStringAsFixed(split.inches % 1 == 0 ? 0 : 1));
+      _loadInto(_calorieCtrl, c);
       _foodTabEnabled = f == 'true';
       _heightUnit = u == 'ft' ? 'ft' : 'cm';
       _remindersEnabled = rEnabled == 'true';
@@ -155,10 +209,10 @@ class SettingsBodyState extends State<SettingsBody> {
         minute: int.tryParse(rMin) ?? 0,
       );
 
-      _ageCtrl.text = goal.age > 0 ? goal.age.toString() : '';
-      _targetWeightCtrl.text =
-          goal.targetWeightKg > 0 ? goal.targetWeightKg.toString() : '';
-      _weeksCtrl.text = goal.weeks.toString();
+      _loadInto(_ageCtrl, goal.age > 0 ? goal.age.toString() : '');
+      _loadInto(_targetWeightCtrl,
+          goal.targetWeightKg > 0 ? goal.targetWeightKg.toString() : '');
+      _loadInto(_weeksCtrl, goal.weeks.toString());
       _sex = goal.sex;
       _activity = goal.activity;
       _daysPerWeek = goal.daysPerWeek;
@@ -244,7 +298,7 @@ class SettingsBodyState extends State<SettingsBody> {
 
     setState(() {
       _plan = plan;
-      if (plan != null) _calorieCtrl.text = plan.targetKcal.toString();
+      if (plan != null) _setField(_calorieCtrl, plan.targetKcal.toString());
     });
     widget.onSettingsUpdated();
 
@@ -441,7 +495,13 @@ class SettingsBodyState extends State<SettingsBody> {
     if (!confirmed) return;
 
     setState(() => _busy = true);
+    SettingsBody.importInFlight.value = true;
     final result = await BackupService.instance.pickAndImport();
+    // Dropped ahead of the `mounted` guard on purpose: this future outlives
+    // the widget, so a lock cleared after that guard would survive the
+    // screen that raised it and leave the nav bar dead for the rest of the
+    // session.
+    SettingsBody.importInFlight.value = false;
     if (!mounted) return;
     setState(() => _busy = false);
 
@@ -750,26 +810,41 @@ class SettingsBodyState extends State<SettingsBody> {
           supporting: '$_daysPerWeek',
           onTap: () => _openDaysPerWeekSheet(context),
         ),
-        for (final a in ActivityLevel.values)
-          NvListItem(
-            title: a.label,
-            supporting: a.blurb,
-            onTap: () => _setActivity(a),
-            trailing: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text('x${a.multiplier}', style: theme.textTheme.labelMedium),
-                if (a == _activity) ...[
-                  const SizedBox(height: LockoutTheme.spaceXs),
-                  const NvStatusBadge(
-                    label: 'Selected',
-                    kind: NvBadgeKind.accent,
-                  ),
-                ],
-              ],
-            ),
-          ),
+      ],
+      // The five Sedentary..Athlete rows used to sit in the group above,
+      // directly under "Days per week", with nothing saying what the choice
+      // was: five rows reading as peers of the stepper, told apart only by a
+      // "Selected" badge. They are a named choice now, captioned the way
+      // "Accent" captions the swatches in the Look and feel section, and in
+      // their own group so the caption has something to be above.
+      extras: [
+        Text('Activity level', style: theme.textTheme.titleLarge),
+        const SizedBox(height: LockoutTheme.headingGap),
+        NvGroupedList(
+          children: [
+            for (final a in ActivityLevel.values)
+              NvListItem(
+                title: a.label,
+                supporting: a.blurb,
+                onTap: () => _setActivity(a),
+                trailing: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text('x${a.multiplier}',
+                        style: theme.textTheme.labelMedium),
+                    if (a == _activity) ...[
+                      const SizedBox(height: LockoutTheme.spaceXs),
+                      const NvStatusBadge(
+                        label: 'Selected',
+                        kind: NvBadgeKind.accent,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+          ],
+        ),
       ],
     );
   }
@@ -867,6 +942,11 @@ class SettingsBodyState extends State<SettingsBody> {
           ],
         ),
         const SizedBox(height: LockoutTheme.spaceMd),
+        // Captioned like the fields it sits between — `NvTextField` draws
+        // its own label in `labelMedium` with an `spaceXs` gap, and this
+        // control is the only one in the card that had no subject at all.
+        Text('Sex', style: theme.textTheme.labelMedium),
+        const SizedBox(height: LockoutTheme.spaceXs),
         NvSegmentedButton<Sex>(
           segments: const [
             NvSegment(value: Sex.male, label: 'Male'),

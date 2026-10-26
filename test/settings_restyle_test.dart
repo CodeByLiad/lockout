@@ -370,11 +370,18 @@ void main() {
     /// Drives the whole import tail through the UI — picker, restore,
     /// reschedule, callback, toast — over [raw], and hands back the three
     /// things the tail is pinned on.
-    Future<({List<String> notificationCalls, int callbacks, SnackBar toast})>
-        runImport(WidgetTester tester, String raw) async {
+    Future<
+        ({
+          List<String> notificationCalls,
+          int callbacks,
+          SnackBar toast,
+          bool? lockWhilePicking,
+        })> runImport(WidgetTester tester, String raw) async {
       final realPicker = FilePickerPlatform.instance;
-      FilePickerPlatform.instance = _StubFilePicker(raw);
+      final picker = _StubFilePicker(raw);
+      FilePickerPlatform.instance = picker;
       addTearDown(() => FilePickerPlatform.instance = realPicker);
+      addTearDown(() => SettingsBody.importInFlight.value = false);
 
       AndroidFlutterLocalNotificationsPlugin.registerWith();
       final notificationCalls = <String>[];
@@ -418,6 +425,7 @@ void main() {
         notificationCalls: notificationCalls,
         callbacks: callbacks,
         toast: tester.widget<SnackBar>(find.byType(SnackBar)),
+        lockWhilePicking: picker.lockWhilePicking,
       );
     }
 
@@ -501,6 +509,25 @@ void main() {
 
       final colors = lockoutTestTheme().colorScheme;
       expect(imported.toast.backgroundColor, colors.inverseSurface);
+    });
+
+    // The screen's own `AbsorbPointer` covers the body it owns and stops
+    // there; `BottomNav` is that body's sibling one level up in
+    // `MainScreen`, so a tab switch mid-import landed the user on a tab
+    // reading a half-restored database. This is the half of the repair that
+    // belongs to the screen — raising the lock for the destructive
+    // operation only, and dropping it after. That `MainScreen` obeys it is
+    // pinned in `main_screen_test.dart`.
+    testWidgets('a destructive import raises the nav lock and drops it again',
+        (tester) async {
+      final imported = await runImport(tester, backupJson(81.25));
+
+      expect(imported.lockWhilePicking, isTrue,
+          reason: 'the lock must be up while the database is being '
+              'replaced, not merely after');
+      expect(SettingsBody.importInFlight.value, isFalse,
+          reason: 'a lock that outlives its import leaves the nav bar dead '
+              'for the rest of the session');
     });
   });
 
@@ -791,6 +818,125 @@ void main() {
     });
   });
 
+  group('a save in one card does not discard typing in another', () {
+    /// The loop the review traced: a card's save calls
+    /// `widget.onSettingsUpdated()`, which is `MainScreen._loadSettings` ->
+    /// `_refreshVisibleTab()` -> `ProfileTabState.reload()` ->
+    /// `SettingsBodyState.reload()` -> `_loadSettings()`. The screen asks the
+    /// app to refresh and the app refreshes the screen that asked, over the
+    /// top of whatever the user was typing. Wired here exactly as
+    /// `MainScreen` wires it, because the defect is in the wiring.
+    Future<GlobalKey<ProfileTabState>> pumpHostedProfile(
+        WidgetTester tester) async {
+      final key = GlobalKey<ProfileTabState>();
+      tester.view.physicalSize = const Size(800, 6000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: lockoutTestTheme(),
+          home: ProfileTab(
+            key: key,
+            onSettingsUpdated: () => key.currentState?.reload(),
+          ),
+        ),
+      );
+      await settle(tester);
+      return key;
+    }
+
+    Future<void> type(
+        WidgetTester tester, String label, String text) async {
+      await tester.enterText(
+        find.descendant(
+          of: find.widgetWithText(NvTextField, label),
+          matching: find.byType(TextField),
+        ),
+        text,
+      );
+      await tester.pump();
+    }
+
+    testWidgets('unsaved typing survives the save of another card',
+        (tester) async {
+      await pumpHostedProfile(tester);
+
+      await type(tester, 'Age', '41');
+      await type(tester, 'Timeframe (weeks)', '9');
+
+      // A different card entirely, with its own writer and its own button.
+      await tester.tap(find.text('Save height'));
+      await settle(tester);
+
+      expect(fieldText(tester, 'Age'), '41',
+          reason: 'saving the height card re-read every field from the '
+              'database and dropped what the user was typing');
+      expect(fieldText(tester, 'Timeframe (weeks)'), '9');
+
+      // Flush the toast's auto-dismiss Timer before teardown.
+      await tester.pump(const Duration(seconds: 6));
+    });
+
+    testWidgets('a field the user has not touched still takes the value the '
+        'database now holds', (tester) async {
+      final key = await pumpHostedProfile(tester);
+
+      // The other half of the contract, and the reason the fix compares
+      // against the last loaded value rather than simply refusing to write:
+      // an import replaces every row, and every field the user is not in
+      // the middle of editing must follow it.
+      await DatabaseService.instance.saveSetting('calorie_target', '2345');
+      await key.currentState!.reload();
+      await settle(tester);
+
+      expect(fieldText(tester, 'Daily calorie target (kcal)'), '2345');
+    });
+  });
+
+  group('every control says what it is', () {
+    // Five rows reading Sedentary..Athlete sat directly under "Days per
+    // week" inside the Training group with nothing naming the choice — in
+    // docs/spine/qa/2026-10-11/03-profile-scroll1.png they read as peers of
+    // that row, separated only by a "Selected" badge. The sex control was
+    // two buttons with no subject at all.
+    testWidgets('the activity choice and the sex choice are both named',
+        (tester) async {
+      await pumpSettings(tester);
+
+      expect(find.text('Activity level'), findsOneWidget);
+      expect(find.text('Sex'), findsOneWidget);
+
+      // A caption is only a caption if it sits with what it names: above the
+      // control, and below whatever it does not name.
+      final activityCaption =
+          tester.getBottomLeft(find.text('Activity level')).dy;
+      expect(
+        activityCaption,
+        greaterThan(tester.getBottomLeft(find.text('Days per week')).dy),
+        reason: 'the caption must not read as part of the stepper row above '
+            'it',
+      );
+      expect(
+        activityCaption,
+        lessThanOrEqualTo(
+            tester.getTopLeft(find.text(ActivityLevel.values.first.label)).dy),
+        reason: 'the caption must sit above the options it names',
+      );
+
+      final sexCaption = tester.getBottomLeft(find.text('Sex')).dy;
+      expect(
+        sexCaption,
+        lessThanOrEqualTo(tester.getTopLeft(find.text('Male')).dy),
+      );
+      expect(
+        sexCaption,
+        greaterThan(tester.getBottomLeft(find.text('Target weight (kg)')).dy),
+      );
+    });
+  });
+
   group('reminders-expanded branch', () {
     /// The removed neubrutalist suite seeded `reminders_enabled=true` plus a
     /// rate-capped plan and asserted the reminder time row, the streak
@@ -859,6 +1005,11 @@ class _StubFilePicker extends FilePickerPlatform {
 
   final String json;
 
+  /// The state of [SettingsBody.importInFlight] at the one moment the lock
+  /// is meant to be up: inside `pickAndImport`, with the database about to
+  /// be replaced. Null until the picker is asked for a file.
+  bool? lockWhilePicking;
+
   @override
   Future<PlatformFile?> pickFile({
     String? dialogTitle,
@@ -872,6 +1023,8 @@ class _StubFilePicker extends FilePickerPlatform {
     WindowsOptions windowsOptions = const WindowsOptions(),
     LinuxOptions linuxOptions = const LinuxOptions(),
     WebOptions webOptions = const WebOptions(),
-  }) async =>
-      _StubBackupFile(json);
+  }) async {
+    lockWhilePicking = SettingsBody.importInFlight.value;
+    return _StubBackupFile(json);
+  }
 }

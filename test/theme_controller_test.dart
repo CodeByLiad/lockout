@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lockout/main.dart';
 import 'package:lockout/services/database_service.dart';
 import 'package:lockout/theme/accents.dart';
 import 'package:lockout/theme/theme_controller.dart';
@@ -219,6 +220,48 @@ void main() {
       expect(stored, 'light|lime');
     });
 
+    // The `finally` block already computes "am I still the latest
+    // selection"; the commit below it did not use the answer, so a
+    // superseded write still moved the field and still notified. sqflite's
+    // FIFO ordering hides the end state — the newest write lands last either
+    // way — so the only visible symptom is the one asserted here: the app
+    // repaints once in a colour the user has already moved away from.
+    test('a superseded accent never reaches the listeners', () async {
+      await _loadWithSetting('light|lime');
+
+      final seen = <LockoutAccent>[];
+      void listener() => seen.add(ThemeController.instance.accent);
+      ThemeController.instance.addListener(listener);
+
+      final first = ThemeController.instance.selectAccent(LockoutAccent.teal);
+      final second = ThemeController.instance.selectAccent(LockoutAccent.coral);
+      await Future.wait([first, second]);
+      ThemeController.instance.removeListener(listener);
+
+      expect(seen, [LockoutAccent.coral],
+          reason: 'the app repainted in a choice the user had already moved '
+              'away from');
+    });
+
+    test('a superseded brightness never reaches the listeners', () async {
+      await _loadWithSetting('light|lime');
+
+      final seen = <LockoutBrightnessChoice>[];
+      void listener() => seen.add(ThemeController.instance.brightnessChoice);
+      ThemeController.instance.addListener(listener);
+
+      final first = ThemeController.instance
+          .selectBrightness(LockoutBrightnessChoice.dark);
+      final second = ThemeController.instance
+          .selectBrightness(LockoutBrightnessChoice.system);
+      await Future.wait([first, second]);
+      ThemeController.instance.removeListener(listener);
+
+      expect(seen, [LockoutBrightnessChoice.system],
+          reason: 'a whole-app light/dark flash is the loudest form this '
+              'bug takes');
+    });
+
     test('the axes do not clobber each other when interleaved', () async {
       await _loadWithSetting('light|lime');
 
@@ -265,11 +308,20 @@ void main() {
     });
   });
 
-  // `main.dart` awaits `load()` before `runApp`, so anything that escapes it
-  // happens with no widget tree to report it in: a blank screen on every
-  // launch and no way back from inside the app. The write-back is only an
-  // optimisation — the choice is already in memory by the time it runs — so
-  // losing it costs one re-migration next launch, not the app.
+  // `main.dart` awaits `load()` before `runApp`. The write-back inside it is
+  // only an optimisation — the choice is already in the fields by the time it
+  // runs — so losing it costs one re-migration next launch, and `load()`
+  // swallows it.
+  //
+  // A failed *read* is the other half of the same question and is answered
+  // one level up. `load()` still lets it escape: a controller that swallowed
+  // it would have to invent a choice and would have no way to say it had.
+  // `loadSavedAppearance()` in `main.dart` is what catches it, boots on the
+  // defaults the controller already holds, and says so on screen — see the
+  // group below. The note that used to sit here recorded the opposite
+  // outcome, "a blank screen on every launch and no way back from inside the
+  // app", as the accepted cost of an unguarded await. It is not accepted any
+  // more, and these two groups together are what hold that.
   group('load() survives a write it cannot make', () {
     test('a migration whose write-back fails still applies the choice',
         () async {
@@ -317,13 +369,78 @@ void main() {
       );
     });
 
-    test('a failed read still escapes, because nothing can be resolved '
-        'without it', () async {
+    test('a failed read escapes load(), so the caller can decide what it '
+        'costs', () async {
       await wipeDatabaseAndReseed(DatabaseService.instance);
       await _failEverySettingRead();
       ThemeController.instance.resetForTest();
 
       await expectLater(ThemeController.instance.load(), throwsA(anything));
+    });
+  });
+
+  // The decision this group replaces was made with eyes open and still
+  // produced the worst outcome available: an unguarded `await` ahead of
+  // `runApp` turns an unreadable settings row into a blank screen on every
+  // launch, with no widget alive to offer a way back. The controller already
+  // holds safe defaults, so there is nothing the app cannot do on them.
+  group('a boot whose settings read fails still boots', () {
+    test('the failure is reported rather than propagated, and the defaults '
+        'stand', () async {
+      await wipeDatabaseAndReseed(DatabaseService.instance);
+      await _failEverySettingRead();
+      ThemeController.instance.resetForTest();
+
+      expect(await loadSavedAppearance(), isFalse);
+      expect(ThemeController.instance.brightnessChoice,
+          LockoutBrightnessChoice.system);
+      expect(ThemeController.instance.accent, LockoutAccent.fallback);
+    });
+
+    test('a readable database still applies the stored choice', () async {
+      await wipeDatabaseAndReseed(DatabaseService.instance);
+      await DatabaseService.instance.saveSetting('theme_key', 'dark|teal');
+      ThemeController.instance.resetForTest();
+
+      expect(await loadSavedAppearance(), isTrue);
+      expect(ThemeController.instance.brightnessChoice,
+          LockoutBrightnessChoice.dark);
+      expect(ThemeController.instance.accent, LockoutAccent.teal);
+    });
+
+    // Booting on defaults without saying so is its own failure: the user's
+    // chosen appearance is silently gone and nothing in the app accounts for
+    // it, so the next thing they do is set it again — over a database that
+    // may still be unreadable.
+    testWidgets('the app states the failure instead of swallowing it',
+        (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: StartupNotice(
+            appearanceUnreadable: true,
+            child: Scaffold(body: SizedBox.shrink()),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(find.text(StartupNotice.appearanceMessage), findsOneWidget);
+    });
+
+    testWidgets('a boot that read its settings says nothing', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: StartupNotice(
+            appearanceUnreadable: false,
+            child: Scaffold(body: SizedBox.shrink()),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(find.byType(SnackBar), findsNothing);
     });
   });
 

@@ -37,6 +37,26 @@ void main() {
     expect(find.textContaining('GPL'), findsOneWidget);
   });
 
+  // The ruling on Task 10 Q4. The user taps a row labelled "About Lockout"
+  // in Settings and used to arrive at a bar labelled "About": the
+  // destination has to echo the affordance that opened it. The section
+  // heading above that row stays "About", so heading and row remain
+  // distinct, and "LOCKOUT v1.1.0" in the body is the wordmark plus build,
+  // not a third name — it is pinned against pubspec.yaml below.
+  testWidgets('the bar title echoes the row that opens it', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(theme: lockoutTestTheme(), home: const AboutScreen()),
+    );
+    await tester.pumpAndSettle();
+
+    final title = find.descendant(
+      of: find.byType(AppBar),
+      matching: find.byType(Text),
+    );
+    expect(title, findsOneWidget);
+    expect(tester.widget<Text>(title).data, 'About Lockout');
+  });
+
   testWidgets('it uses a simple top bar with a back button', (tester) async {
     await tester.pumpWidget(
       MaterialApp(

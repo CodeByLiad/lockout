@@ -3,7 +3,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:lockout/models/models.dart';
+import 'package:lockout/screens/food_tab.dart';
 import 'package:lockout/screens/main_screen.dart';
+import 'package:lockout/screens/profile_tab.dart';
+import 'package:lockout/screens/progress_tab.dart';
+import 'package:lockout/screens/routines_tab.dart';
+import 'package:lockout/screens/settings_screen.dart';
+import 'package:lockout/screens/today_tab.dart';
 import 'package:lockout/services/database_service.dart';
 import 'package:lockout/widgets/bottom_nav.dart';
 
@@ -175,6 +181,100 @@ void main() {
     }
   });
 
+  // `IndexedStack` keeps every tab mounted — that is why an in-progress live
+  // session survives a trip to another tab — but it installs no `TickerMode`,
+  // so an off-screen tab's `AnimationController`s keep running. Measured at
+  // HEAD: inside an unselected child the wave phase of `NvWavyProgress`
+  // advanced 0.0067 -> 0.2567 over 600ms with a transient frame callback
+  // still registered. During a live workout, the longest screen-on period
+  // this app has, that is up to two 60Hz repaint loops driving a widget
+  // nobody can see.
+  //
+  // Asserted through `TickerMode.getValuesNotifier` rather than through any
+  // one animated widget: that notifier is the exact object every `Ticker`
+  // created by `TickerProviderStateMixin` subscribes to (see
+  // `ticker_provider.dart`, `_updateTicker`), so `enabled == false` means
+  // every ticker in that subtree is muted — including the ones a tab has
+  // not grown yet.
+  testWidgets('tickers are muted on every unselected tab', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(theme: lockoutTestTheme(), home: MainScreen()),
+    );
+    await _settle(tester);
+
+    const screens = <String, Type>{
+      'home': TodayTab,
+      'workout': RoutinesTab,
+      'progress': ProgressTab,
+      'food': FoodTab,
+      'profile': ProfileTab,
+    };
+
+    final tabs = BottomNav.visibleTabs(foodTabEnabled: true);
+    for (final selected in tabs) {
+      await tester.tap(_navLabel(selected.label));
+      await _settle(tester);
+
+      for (final other in tabs) {
+        // `skipOffstage: false`: an unselected `IndexedStack` child is built
+        // and mounted but not painted, and those are exactly the children
+        // this test is about.
+        final element = tester.element(
+          find.byType(screens[other.id]!, skipOffstage: false),
+        );
+        expect(
+          TickerMode.getValuesNotifier(element).value.enabled,
+          other.id == selected.id,
+          reason: 'with ${selected.id} selected, ${other.id} reports its '
+              'tickers ${other.id == selected.id ? 'muted' : 'running'}',
+        );
+      }
+    }
+  });
+
+  // `SettingsBody`'s own `AbsorbPointer` stops at the body it owns, and
+  // `BottomNav` is a sibling of that body one level up here — so until this
+  // lock existed a user could switch tabs mid-import and land on a tab
+  // reading a half-restored database. The other half of this contract (that
+  // an import actually raises the lock) is pinned in
+  // `settings_restyle_test.dart`.
+  testWidgets('the bottom nav is inert while a destructive import is in '
+      'flight', (tester) async {
+    addTearDown(() => SettingsBody.importInFlight.value = false);
+
+    await tester.pumpWidget(
+      MaterialApp(theme: lockoutTestTheme(), home: MainScreen()),
+    );
+    await _settle(tester);
+
+    SettingsBody.importInFlight.value = true;
+    await tester.pump();
+
+    // `warnIfMissed: false` is the point of the test, not a workaround: the
+    // tap reaches the bar's pixels and no handler, which is what a lock is.
+    await tester.tap(_navLabel('Workout'), warnIfMissed: false);
+    await _settle(tester);
+
+    expect(find.byType(BottomNav), findsOneWidget,
+        reason: 'the bar stays visible; it is locked, not removed');
+    expect(
+      tester.widget<BottomNav>(find.byType(BottomNav)).currentIndex,
+      0,
+      reason: 'a tab switch mid-import lands the user on a tab reading a '
+          'half-restored database',
+    );
+
+    // And the lock lifts with the import rather than outliving it.
+    SettingsBody.importInFlight.value = false;
+    await tester.pump();
+    await tester.tap(_navLabel('Workout'));
+    await _settle(tester);
+
+    expect(
+      tester.widget<BottomNav>(find.byType(BottomNav)).currentIndex,
+      isNot(0),
+    );
+  });
 }
 
 /// The nav bar's copy of [label], not any other widget's — see the note
