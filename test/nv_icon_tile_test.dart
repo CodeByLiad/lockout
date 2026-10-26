@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lockout/widgets/house/nv_icon_tile.dart';
 
@@ -99,5 +100,26 @@ void main() {
     final node = tester.getSemantics(find.byType(NvIconTile));
     expect(node.flagsCollection.isButton, isTrue);
     expect(node.label, 'Log food');
+    // The flag and the label are the constructor arguments read back; the
+    // action is the part a screen reader actually needs.
+    expect(
+      node.getSemanticsData().hasAction(SemanticsAction.tap),
+      isTrue,
+      reason: 'excludeSemantics over the InkWell drops its tap action, so '
+          'the tile announces as a button nothing can press',
+    );
+  });
+
+  testWidgets('a screen reader can press it', (tester) async {
+    var taps = 0;
+    await tester.pumpWidget(_host(onTap: () => taps++));
+    await tester.pumpAndSettle();
+
+    // Not `tester.tap`: a synthetic pointer event reaches the InkWell
+    // whether or not semantics expose the action.
+    final node = tester.getSemantics(find.byType(NvIconTile));
+    node.owner!.performAction(node.id, SemanticsAction.tap);
+    await tester.pumpAndSettle();
+    expect(taps, 1);
   });
 }

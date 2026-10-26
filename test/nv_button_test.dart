@@ -1,6 +1,7 @@
 import 'dart:ui' show Tristate;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lockout/widgets/house/nv_button.dart';
 
@@ -29,6 +30,18 @@ Widget _host({
       ),
     ),
   );
+}
+
+/// Activates [finder]'s node the way a screen reader does.
+///
+/// `tester.tap` sends a synthetic pointer event, which reaches the
+/// `GestureDetector` whether or not the semantics tree exposes an action —
+/// it cannot see the gap TalkBack falls into. This goes through the
+/// semantics owner instead, so it fails exactly when assistive technology
+/// would.
+void _semanticTap(WidgetTester tester, Finder finder) {
+  final node = tester.getSemantics(finder);
+  node.owner!.performAction(node.id, SemanticsAction.tap);
 }
 
 double _radiusOf(WidgetTester tester) {
@@ -146,6 +159,28 @@ void main() {
     expect(node.flagsCollection.isButton, isTrue);
     expect(node.flagsCollection.isEnabled, Tristate.isTrue);
     expect(node.label, 'Start session');
+    // The flag and the label are constructor arguments restated; the action
+    // is the one property that separates a usable button from a label that
+    // announces itself as "Button". `excludeSemantics` over a
+    // `GestureDetector` drops it.
+    expect(
+      node.getSemanticsData().hasAction(SemanticsAction.tap),
+      isTrue,
+      reason: 'a button with no tap action cannot be activated by a screen '
+          'reader, whatever it announces itself as',
+    );
+  });
+
+  testWidgets('a screen reader can press it', (tester) async {
+    var presses = 0;
+    await tester.pumpWidget(
+      _host(variant: NvButtonVariant.accent, onPressed: () => presses++),
+    );
+    await tester.pumpAndSettle();
+
+    _semanticTap(tester, find.byType(NvButton));
+    await tester.pumpAndSettle();
+    expect(presses, 1);
   });
 
   testWidgets('a disabled button says so to assistive technology',
@@ -159,6 +194,12 @@ void main() {
     // `isFalse` here asserts both that the state exists and that it says
     // disabled — a screen reader must not announce it as actionable.
     expect(node.flagsCollection.isEnabled, Tristate.isFalse);
+    expect(
+      node.getSemanticsData().hasAction(SemanticsAction.tap),
+      isFalse,
+      reason: 'a disabled button must not offer an activation a screen '
+          'reader can take',
+    );
   });
 
   testWidgets('the low-emphasis variants carry no fill of their own',
@@ -201,9 +242,13 @@ void main() {
             'its fill makes it invisible');
   });
 
-  testWidgets('every variant paints a colour the theme resolved',
+  testWidgets('every filled variant paints a colour the theme resolved',
       (tester) async {
-    for (final variant in NvButtonVariant.values) {
+    for (final variant in const [
+      NvButtonVariant.accent,
+      NvButtonVariant.filled,
+      NvButtonVariant.tonal,
+    ]) {
       await tester.pumpWidget(_host(variant: variant));
       await tester.pumpAndSettle();
 
@@ -214,6 +259,35 @@ void main() {
         isA<Color>(),
         reason: '$variant resolved no fill',
       );
+      expect(
+        container.clipBehavior,
+        Clip.antiAlias,
+        reason: 'a surface that paints has to clip its paint to its corners',
+      );
+    }
+  });
+
+  testWidgets('a fill-less variant costs no clip layer', (tester) async {
+    // `MorphingSurface` reads a non-null colour as "this surface paints" and
+    // turns on `Clip.antiAlias` for it. `Colors.transparent` therefore bought
+    // a clip layer per outlined, text and danger button to clip nothing.
+    for (final variant in const [
+      NvButtonVariant.outlined,
+      NvButtonVariant.text,
+      NvButtonVariant.danger,
+    ]) {
+      await tester.pumpWidget(_host(variant: variant));
+      await tester.pumpAndSettle();
+
+      final container =
+          tester.widget<AnimatedContainer>(find.byType(AnimatedContainer).first);
+      expect(
+        (container.decoration! as BoxDecoration).color,
+        isNull,
+        reason: '$variant asks MorphingSurface to paint a fill it does not '
+            'have',
+      );
+      expect(container.clipBehavior, Clip.none, reason: '$variant clips');
     }
   });
 
@@ -263,6 +337,31 @@ void main() {
       final node = tester.getSemantics(find.byType(NvIconButton));
       expect(node.label, 'One rep fewer');
       expect(node.flagsCollection.isButton, isTrue);
+      expect(
+        node.getSemanticsData().hasAction(SemanticsAction.tap),
+        isTrue,
+        reason: 'the description is useless if the node it sits on cannot '
+            'be activated',
+      );
+    });
+
+    testWidgets('a screen reader can press it', (tester) async {
+      var presses = 0;
+      await tester.pumpWidget(host(onPressed: () => presses++));
+      await tester.pumpAndSettle();
+
+      _semanticTap(tester, find.byType(NvIconButton));
+      await tester.pumpAndSettle();
+      expect(presses, 1);
+    });
+
+    testWidgets('a disabled icon button offers no action', (tester) async {
+      await tester.pumpWidget(host(enabled: false));
+      await tester.pumpAndSettle();
+
+      final node = tester.getSemantics(find.byType(NvIconButton));
+      expect(node.flagsCollection.isEnabled, Tristate.isFalse);
+      expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isFalse);
     });
 
     testWidgets('it reports the press', (tester) async {

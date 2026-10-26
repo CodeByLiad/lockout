@@ -50,16 +50,18 @@ class _NvButtonState extends State<NvButton> {
       ? LockoutTheme.radiusButtonLargeActive
       : LockoutTheme.radiusButtonActive;
 
-  ({Color background, Color foreground, BorderSide side}) _paletteFor(
+  ({Color? background, Color foreground, BorderSide side}) _paletteFor(
     BuildContext context,
   ) {
     final colors = Theme.of(context).colorScheme;
     final semantics = LockoutSemantics.of(context);
 
-    // `Colors.transparent`, not a hex literal: the contract guard forbids a
-    // hard-coded colour in the catalog, and it is right to — this is the
-    // absence of a fill, which is the one thing no theme role can name.
-    const noFill = Colors.transparent;
+    // Null, not `Colors.transparent`: `MorphingSurface` reads a non-null
+    // colour as "this surface paints" and switches on `Clip.antiAlias`, so a
+    // transparent fill buys a clip layer per outlined, text and danger
+    // button for nothing. Null is the absence of a fill, which is also the
+    // one thing no theme role can name.
+    const Color? noFill = null;
 
     return switch (widget.variant) {
       // `onPrimaryContainer` on `primaryContainer`, inverted: the accent
@@ -111,10 +113,15 @@ class _NvButtonState extends State<NvButton> {
     final foreground =
         _enabled ? palette.foreground : theme.colorScheme.onSurfaceVariant;
 
+    // `onTap` on the same node as the label: `excludeSemantics` drops the
+    // `GestureDetector`'s own semantics, including its tap action, so
+    // without this the button reaches a screen reader announced and
+    // unpressable.
     return Semantics(
       button: true,
       enabled: _enabled,
       label: widget.label,
+      onTap: widget.onPressed,
       excludeSemantics: true,
       child: GestureDetector(
         onTapDown: _enabled ? (_) => setState(() => _pressed = true) : null,
@@ -228,6 +235,9 @@ class _NvIconButtonState extends State<NvIconButton> {
       button: true,
       enabled: _enabled,
       label: widget.tooltip,
+      // Same reason as NvButton: excluded descendants take their tap action
+      // with them, so the action has to live on the labelled node.
+      onTap: widget.onPressed,
       excludeSemantics: true,
       child: Tooltip(
         message: widget.tooltip,

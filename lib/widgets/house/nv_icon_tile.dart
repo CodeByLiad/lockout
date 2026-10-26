@@ -29,9 +29,13 @@ class NvIconTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
+    // `onTap` here as well as on the `InkWell`: `excludeSemantics` drops the
+    // InkWell's semantics node and its tap action with it, leaving a tile a
+    // screen reader can read and cannot press.
     return Semantics(
       button: true,
       label: label,
+      onTap: onTap,
       excludeSemantics: true,
       child: InkWell(
         onTap: onTap,
