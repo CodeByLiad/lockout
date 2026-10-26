@@ -157,6 +157,31 @@ class SettingsBodyState extends State<SettingsBody> {
     _loadedText[controller] = value;
   }
 
+  /// The non-text half of [_loadedText].
+  ///
+  /// A controller is only one of the ways a card holds a choice the user has
+  /// not committed yet. The nutrition switch, the height unit and the sex
+  /// control are each set by one widget and written by a button somewhere
+  /// else, so a reload between those two moments discards them for exactly
+  /// the same reason unguarded controllers lost typing. The reminder
+  /// toggles, the activity radio and the days stepper need nothing here:
+  /// each persists the instant it changes, so a reload re-reads what the
+  /// user just chose.
+  final Map<String, Object?> _loadedValues = {};
+
+  /// Returns [incoming], unless the user has moved [current] away from what
+  /// was last loaded into [slot] — then their choice stands.
+  T _loadValue<T>(String slot, T current, T incoming) {
+    final loaded = _loadedValues[slot];
+    if (loaded != null && current != loaded) return current;
+    _loadedValues[slot] = incoming;
+    return incoming;
+  }
+
+  /// Moves a [_loadValue] baseline onto a value this screen has just
+  /// written, so the choice stops reading as unsaved once it is saved.
+  void _markSaved(String slot, Object? value) => _loadedValues[slot] = value;
+
   /// Re-reads every setting. Public so `ProfileTab` can refresh the hosted
   /// body the same way the other tabs are refreshed on the way in.
   Future<void> reload() => _loadSettings();
@@ -200,8 +225,10 @@ class SettingsBodyState extends State<SettingsBody> {
       _loadInto(_heightInCtrl,
           split.inches.toStringAsFixed(split.inches % 1 == 0 ? 0 : 1));
       _loadInto(_calorieCtrl, c);
-      _foodTabEnabled = f == 'true';
-      _heightUnit = u == 'ft' ? 'ft' : 'cm';
+      // `_loadValue`, not a bare assignment: see [_loadedValues].
+      _foodTabEnabled = _loadValue('food_tab_enabled', _foodTabEnabled, f == 'true');
+      _heightUnit =
+          _loadValue('height_unit', _heightUnit, u == 'ft' ? 'ft' : 'cm');
       _remindersEnabled = rEnabled == 'true';
       _streakAlertsEnabled = sAlerts == 'true';
       _reminderTime = TimeOfDay(
@@ -213,7 +240,7 @@ class SettingsBodyState extends State<SettingsBody> {
       _loadInto(_targetWeightCtrl,
           goal.targetWeightKg > 0 ? goal.targetWeightKg.toString() : '');
       _loadInto(_weeksCtrl, goal.weeks.toString());
-      _sex = goal.sex;
+      _sex = _loadValue('sex', _sex, goal.sex);
       _activity = goal.activity;
       _daysPerWeek = goal.daysPerWeek;
       _plan = snap.nutrition;
@@ -261,6 +288,7 @@ class SettingsBodyState extends State<SettingsBody> {
     final cm = _resolveHeightCm();
     await db.saveSetting('height_cm', cm.toStringAsFixed(2));
     await db.saveSetting('height_unit', _heightUnit);
+    _markSaved('height_unit', _heightUnit);
     widget.onSettingsUpdated();
     _toast('Saved height ${Units.formatHeight(cm, _heightUnit)}.');
   }
@@ -273,6 +301,7 @@ class SettingsBodyState extends State<SettingsBody> {
       'food_tab_enabled',
       _foodTabEnabled ? 'true' : 'false',
     );
+    _markSaved('food_tab_enabled', _foodTabEnabled);
     widget.onSettingsUpdated();
     _toast('Saved food settings.');
   }
@@ -285,6 +314,8 @@ class SettingsBodyState extends State<SettingsBody> {
     await db.saveSetting('height_unit', _heightUnit);
     await db.saveSetting('age', _ageCtrl.text.trim());
     await db.saveSetting('sex', _sex.name);
+    _markSaved('height_unit', _heightUnit);
+    _markSaved('sex', _sex);
     await db.saveSetting('activity_level', _activity.name);
     await db.saveSetting(
       'target_weight_kg',

@@ -893,6 +893,52 @@ void main() {
 
       expect(fieldText(tester, 'Daily calorie target (kcal)'), '2345');
     });
+
+    // The same clobber, on the state that is not text. A controller is only
+    // one way a card holds an unsaved choice: the nutrition switch, the
+    // height unit and the sex control are all set by one widget and written
+    // by a button somewhere else, so until that button is pressed a reload
+    // overwrites them exactly the way it used to overwrite typing. The
+    // reminder toggles, the activity radio and the days stepper are safe for
+    // a different reason — each persists the instant it changes — so they
+    // are deliberately not in this list.
+    testWidgets('an unsaved switch survives the save of another card',
+        (tester) async {
+      await pumpHostedProfile(tester);
+
+      final toggle = find.widgetWithText(NvSwitchRow, 'Enable nutrition tab');
+      expect(tester.widget<NvSwitchRow>(toggle).value, isTrue);
+
+      await tester.tap(find.descendant(of: toggle, matching: find.byType(Switch)));
+      await settle(tester);
+      expect(tester.widget<NvSwitchRow>(toggle).value, isFalse);
+
+      await tester.tap(find.text('Save height'));
+      await settle(tester);
+
+      expect(tester.widget<NvSwitchRow>(toggle).value, isFalse,
+          reason: 'saving the height card re-read food_tab_enabled and threw '
+              'away a toggle the user had not saved yet');
+
+      await tester.pump(const Duration(seconds: 6));
+    });
+
+    testWidgets('a switch the user has not touched still follows the database',
+        (tester) async {
+      final key = await pumpHostedProfile(tester);
+
+      await DatabaseService.instance.saveSetting('food_tab_enabled', 'false');
+      await key.currentState!.reload();
+      await settle(tester);
+
+      expect(
+        tester
+            .widget<NvSwitchRow>(
+                find.widgetWithText(NvSwitchRow, 'Enable nutrition tab'))
+            .value,
+        isFalse,
+      );
+    });
   });
 
   group('every control says what it is', () {

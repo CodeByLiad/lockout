@@ -166,4 +166,20 @@ void main() {
 
     expect(scaffoldFill(tester), darkAppearance.colors.surface);
   });
+
+  // The second pre-`runApp` await. `loadSavedAppearance` is guarded because
+  // an unguarded await before `runApp` is a blank screen on every launch
+  // with no widget alive to explain it; this one reaches the notification
+  // plugin and has exactly the same shape. It is not hypothetical — the
+  // plugin throws here, in this binding, for the same reason it throws on a
+  // device whose platform channel is unavailable.
+  //
+  // Notifications are worth strictly less than booting: a lost reminder is
+  // a lost reminder, a failed boot is the whole app. So this reports rather
+  // than throws, and the reminder toggles in Settings already handle a
+  // service that will not start.
+  test('a notification plugin that will not start does not stop the boot',
+      () async {
+    expect(await initNotifications(), isFalse);
+  });
 }

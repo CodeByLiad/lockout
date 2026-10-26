@@ -10,7 +10,7 @@ Future<void> main() async {
 
   final appearanceRead = await loadSavedAppearance();
 
-  await NotificationService.instance.init();
+  await initNotifications();
 
   runApp(LockoutApp(appearanceUnreadable: !appearanceRead));
 }
@@ -34,6 +34,28 @@ Future<bool> loadSavedAppearance() async {
     return true;
   } catch (error, stack) {
     debugPrint('Could not read the saved appearance: $error\n$stack');
+    return false;
+  }
+}
+
+/// Starts the notification service before the first frame, and reports
+/// whether it came up.
+///
+/// The same reasoning as [loadSavedAppearance], applied to the other
+/// pre-`runApp` await: `NotificationService.init()` reaches a platform
+/// channel, and a channel that is not there throws. Unguarded, that throw
+/// lands in exactly the same place — before `runApp`, with no widget alive
+/// to say what happened. Reminders are worth less than booting, so a
+/// service that will not start costs the reminders and nothing else; the
+/// toggles in Settings already handle a service that is not running, and
+/// they are where a user would go to turn one back on.
+@visibleForTesting
+Future<bool> initNotifications() async {
+  try {
+    await NotificationService.instance.init();
+    return true;
+  } catch (error, stack) {
+    debugPrint('Could not start notifications: $error\n$stack');
     return false;
   }
 }
