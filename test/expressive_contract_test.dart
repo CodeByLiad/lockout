@@ -57,6 +57,7 @@ const List<String> _branchOneFiles = [
 const List<String> _rebuiltFiles = [
   ..._branchOneFiles,
   'lib/screens/about_screen.dart',
+  'lib/screens/profile_tab.dart',
 ];
 
 /// The screens rebuilt so far. Appended to as screens land.
@@ -64,10 +65,15 @@ const List<String> _rebuiltFiles = [
 /// `settings_screen.dart` joins at branch end. It reaches for no pre-rebuild
 /// widget today, so the entry catches no present bug — it is here so that the
 /// next edit to a 1171-line screen cannot quietly re-import one.
+///
+/// `profile_tab.dart` joins for a blunter reason: it was in none of these
+/// three lists at all, so every rule here skipped the only live host of
+/// `SettingsBody` — the screen a user actually reaches Settings through.
 const List<String> _rebuiltScreens = [
   'lib/screens/today_tab.dart',
   'lib/screens/about_screen.dart',
   'lib/screens/settings_screen.dart',
+  'lib/screens/profile_tab.dart',
 ];
 
 /// The pre-rebuild widgets a rebuilt screen must not reach for.
@@ -442,8 +448,12 @@ void main() {
       final gesture =
           await tester.startGesture(tester.getCenter(find.byType(FilledButton)));
       await tester.pumpAndSettle();
-      expect(radiusOf(shapeNow()), LockoutTheme.radiusButtonLargeActive,
-          reason: 'the press morph must reach the painted Material');
+      expect(radiusOf(shapeNow()), LockoutTheme.radiusButtonActive,
+          reason: 'the press morph must reach the painted Material, and it '
+              'must land on the 12dp button pill. The 16dp large pill '
+              'belongs to the 60dp hero control, which is '
+              '`NvButton(large: true)`, not the 48dp FilledButton this '
+              'theme styles');
 
       await gesture.up();
       await tester.pumpAndSettle();
@@ -475,6 +485,48 @@ void main() {
           expect(source.contains('widgets/$widget'), isFalse,
               reason: '$path still reaches for $widget, a widget written '
                   'for the previous design');
+        }
+      }
+    });
+
+    test('a rebuilt screen does not reach for a framework button', () {
+      // The hole the import rule above could not cover. It matches on an
+      // import path, and a framework widget needs no import — so three
+      // framework buttons sat on the rebuilt Today screen unopposed
+      // (`OutlinedButton` "Add exercise", and the finish sheet's
+      // `OutlinedButton`/`FilledButton` pair). They are not the same
+      // control as the catalog's: `controlHeight` is 52 against
+      // `NvButton`'s 48, and the theme's press morph cannot read
+      // `MediaQuery.disableAnimations` at all (deviation D10, retired by
+      // `NvButton` precisely because a context-free `ThemeData` cannot).
+      //
+      // `\b` either side is what keeps `NvIconButton` and
+      // `NvSegmentedButton` out of the match: there is no word boundary
+      // inside an identifier.
+      //
+      // The framework `IconButton` is deliberately NOT on this list yet.
+      // `settings_screen.dart:950` and `:967` still use two of them for
+      // the training-days stepper, and `NvIconButton` is the control they
+      // owe; adding it here turns this suite red on shipping code, which
+      // is the same bargain `exercise_picker.dart` is recorded under
+      // above. It is owed, not absolved.
+      const frameworkButtons = [
+        'ElevatedButton',
+        'FilledButton',
+        'OutlinedButton',
+        'TextButton',
+        'MaterialButton',
+        'CupertinoButton',
+      ];
+
+      for (final path in _rebuiltScreens) {
+        final source = _withoutComments(File(path).readAsStringSync());
+        for (final widget in frameworkButtons) {
+          expect(RegExp('\\b$widget\\b').hasMatch(source), isFalse,
+              reason: '$path builds a $widget; a rebuilt screen composes '
+                  'from lib/widgets/house/ and the theme only, and '
+                  'NvButton is the control that is the same size and '
+                  'presses to the same radius as the rest of the screen');
         }
       }
     });

@@ -32,18 +32,6 @@ Widget _host({
   );
 }
 
-/// Activates [finder]'s node the way a screen reader does.
-///
-/// `tester.tap` sends a synthetic pointer event, which reaches the
-/// `GestureDetector` whether or not the semantics tree exposes an action —
-/// it cannot see the gap TalkBack falls into. This goes through the
-/// semantics owner instead, so it fails exactly when assistive technology
-/// would.
-void _semanticTap(WidgetTester tester, Finder finder) {
-  final node = tester.getSemantics(finder);
-  node.owner!.performAction(node.id, SemanticsAction.tap);
-}
-
 double _radiusOf(WidgetTester tester) {
   final container =
       tester.widget<AnimatedContainer>(find.byType(AnimatedContainer).first);
@@ -178,7 +166,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    _semanticTap(tester, find.byType(NvButton));
+    semanticTap(tester, find.byType(NvButton));
     await tester.pumpAndSettle();
     expect(presses, 1);
   });
@@ -350,7 +338,7 @@ void main() {
       await tester.pumpWidget(host(onPressed: () => presses++));
       await tester.pumpAndSettle();
 
-      _semanticTap(tester, find.byType(NvIconButton));
+      semanticTap(tester, find.byType(NvIconButton));
       await tester.pumpAndSettle();
       expect(presses, 1);
     });

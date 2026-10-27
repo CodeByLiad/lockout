@@ -70,4 +70,29 @@ void main() {
     final node = tester.getSemantics(find.text('Dark'));
     expect(node.hasFlag(SemanticsFlag.isSelected), isTrue);
   });
+
+  testWidgets('a screen reader can choose a segment', (tester) async {
+    // `isSelected` above is the constructor argument read straight back, and
+    // it is equally true of a segment assistive technology cannot choose.
+    // `tapping a segment reports its value` drives a synthetic pointer,
+    // which reaches the `GestureDetector` whether or not the semantics tree
+    // exposes an action at all — so between them the two tests above still
+    // left the TalkBack path unasserted. This is the appearance picker: a
+    // user who cannot reach it cannot change the theme.
+    String? chosen;
+    await tester.pumpWidget(
+      _host(selected: 'dark', onChanged: (value) => chosen = value),
+    );
+    await tester.pumpAndSettle();
+
+    final node = tester.getSemantics(find.text('System'));
+    expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue,
+        reason: 'a segment announced as a button must offer an activation');
+
+    semanticTap(tester, find.text('System'));
+    await tester.pumpAndSettle();
+    expect(chosen, 'system',
+        reason: 'and that activation must report the segment value, not '
+            'merely exist on the node');
+  });
 }

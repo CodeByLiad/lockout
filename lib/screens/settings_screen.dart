@@ -597,49 +597,83 @@ class SettingsBodyState extends State<SettingsBody> {
       return;
     }
 
-    // Restored settings include the theme, so re-read everything.
-    // `load()` rather than a read-then-select pair: it is the one place that
-    // knows both axes and the legacy formats, and an imported backup can
-    // carry a `theme_key` written by any older build.
-    await ThemeController.instance.load();
-    if (!mounted) return;
-
-    // A belt, and deliberately kept as one now that both braces hold:
-    // `BackupService` coerces numeric columns on import, and every read on
-    // the far side of this `await` goes through `NumericGuard` rather than
-    // a cast, so nothing arriving through an import can still throw here.
-    // What that leaves is an unenumerable class — any future failure in
-    // `_loadSettings`, from a schema the running build does not know to a
-    // disk error — and the consequence has not changed: unguarded, the
-    // throw takes the reschedule, the callback and the toast with it, so
-    // the import applies while the OS keeps the pre-restore reminder
-    // schedule and the user is told nothing.
-    // Re-reading settings is best-effort; everything after it is not.
+    // Everything from here on is the import TAIL: the restore has already
+    // applied, so the one thing that must happen whatever else does is that
+    // the host re-reads and the user is told. Hence one `try` over the
+    // whole tail with both of those in a `finally`.
+    //
+    // Three awaits live in it and all three can throw.
+    // `ThemeController.load()` lets a failed read escape on purpose.
+    // `rescheduleAll()`'s own `_ensureReady` guard covers `init()` and
+    // nothing else, so `_plugin.cancel`, `_plugin.zonedSchedule` and
+    // `_workoutReminderBody()` — which reads the database this import has
+    // just replaced the contents of — are all still live. `_loadSettings`
+    // is the one whose failure is merely best-effort, so it keeps its own
+    // inner guard and its own wording.
+    //
+    // Unguarded, any of them took the reschedule, the callback and the
+    // "Import complete" toast with it: the import applied, the OS kept the
+    // pre-restore reminder schedule, and the user was told nothing at all.
     var reloaded = true;
+    var tailFailed = false;
     try {
-      await _loadSettings();
-    } catch (_) {
-      reloaded = false;
-    }
-    await NotificationService.instance.rescheduleAll();
-    widget.onSettingsUpdated();
+      // Restored settings include the theme, so re-read everything.
+      // `load()` rather than a read-then-select pair: it is the one place
+      // that knows both axes and the legacy formats, and an imported backup
+      // can carry a `theme_key` written by any older build.
+      await ThemeController.instance.load();
 
-    if (!mounted) return;
-    // Two different things can be worth warning about, and they are
-    // independent. `reloaded` is the belt above failing — rare, and now
-    // unreachable from an import. `coercedValues` is the common one: the
-    // restore succeeded by rewriting cells it could not read as `0`, and
-    // saying only "Import complete" there reports a silent edit of the
-    // user's own data as an unqualified success.
-    final rewritten = result.coercedValues > 0;
-    _toast(
-      reloaded
+      // A belt, and deliberately kept as one now that both braces hold:
+      // `BackupService` coerces numeric columns on import, and every read
+      // on the far side of this `await` goes through `NumericGuard` rather
+      // than a cast, so nothing arriving through an import can still throw
+      // here. What that leaves is an unenumerable class — any future
+      // failure in `_loadSettings`, from a schema the running build does
+      // not know to a disk error.
+      // Re-reading settings is best-effort; everything after it is not.
+      try {
+        await _loadSettings();
+      } catch (_) {
+        reloaded = false;
+      }
+
+      await NotificationService.instance.rescheduleAll();
+    } catch (error, stack) {
+      // Reported rather than rethrown: this is the one place in the app
+      // where a failure after the restore must not be allowed to hide the
+      // restore itself.
+      debugPrint('The import tail failed after the restore applied: '
+          '$error\n$stack');
+      tailFailed = true;
+    } finally {
+      // Unconditional, and deliberately not behind `mounted`: the data on
+      // disk has changed, so every other tab is holding a stale read
+      // whether or not THIS screen survived the import.
+      widget.onSettingsUpdated();
+
+      // Three different things can be worth warning about, and they are
+      // independent. `reloaded` is the belt above failing — rare, and now
+      // unreachable from an import. `coercedValues` is the common one: the
+      // restore succeeded by rewriting cells it could not read as `0`, and
+      // saying only "Import complete" there reports a silent edit of the
+      // user's own data as an unqualified success. `tailFailed` is the
+      // theme re-read or the reschedule going down, which leaves the OS
+      // holding a schedule this import replaced — an unqualified success
+      // there is the same lie in a different place.
+      // `_toast` is a no-op once unmounted, so it needs no guard of its own.
+      final rewritten = result.coercedValues > 0;
+      final restored = reloaded
           ? 'Import complete. ${result.rowsRestored} rows restored.'
               '${ImportResult.coercionNote(result.coercedValues)}'
           : 'Import complete. ${result.rowsRestored} rows restored, but some '
-              'of them could not be read back. Check the backup file.',
-      warn: !reloaded || rewritten,
-    );
+              'of them could not be read back. Check the backup file.';
+      _toast(
+        tailFailed
+            ? '$restored Reminders could not be rescheduled.'
+            : restored,
+        warn: !reloaded || rewritten || tailFailed,
+      );
+    }
   }
 
   // --- BUILD ---
@@ -669,16 +703,30 @@ class SettingsBodyState extends State<SettingsBody> {
           // `viewPadding` ignores insets, so it would reserve another chunk
           // of dead space above the keyboard. `padding.bottom` collapses to 0
           // in exactly that case.
+          //
+          // Vertical only. The house system gives text and headings a 20dp
+          // margin and grouped lists and cards a 16dp one, and `_section`
+          // is the one thing that knows which of its children is which —
+          // so a horizontal padding here is a second margin underneath
+          // that one, which put every heading at 40 and every group at 36.
+          // `today_tab.dart` pads per element for the same reason.
           padding: EdgeInsets.fromLTRB(
-            LockoutTheme.screenPadding,
+            0,
             LockoutTheme.spaceMd,
-            LockoutTheme.screenPadding,
+            0,
             LockoutTheme.spaceMd + MediaQuery.paddingOf(context).bottom,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildHeader(context),
+              // The header is text at subject scale, so it takes the text
+              // margin rather than the grouped-list one.
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: LockoutTheme.screenPadding,
+                ),
+                child: _buildHeader(context),
+              ),
               const SizedBox(height: LockoutTheme.sectionGap),
               _buildAppearanceCard(context),
               _buildUnitsCard(context),

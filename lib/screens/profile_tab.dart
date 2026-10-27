@@ -43,7 +43,11 @@ class ProfileTabState extends State<ProfileTab> {
                 LockoutTheme.screenPadding,
                 LockoutTheme.spaceSm,
               ),
-              child: Text('Profile', style: theme.textTheme.headlineMedium),
+              // `displayMedium`, the house large title section 7.1 gives a
+              // tab screen — the same style `today_tab.dart` opens with.
+              // This read `headlineMedium`, so the two tab screens a user
+              // swipes between opened at 36sp and 22sp.
+              child: Text('Profile', style: theme.textTheme.displayMedium),
             ),
             Expanded(
               child: SettingsBody(

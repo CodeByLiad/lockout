@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lockout/screens/profile_tab.dart';
 import 'package:lockout/services/database_service.dart';
@@ -20,6 +21,26 @@ Future<void> settle(WidgetTester tester, {int maxPumps = 20}) async {
   for (var i = 0; i < maxPumps; i++) {
     await tester.pump(const Duration(milliseconds: 50));
   }
+}
+
+/// Activates [finder]'s semantics node the way a screen reader does.
+///
+/// `tester.tap` sends a synthetic pointer event, which reaches the
+/// `GestureDetector` whether or not the semantics tree exposes an action —
+/// it cannot see the gap TalkBack falls into. This goes through the
+/// semantics owner instead, so it fails exactly when assistive technology
+/// would.
+///
+/// Shared rather than private to one suite: it started in
+/// `nv_button_test.dart`, and the two catalog controls that never got an
+/// activation test — `NvListItem` and `NvSegmentedButton` — are exactly the
+/// ones that could not reach it. A control asserted only on the flags its
+/// own constructor set is asserted on nothing: that is the shape that hid
+/// an earlier Critical, where a button read correctly to a screen reader
+/// and could not be pressed by one.
+void semanticTap(WidgetTester tester, Finder finder) {
+  final node = tester.getSemantics(finder);
+  node.owner!.performAction(node.id, SemanticsAction.tap);
 }
 
 /// Wipes every backup table and restores the same seed rows

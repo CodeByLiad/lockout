@@ -14,6 +14,7 @@ import 'package:lockout/screens/settings_screen.dart';
 import 'package:lockout/services/database_service.dart';
 import 'package:lockout/services/goal_service.dart';
 import 'package:lockout/services/nutrition_planner.dart';
+import 'package:lockout/services/schedule_service.dart';
 import 'package:lockout/theme/accents.dart';
 import 'package:lockout/theme/lockout_theme.dart';
 import 'package:lockout/widgets/house/nv_grouped_list.dart';
@@ -642,6 +643,86 @@ void main() {
               'for the rest of the session');
     });
 
+    testWidgets(
+        'a throw inside the reschedule still calls back and still tells the '
+        'user the import applied', (tester) async {
+      // The gap the previous guard could not see. `rescheduleAll()` returns
+      // early whenever `_ensureReady()` is false, and the test above it in
+      // this file leaves the plugin absent, so it never reaches anything
+      // that can throw. `runImport` registers the plugin and answers both
+      // channels, so this one gets all the way into `_workoutReminderBody`
+      // -> `ScheduleService.resolveToday()` — the database read the import
+      // has just replaced the contents of.
+      //
+      // The throw is injected through `ScheduleService.calendarDay`, the
+      // seam that class documents for exactly this (restored below). The
+      // honest reason it is a seam and not poisoned backup data: every
+      // model read on this path now goes through `NumericGuard` or a
+      // TEXT-affinity column, so no JSON a backup file can carry still
+      // reaches a cast that throws. What is left is the unenumerable class
+      // — a schema the running build does not know, a disk error — and the
+      // consequence of leaving it unguarded is unchanged and is what this
+      // pins: the import applies, the OS keeps the pre-restore schedule,
+      // `onSettingsUpdated()` never fires and the user is told nothing.
+      final realCalendar = ScheduleService.calendarDay;
+      addTearDown(() => ScheduleService.calendarDay = realCalendar);
+      ScheduleService.calendarDay =
+          (_) => throw StateError('the schedule read failed');
+
+      final imported = await runImport(
+        tester,
+        jsonEncode({
+          'app': 'lockout',
+          'schemaVersion': 2,
+          'data': {
+            // ROTATING, so resolution runs through `matchByRotation` and
+            // therefore through the calendar above.
+            'routines': [
+              {
+                'id': 'r1',
+                'name': 'Push pull legs',
+                'scheduling_mode': 'ROTATING',
+                'is_active': 1,
+                'created_at': '2026-01-01',
+              },
+            ],
+            'training_days': [
+              {
+                'id': 'd1',
+                'routine_id': 'r1',
+                'name': 'Push',
+                'tag': 'A',
+                'order_index': 0,
+              },
+            ],
+            'user_settings': [
+              {'key': 'reminders_enabled', 'value': 'true'},
+              {'key': 'active_routine_id', 'value': 'r1'},
+            ],
+          },
+        }),
+      );
+
+      expect(tester.takeException(), isNull,
+          reason: 'an unguarded await here is an unhandled async error');
+      expect(imported.notificationCalls, isNot(contains('zonedSchedule')),
+          reason: 'the premise: the reschedule really did fail, so the OS '
+              'is still holding the pre-restore schedule');
+      expect(imported.callbacks, 1,
+          reason: 'the import applied, so the host has to re-read it '
+              'whatever the reminder schedule did');
+      expect(find.textContaining('Import complete'), findsOneWidget,
+          reason: 'the toast is the part that must survive — a restore the '
+              'user is never told about is the worst outcome here');
+      expect(find.textContaining('Reminders could not be rescheduled'),
+          findsOneWidget,
+          reason: 'and it must not report an unqualified success while the '
+              'OS holds a schedule the import replaced');
+      expect(imported.toast.backgroundColor,
+          lockoutTestTheme().colorScheme.errorContainer,
+          reason: 'it must look different from a clean import');
+    });
+
     // The same lock, and the one way it can still be left up: a throw out
     // of `pickAndImport()`. It guards every path it authors except the bare
     // `await DatabaseService.instance.columnTypes(table)` in
@@ -712,6 +793,36 @@ void main() {
       ]) {
         expect(find.text(heading), findsOneWidget, reason: heading);
       }
+    });
+
+    testWidgets('a section heading sits at 20 and its grouped list at 16',
+        (tester) async {
+      // House section 7, restated in `.spine/config.md`: screen margins are
+      // 20 for text and headings and 16 for grouped lists and cards. The
+      // scroll view used to pad itself by `screenPadding` and then let
+      // `_section` pad again, so every heading landed at 40 and every group
+      // at 36 — a whole screen indented past the one `today_tab.dart` sets.
+      // Visible in the branch's own `docs/spine/qa/2026-10-11/02-profile.png`
+      // and asserted by nothing: the device pass looked straight at it.
+      await pumpSettings(tester);
+
+      expect(
+        tester.getTopLeft(find.text('Notifications')).dx,
+        LockoutTheme.screenPadding,
+        reason: 'a section heading is text, so it takes the 20dp margin',
+      );
+
+      final rows = find.ancestor(
+        of: find.text('Daily training nudge'),
+        matching: find.byType(NvGroupedList),
+      );
+      expect(
+        tester.getTopLeft(rows).dx,
+        LockoutTheme.cardPadding,
+        reason: 'a grouped list takes the 16dp margin, so it sits slightly '
+            'wider than its own heading rather than inside a second copy of '
+            'the screen margin',
+      );
     });
 
     testWidgets('a tappable row clears the 48dp touch target', (tester) async {

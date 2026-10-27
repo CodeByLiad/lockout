@@ -342,7 +342,14 @@ class LockoutTheme {
           // reduced motion, because `build` has no context — see D10.
           animationDuration: LockoutMotion.springFast.duration,
         ).copyWith(
-          shape: _statefulShape(radiusButtonRest, radiusButtonLargeActive),
+          // The button pill, not the large one: shape-as-state gives a
+          // button pill -> 12 and reserves the pill -> 16 for the 60dp
+          // hero control, which is `NvButton(large: true)` and styles
+          // itself. A `FilledButton` here is the 48dp main action, so it
+          // morphs to the same 12 its outlined and text siblings do —
+          // otherwise the finish sheet shows a 16dp press on one button
+          // and a 12dp press on the one beside it.
+          shape: _statefulShape(radiusButtonRest, radiusButtonActive),
         ),
       ),
 

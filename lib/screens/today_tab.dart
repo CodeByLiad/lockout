@@ -1068,9 +1068,10 @@ class TodayTabState extends State<TodayTab> {
           );
         }
         if (index == lastIndex) {
-          return OutlinedButton(
+          return NvButton(
+            variant: NvButtonVariant.outlined,
+            label: 'Add exercise',
             onPressed: _addExerciseMidSession,
-            child: const Text('Add exercise'),
           );
         }
         if (!hasExercises) {
@@ -1657,16 +1658,18 @@ class _FinishSummarySheet extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: OutlinedButton(
+              child: NvButton(
+                variant: NvButtonVariant.outlined,
+                label: 'Discard',
                 onPressed: () => Navigator.pop(context, 'discard'),
-                child: const Text('Discard'),
               ),
             ),
             const SizedBox(width: LockoutTheme.spaceMd),
             Expanded(
-              child: FilledButton(
+              child: NvButton(
+                variant: NvButtonVariant.filled,
+                label: 'Save',
                 onPressed: () => Navigator.pop(context, 'save'),
-                child: const Text('Save'),
               ),
             ),
           ],

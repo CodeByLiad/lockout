@@ -45,6 +45,25 @@ void main() {
     expect(find.text('Profile'), findsOneWidget);
   });
 
+  testWidgets('the tab title is the house large title, the one Today uses',
+      (tester) async {
+    // House section 7.1: a tab screen opens with `displayMedium`.
+    // `today_tab.dart:693` honours it at 36sp; Profile rendered the same
+    // kind of title in `headlineMedium` at 22, so the two tab screens a
+    // user swipes between opened at visibly different scales.
+    await pumpProfile(tester);
+
+    final title = tester.widget<Text>(find.text('Profile'));
+    // Read back through the tree, not from `_theme()`: `MaterialApp`
+    // localizes the text theme before any descendant sees it, so the style
+    // the screen resolved carries a geometry the raw `ThemeData` does not.
+    final text = Theme.of(tester.element(find.text('Profile'))).textTheme;
+    expect(title.style, text.displayMedium);
+    expect(title.style?.fontSize, isNot(text.headlineMedium?.fontSize),
+        reason: 'the two styles have to actually differ, or this guard '
+            'asserts nothing');
+  });
+
   testWidgets('as a tab there is no app bar and nothing to pop back to',
       (tester) async {
     await pumpProfile(tester);

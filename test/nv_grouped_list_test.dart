@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lockout/widgets/house/nv_grouped_list.dart';
 
@@ -154,6 +155,37 @@ void main() {
 
     final node = tester.getSemantics(find.byType(NvListItem).first);
     expect(node.flagsCollection.isButton, isTrue);
+  });
+
+  testWidgets('a screen reader can press a row', (tester) async {
+    // `isButton` above is the literal constructor argument read back two
+    // lines into `build`, and it is true of a row a screen reader cannot
+    // activate at all — the exact assertion shape that hid an earlier
+    // Critical on `NvButton`. `NvListItem` is the most-instantiated control
+    // in the app, so the gap would have been the widest here.
+    var taps = 0;
+    await tester.pumpWidget(_host(3, onTap: () => taps++));
+    await tester.pumpAndSettle();
+
+    final node = tester.getSemantics(find.byType(NvListItem).first);
+    expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue,
+        reason: 'a row announced as a button must offer an activation');
+
+    semanticTap(tester, find.byType(NvListItem).first);
+    await tester.pumpAndSettle();
+    expect(taps, 1,
+        reason: 'and that activation must reach the callback the row was '
+            'given, not merely exist on the node');
+  });
+
+  testWidgets('an inert row offers no activation', (tester) async {
+    // The other half: `onTap: null` makes the row inert by construction, so
+    // a screen reader must not be offered a press that does nothing.
+    await tester.pumpWidget(_host(3, tappable: false));
+    await tester.pumpAndSettle();
+
+    final node = tester.getSemantics(find.byType(NvListItem).first);
+    expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isFalse);
   });
 
   testWidgets('an empty group renders nothing', (tester) async {

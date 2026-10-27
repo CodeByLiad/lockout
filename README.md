@@ -2,7 +2,7 @@
 
 An offline-first strength training tracker for Android, built with Flutter.
 
-Routines, workout logs, nutrition and body metrics live in a local SQLite database on your device. No account, no analytics, no ads, no server. The network is used for exactly one thing: streaming exercise form videos from YouTube when you tap **WATCH**.
+Routines, workout logs, nutrition and body metrics live in a local SQLite database on your device. No account, no analytics, no ads, no server. The network is used for exactly one thing: streaming exercise form videos from YouTube when you tap **Watch**.
 
 Interface follows the Nuvetrix App Design System — Material 3 Expressive, shape as a state, spring motion and Bricolage Grotesque/Figtree/JetBrains Mono bundled with the app — with a brightness and an accent the user picks independently.
 
@@ -92,7 +92,7 @@ The release APK lands at `build/app/outputs/flutter-apk/app-release.apk`. Prebui
 flutter test
 ```
 
-670+ tests covering unit conversion and BMI, BMR/TDEE and goal clamping, streak edge cases, weekday resolution, catalog integrity and cuisine balance, WCAG contrast across all ten brightness-and-accent combinations, the Material 3 Expressive theme and its widgets, the lobed `CookieBorder` geometry, the two-axis theme migration, and a full backup export/import round-trip against a real SQLite database via `sqflite_common_ffi` — including six classes of malformed input that must be rejected without touching existing data.
+887 tests covering unit conversion and BMI, BMR/TDEE and goal clamping, streak edge cases, weekday resolution, catalog integrity and cuisine balance, WCAG contrast across all ten brightness-and-accent combinations, the Material 3 Expressive theme and its widgets, the lobed `CookieBorder` geometry, the two-axis theme migration, and a full backup export/import round-trip against a real SQLite database via `sqflite_common_ffi` — including six classes of malformed input that must be rejected without touching existing data.
 
 ---
 
@@ -118,7 +118,7 @@ The database migrates in place across schema versions; existing installs keep th
 
 | Permission | Why |
 |---|---|
-| `INTERNET` | Streaming exercise form videos when you tap WATCH. Nothing else. |
+| `INTERNET` | Streaming exercise form videos when you tap Watch. Nothing else. |
 | `POST_NOTIFICATIONS` | Local training reminders, scheduled on-device from local data. |
 | `RECEIVE_BOOT_COMPLETED` | Re-arming those reminders after a restart. |
 
