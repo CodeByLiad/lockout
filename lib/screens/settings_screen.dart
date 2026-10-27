@@ -149,13 +149,38 @@ class SettingsBodyState extends State<SettingsBody> {
     _setField(controller, value);
   }
 
-  /// Writes text this screen chose itself — a recalculated target, not a
-  /// read. It moves the baseline with it, so the next reload does not
-  /// mistake the screen's own edit for the user's.
+  /// Writes text this screen chose itself — a recalculated target, a height
+  /// re-rendered in the other unit — rather than a value read from the
+  /// database. It moves the baseline with it, so the next reload does not
+  /// mistake the screen's own edit for the user's and refuse to refresh the
+  /// field ever again.
   void _setField(TextEditingController controller, String value) {
     controller.text = value;
     _loadedText[controller] = value;
   }
+
+  /// Moves the baseline of every controller a save has just persisted onto
+  /// what that controller now holds.
+  ///
+  /// The counterpart of [_markSaved] for text, and the half of the dirty
+  /// check that is easy to forget: a field whose text sits above its
+  /// baseline is treated as unsaved typing, and nothing about saving it
+  /// changes its text. Without this the field stays "edited" for the rest
+  /// of the session — it stops following the database, so an import lands
+  /// under it and leaves it showing the old value, and the next press of
+  /// the same save button writes that stale value back over the imported
+  /// row. [_setField] is not used here on purpose: assigning
+  /// `controller.text` collapses the selection to the end, which would move
+  /// the caret of a field the user may still be typing in.
+  void _markFieldsSaved(List<TextEditingController> controllers) {
+    for (final controller in controllers) {
+      _loadedText[controller] = controller.text;
+    }
+  }
+
+  /// The three controllers that hold one value between them.
+  List<TextEditingController> get _heightCtrls =>
+      [_heightCmCtrl, _heightFtCtrl, _heightInCtrl];
 
   /// The non-text half of [_loadedText].
   ///
@@ -289,6 +314,7 @@ class SettingsBodyState extends State<SettingsBody> {
     await db.saveSetting('height_cm', cm.toStringAsFixed(2));
     await db.saveSetting('height_unit', _heightUnit);
     _markSaved('height_unit', _heightUnit);
+    _markFieldsSaved(_heightCtrls);
     widget.onSettingsUpdated();
     _toast('Saved height ${Units.formatHeight(cm, _heightUnit)}.');
   }
@@ -302,6 +328,7 @@ class SettingsBodyState extends State<SettingsBody> {
       _foodTabEnabled ? 'true' : 'false',
     );
     _markSaved('food_tab_enabled', _foodTabEnabled);
+    _markFieldsSaved([_calorieCtrl]);
     widget.onSettingsUpdated();
     _toast('Saved food settings.');
   }
@@ -323,6 +350,11 @@ class SettingsBodyState extends State<SettingsBody> {
     );
     await db.saveSetting('goal_weeks', _weeksCtrl.text.trim());
     await db.saveSetting('training_days_per_week', _daysPerWeek.toString());
+    // Every field this card owns is now on disk, so none of them is
+    // unsaved typing any more. `_calorieCtrl` is not in the list: this path
+    // does not persist what is in it — it replaces it below, through
+    // `_setField`, which moves that baseline itself.
+    _markFieldsSaved([..._heightCtrls, _ageCtrl, _targetWeightCtrl, _weeksCtrl]);
 
     final plan = await GoalService.instance.recalculateAndSaveTarget();
     if (!mounted) return;
@@ -388,15 +420,28 @@ class SettingsBodyState extends State<SettingsBody> {
 
   /// Keeps the hidden unit's fields in sync so switching units never loses
   /// the value the user just typed.
+  ///
+  /// Through [_setField], not a bare `controller.text =`: this is the
+  /// screen writing its own re-rendering of a value, not the user editing
+  /// one, and a bare assignment left all three controllers reading as
+  /// edited forever after. It does not even take a typed value to trigger
+  /// that — a round trip through `_resolveHeightCm` turns a loaded `175`
+  /// into `175.0` (`Units.feetInchesToCm(5, 8.9)` is 175.006), and that one
+  /// character is the whole difference the dirty check looks at. The cost
+  /// is the symmetrical one: a height typed but not saved, then carried
+  /// through a unit switch, is a value the screen has re-rendered, so a
+  /// reload refreshes it like any other unedited field. That is the smaller
+  /// loss — the field is two taps from its own save button, and the
+  /// alternative was an import being silently overwritten.
   void _switchHeightUnit(String unit) {
     final cm = _resolveHeightCm();
     setState(() {
       _heightUnit = unit;
-      _heightCmCtrl.text = cm.toStringAsFixed(cm % 1 == 0 ? 0 : 1);
+      _setField(_heightCmCtrl, cm.toStringAsFixed(cm % 1 == 0 ? 0 : 1));
       final split = Units.cmToFeetInches(cm);
-      _heightFtCtrl.text = split.feet.toString();
-      _heightInCtrl.text =
-          split.inches.toStringAsFixed(split.inches % 1 == 0 ? 0 : 1);
+      _setField(_heightFtCtrl, split.feet.toString());
+      _setField(_heightInCtrl,
+          split.inches.toStringAsFixed(split.inches % 1 == 0 ? 0 : 1));
     });
   }
 
@@ -527,12 +572,23 @@ class SettingsBodyState extends State<SettingsBody> {
 
     setState(() => _busy = true);
     SettingsBody.importInFlight.value = true;
-    final result = await BackupService.instance.pickAndImport();
-    // Dropped ahead of the `mounted` guard on purpose: this future outlives
-    // the widget, so a lock cleared after that guard would survive the
-    // screen that raised it and leave the nav bar dead for the rest of the
-    // session.
-    SettingsBody.importInFlight.value = false;
+    final ImportResult result;
+    try {
+      result = await BackupService.instance.pickAndImport();
+    } finally {
+      // Dropped in a `finally`, and ahead of the `mounted` guard, for the
+      // same reason twice over: a lock this method fails to clear is not
+      // undone by anything else. `pickAndImport` turns every fault it
+      // authors into an `ImportResult`, but it says itself that a database
+      // which will not open at all is "outside that structure and throws",
+      // and its `columnTypes` read is unguarded. Cleared after the call
+      // instead, that throw leaves the lock up for the life of the process
+      // — a bottom nav bar that never works again, with nothing on screen
+      // to explain it. And this future outlives the widget, so a clear
+      // behind the `mounted` guard would survive the screen that raised it
+      // in exactly the same way.
+      SettingsBody.importInFlight.value = false;
+    }
     if (!mounted) return;
     setState(() => _busy = false);
 

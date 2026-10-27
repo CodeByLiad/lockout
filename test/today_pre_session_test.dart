@@ -249,8 +249,8 @@ void main() {
       final ramp = LockoutSemantics.of(context).categoryRamp;
 
       expect(tiles.map((t) => t.color).toSet(), {colors.inverseSurface},
-          reason: 'one fill for all eight, and the one role whose authored '
-              'foreground is the `surface` glyph NvIconTile paints');
+          reason: 'one fill for all eight, and the one neutral that stands '
+              'clear of the surface behind it in both brightnesses');
       expect(tiles.where((t) => ramp.contains(t.color)), isEmpty,
           reason: 'a quick action is not a day category; re-keying the ramp '
               'on grid position is the defect this guards');

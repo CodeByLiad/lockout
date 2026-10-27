@@ -1,9 +1,18 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lockout/theme/lockout_semantics.dart';
 import 'package:lockout/widgets/house/nv_icon_tile.dart';
 
 import 'test_helpers.dart';
+
+double _contrast(Color a, Color b) {
+  final la = a.computeLuminance();
+  final lb = b.computeLuminance();
+  return (math.max(la, lb) + 0.05) / (math.min(la, lb) + 0.05);
+}
 
 Widget _host({VoidCallback? onTap, Color color = const Color(0xFF884422)}) {
   return MaterialApp(
@@ -71,6 +80,60 @@ void main() {
 
     final decoration = _tileContainer(tester).decoration! as BoxDecoration;
     expect(decoration.color, const Color(0xFF123456));
+  });
+
+  testWidgets('the glyph follows the fill it was handed, on both sides',
+      (tester) async {
+    // The defect this guards: the glyph was pinned to `colorScheme.surface`,
+    // which is only legible on a fill the scheme happens to pair with it.
+    // Hand the tile a light fill and a dark one in the SAME theme — a glyph
+    // read off the theme cannot tell them apart, so it comes back identical
+    // and this fails.
+    await tester.pumpWidget(_host(color: const Color(0xFFF2F2F2)));
+    await tester.pumpAndSettle();
+    final onLightFill = tester.widget<Icon>(find.byType(Icon)).color;
+
+    await tester.pumpWidget(_host(color: const Color(0xFF101010)));
+    await tester.pumpAndSettle();
+    final onDarkFill = tester.widget<Icon>(find.byType(Icon)).color;
+
+    expect(onLightFill, isNot(onDarkFill),
+        reason: 'one theme, two fills: a glyph that does not read the fill '
+            'paints the same colour on both and is invisible on one');
+    expect(onLightFill, LockoutSemantics.onCategoryColor(
+        const Color(0xFFF2F2F2)));
+    expect(onDarkFill, LockoutSemantics.onCategoryColor(
+        const Color(0xFF101010)));
+  });
+
+  testWidgets('the glyph clears 3:1 on a fill the scheme does not pair with',
+      (tester) async {
+    // Deliberately the mismatched pairs, not the ramp: every ramp colour
+    // already clears 3:1 against `colorScheme.surface`, so a ramp loop
+    // passes against the pinned glyph too and guards nothing. A fill on the
+    // same side as the theme's own `surface` — a dark fill under the dark
+    // theme, a light one under the light theme — is where reading the glyph
+    // off the theme collapses to about 1:1.
+    Future<double> contrastOn(TestAppearance appearance, Color fill) async {
+      await tester.pumpWidget(MaterialApp(
+        theme: lockoutTestTheme(appearance),
+        home: Scaffold(
+          body: NvIconTile(
+            icon: Icons.restaurant,
+            color: fill,
+            label: 'Log food',
+            onTap: () {},
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+      return _contrast(fill, tester.widget<Icon>(find.byType(Icon)).color!);
+    }
+
+    expect(await contrastOn(darkAppearance, const Color(0xFF101010)),
+        greaterThanOrEqualTo(3.0));
+    expect(await contrastOn(lightAppearance, const Color(0xFFF2F2F2)),
+        greaterThanOrEqualTo(3.0));
   });
 
   testWidgets('the label sits under the tile in sentence case',

@@ -17,6 +17,7 @@ import 'package:lockout/services/nutrition_planner.dart';
 import 'package:lockout/theme/accents.dart';
 import 'package:lockout/theme/lockout_theme.dart';
 import 'package:lockout/widgets/house/nv_grouped_list.dart';
+import 'package:lockout/widgets/house/nv_segmented_button.dart';
 import 'package:lockout/widgets/house/nv_switch.dart';
 import 'package:lockout/widgets/house/nv_text_field.dart';
 import 'package:lockout/widgets/lockout_card.dart';
@@ -355,6 +356,117 @@ void main() {
     }
   });
 
+  group('a notification service that will not start', () {
+    // Declared ahead of the import group on purpose, and it has to stay
+    // there. That group calls
+    // `AndroidFlutterLocalNotificationsPlugin.registerWith()`, which
+    // installs a platform instance for the rest of the process, and
+    // `NotificationService` latches `_ready` on its own singleton once that
+    // instance answers. After it has run, nothing in this file can still
+    // reach the state these two tests are about: a notification plugin that
+    // is simply not there, which is what `flutter test` gives by default
+    // and what a device whose channel is unavailable gives in the field.
+    //
+    // `main.dart` guards its own boot call and reports the failure, on the
+    // stated grounds that "the toggles in Settings already handle a service
+    // that is not running". These are the two places that has to be true
+    // of: the toggle that comment names, and the import tail, where the
+    // throw landed between the restore and the user being told it had
+    // happened.
+
+    /// Lets `init()` get as far as the notification plugin.
+    ///
+    /// `init()` asks for the local timezone first, and an unmocked platform
+    /// channel under `flutter test` never answers at all — that await never
+    /// returns, which is a different failure from the one under test and
+    /// would mask it. This mocks the one channel that is merely a
+    /// dependency of the code under test. The notification plugin itself is
+    /// left exactly as absent as it is on a device with no channel for it,
+    /// where `_plugin.initialize` throws a `LateInitializationError`
+    /// reaching for a platform instance nothing ever registered.
+    void answerTheTimezoneChannel(WidgetTester tester) {
+      const timezone = MethodChannel('flutter_timezone');
+      tester.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(timezone, (call) async => 'UTC');
+      addTearDown(() => tester.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(timezone, null));
+    }
+
+    testWidgets('switching reminders on refuses rather than throwing',
+        (tester) async {
+      answerTheTimezoneChannel(tester);
+      await pumpSettings(tester);
+
+      final toggle = find.widgetWithText(NvSwitchRow, 'Daily training nudge');
+      await tester.tap(
+        find.descendant(of: toggle, matching: find.byType(Switch)),
+      );
+      await settle(tester);
+
+      expect(tester.takeException(), isNull,
+          reason: 'the toggle awaits `requestPermission()`, which awaits an '
+              '`init()` that throws here, with nothing between them');
+      expect(tester.widget<NvSwitchRow>(toggle).value, isFalse,
+          reason: 'a switch that goes on while the service is dead promises '
+              'reminders that can never fire');
+      expect(find.textContaining('Notification permission denied'),
+          findsOneWidget,
+          reason: 'a service that cannot start and a user who declines are '
+              'the same outcome for this caller: no reminders, and a switch '
+              'that stays off rather than lying');
+
+      await tester.pump(const Duration(seconds: 6));
+    });
+
+    testWidgets('an import still finishes when the reminders it restores '
+        'cannot be scheduled', (tester) async {
+      // The same failure, in the place it costs the most: `rescheduleAll()`
+      // sits between the restore and `onSettingsUpdated()` plus the "Import
+      // complete" toast, so an unguarded one applied the import, left the OS
+      // holding the pre-restore schedule, and told the user nothing at all.
+      answerTheTimezoneChannel(tester);
+
+      final realPicker = FilePickerPlatform.instance;
+      FilePickerPlatform.instance = _StubFilePicker(jsonEncode({
+        'app': 'lockout',
+        'schemaVersion': 2,
+        'data': {
+          'user_settings': [
+            {'key': 'reminders_enabled', 'value': 'true'},
+            {'key': 'reminder_hour', 'value': '7'},
+          ],
+        },
+      }));
+      addTearDown(() => FilePickerPlatform.instance = realPicker);
+      addTearDown(() => SettingsBody.importInFlight.value = false);
+
+      tester.view.physicalSize = const Size(800, 6000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      var callbacks = 0;
+      await tester.pumpWidget(MaterialApp(
+        theme: lockoutTestTheme(),
+        home: SettingsScreen(onSettingsUpdated: () => callbacks++),
+      ));
+      await settle(tester);
+
+      await tester.tap(find.text('Import backup JSON'));
+      await settle(tester);
+      await tester.tap(find.text('Choose file'));
+      await settle(tester);
+
+      expect(tester.takeException(), isNull);
+      expect(callbacks, 1, reason: 'onSettingsUpdated must still fire');
+      expect(find.textContaining('Import complete'), findsOneWidget,
+          reason: 'the import applied, so the user must be told so even when '
+              'the reminders inside it cannot be scheduled');
+
+      await tester.pump(const Duration(seconds: 6));
+    });
+  });
+
   group('a restore of a hand-edited backup still finishes', () {
     /// The two channels `NotificationService.rescheduleAll` touches. Both
     /// must be mocked: an unmocked platform channel under `flutter test`
@@ -528,6 +640,54 @@ void main() {
       expect(SettingsBody.importInFlight.value, isFalse,
           reason: 'a lock that outlives its import leaves the nav bar dead '
               'for the rest of the session');
+    });
+
+    // The same lock, and the one way it can still be left up: a throw out
+    // of `pickAndImport()`. It guards every path it authors except the bare
+    // `await DatabaseService.instance.columnTypes(table)` in
+    // `importFromJson`, and its own doc comment says so — "a database that
+    // will not open at all is outside that structure and **throws**".
+    // Unguarded, that strands `importInFlight` (and `_busy`) true for the
+    // life of the process, which is a bottom nav bar that never works
+    // again: the one outcome the comment above the clear is reasoning
+    // about.
+    //
+    // Structural, reluctantly, and the only test in this group that is.
+    // Making that call throw from a test needs a seam that does not exist:
+    // the throw is two singletons down (`BackupService.instance` ->
+    // `DatabaseService.instance`), neither takes an injected collaborator,
+    // and the one lever that would do it — an unopenable database — is out
+    // of reach because `DatabaseService` caches its `Database` in a private
+    // static with nothing that closes or resets it. Every other way in is
+    // already guarded: the picker, the file read and the restore each come
+    // back as an `ImportResult`, which is a normal return. So this pins the
+    // shape instead, and the shape is the whole fix — the clear has to be
+    // in a `finally` that wraps the call, not after it.
+    test('the nav lock is cleared in a finally, not after the call', () {
+      final source = blankComments(
+        File('lib/screens/settings_screen.dart').readAsStringSync(),
+      );
+      final start = source.indexOf('Future<void> _import() async {');
+      expect(start, isNonNegative, reason: '_import has been renamed');
+      final body = source.substring(start, source.indexOf('\n  }', start));
+
+      final raise = body.indexOf('importInFlight.value = true');
+      final opened = body.indexOf('try {', raise);
+      final call = body.indexOf('pickAndImport()', opened);
+      final closed = body.indexOf('} finally {', call);
+      final clear = body.indexOf('importInFlight.value = false', closed);
+
+      expect(raise, isNonNegative);
+      expect(opened, greaterThan(raise),
+          reason: 'the lock is raised, then the call that can throw must be '
+              'entered through a try');
+      expect(call, greaterThan(opened),
+          reason: 'the import call must be inside that try, not before it');
+      expect(closed, greaterThan(call));
+      expect(clear, greaterThan(closed),
+          reason: 'a clear that sits after the call instead of in a finally '
+              'is skipped by a throw, and the nav bar stays locked for the '
+              'rest of the session');
     });
   });
 
@@ -938,6 +1098,262 @@ void main() {
             .value,
         isFalse,
       );
+    });
+
+    /// The sex control's current selection, read off the widget it was
+    /// handed to rather than off whichever label looks highlighted.
+    Sex selectedSex(WidgetTester tester) => tester
+        .widget<NvSegmentedButton<Sex>>(find.byType(NvSegmentedButton<Sex>))
+        .selected;
+
+    // --- the other half of the dirty check: advancing the baseline ---
+    //
+    // `_loadInto` refuses to overwrite a field whose text has moved away
+    // from what was last loaded into it. That is only half a rule: unless
+    // every path that *persists* a field also moves that field's baseline
+    // onto what it has just written, the field counts as edited for the
+    // rest of the session. It then stops following the database — an
+    // import lands and the field keeps showing the old value — and the
+    // next save writes that stale value straight back over the imported
+    // row. The three tests below pin the two triggers (a save, and a unit
+    // switch that re-renders the same height through `_resolveHeightCm`)
+    // and the data loss at the end of them.
+
+    testWidgets('a height field that has been saved still follows a later '
+        'import', (tester) async {
+      final tab = await pumpHostedProfile(tester);
+
+      await type(tester, 'Height (cm)', '180');
+      await tester.tap(find.text('Save height'));
+      await settle(tester);
+
+      // What an import does: the row changes under a field the user is no
+      // longer editing, because the edit was committed.
+      await DatabaseService.instance.saveSetting('height_cm', '150.00');
+      await tab.currentState!.reload();
+      await settle(tester);
+
+      expect(fieldText(tester, 'Height (cm)'), '150',
+          reason: 'the save left the baseline on the value loaded before '
+              'it, so the field read as unsaved typing forever after and '
+              'stopped following the database');
+
+      await tester.pump(const Duration(seconds: 6));
+    });
+
+    testWidgets('a unit round trip does not stop the height field following '
+        'the database', (tester) async {
+      final tab = await pumpHostedProfile(tester);
+
+      // No typing at all, which is what makes this the case a user reaches
+      // by accident. The round trip re-renders 175 as "175.0" —
+      // `Units.feetInchesToCm(5, 8.9)` is 175.006 — and that one character
+      // of difference was enough to mark all three height controllers as
+      // edited for the rest of the session.
+      await tester.tap(find.text('Feet / inches'));
+      await settle(tester);
+      await tester.tap(find.text('Centimetres'));
+      await settle(tester);
+
+      await DatabaseService.instance.saveSetting('height_cm', '150.00');
+      await tab.currentState!.reload();
+      await settle(tester);
+
+      expect(fieldText(tester, 'Height (cm)'), '150',
+          reason: 'two taps on the unit control, with nothing typed, left '
+              'the height field pinned to its old value');
+    });
+
+    testWidgets('a height left over from a unit switch is not written back '
+        'over an import', (tester) async {
+      final tab = await pumpHostedProfile(tester);
+
+      await tester.tap(find.text('Feet / inches'));
+      await settle(tester);
+      await tester.tap(find.text('Centimetres'));
+      await settle(tester);
+
+      await DatabaseService.instance.saveSetting('height_cm', '150.00');
+      await tab.currentState!.reload();
+      await settle(tester);
+
+      await tester.tap(find.text('Save height'));
+      await settle(tester);
+
+      expect(
+        await DatabaseService.instance
+            .getSetting('height_cm', defaultValue: ''),
+        '150.00',
+        reason: 'a field nobody edited overwrote the imported height with '
+            'the value it was still showing',
+      );
+
+      await tester.pump(const Duration(seconds: 6));
+    });
+
+    // The same rule on the other two save paths. Each is its own test
+    // because each advances its own set of baselines: a fix that remembers
+    // the card it was reported against and forgets the other two leaves the
+    // defect exactly where it was.
+
+    testWidgets('a calorie target that has been saved still follows a later '
+        'import', (tester) async {
+      final tab = await pumpHostedProfile(tester);
+
+      await type(tester, 'Daily calorie target (kcal)', '1800');
+      await tester.tap(find.text('Save food settings'));
+      await settle(tester);
+
+      await DatabaseService.instance.saveSetting('calorie_target', '2345');
+      await tab.currentState!.reload();
+      await settle(tester);
+
+      expect(fieldText(tester, 'Daily calorie target (kcal)'), '2345');
+
+      await tester.pump(const Duration(seconds: 6));
+    });
+
+    testWidgets('an age saved by Calculate my target still follows a later '
+        'import', (tester) async {
+      final tab = await pumpHostedProfile(tester);
+
+      await type(tester, 'Age', '41');
+      await tester.tap(find.text('Calculate my target'));
+      await settle(tester);
+
+      await DatabaseService.instance.saveSetting('age', '30');
+      await tab.currentState!.reload();
+      await settle(tester);
+
+      expect(fieldText(tester, 'Age'), '30');
+
+      await tester.pump(const Duration(seconds: 12));
+    });
+
+    // --- the two `_loadValue` slots that are not the nutrition switch ---
+    //
+    // Neutering `_loadValue` reddened only the `food_tab_enabled` switch:
+    // the sex control and the height unit are held exactly the same way —
+    // set by one widget, written by a button somewhere else — and had no
+    // test at all, in either direction.
+
+    testWidgets('an unsaved sex choice survives the save of another card',
+        (tester) async {
+      await pumpHostedProfile(tester);
+      expect(selectedSex(tester), Sex.male);
+
+      await tester.tap(find.text('Female'));
+      await settle(tester);
+      expect(selectedSex(tester), Sex.female);
+
+      await tester.tap(find.text('Save height'));
+      await settle(tester);
+
+      expect(selectedSex(tester), Sex.female,
+          reason: 'saving the height card re-read sex and threw away a '
+              'choice the user had not saved yet');
+
+      await tester.pump(const Duration(seconds: 6));
+    });
+
+    testWidgets('a sex the user has not touched still follows the database',
+        (tester) async {
+      final tab = await pumpHostedProfile(tester);
+
+      await DatabaseService.instance.saveSetting('sex', 'female');
+      await tab.currentState!.reload();
+      await settle(tester);
+
+      expect(selectedSex(tester), Sex.female);
+    });
+
+    testWidgets('an unsaved height unit survives the save of another card',
+        (tester) async {
+      await pumpHostedProfile(tester);
+
+      await tester.tap(find.text('Feet / inches'));
+      await settle(tester);
+
+      // A different card entirely — the unit is only persisted by this
+      // card's own save button and by "Calculate my target".
+      await tester.tap(find.text('Save food settings'));
+      await settle(tester);
+
+      expect(find.widgetWithText(NvTextField, 'Height (ft)'), findsOneWidget,
+          reason: 'saving the food card re-read height_unit and dropped the '
+              'unit the user had just chosen');
+
+      await tester.pump(const Duration(seconds: 6));
+    });
+
+    testWidgets('a height unit the user has not touched still follows the '
+        'database', (tester) async {
+      final tab = await pumpHostedProfile(tester);
+
+      await DatabaseService.instance.saveSetting('height_unit', 'ft');
+      await tab.currentState!.reload();
+      await settle(tester);
+
+      expect(find.widgetWithText(NvTextField, 'Height (ft)'), findsOneWidget);
+    });
+
+    // --- and the `_markSaved` call on each of the two paths that persist
+    // one of those slots ---
+
+    testWidgets('a height unit saved from the units card follows a later '
+        'import', (tester) async {
+      final tab = await pumpHostedProfile(tester);
+
+      await tester.tap(find.text('Feet / inches'));
+      await settle(tester);
+      await tester.tap(find.text('Save height'));
+      await settle(tester);
+
+      await DatabaseService.instance.saveSetting('height_unit', 'cm');
+      await tab.currentState!.reload();
+      await settle(tester);
+
+      expect(find.widgetWithText(NvTextField, 'Height (cm)'), findsOneWidget,
+          reason: 'the unit was saved, so it is no longer an unsaved choice '
+              'and must follow an import like every other field');
+
+      await tester.pump(const Duration(seconds: 6));
+    });
+
+    testWidgets('a height unit saved by Calculate my target follows a later '
+        'import', (tester) async {
+      final tab = await pumpHostedProfile(tester);
+
+      await tester.tap(find.text('Feet / inches'));
+      await settle(tester);
+      await tester.tap(find.text('Calculate my target'));
+      await settle(tester);
+
+      await DatabaseService.instance.saveSetting('height_unit', 'cm');
+      await tab.currentState!.reload();
+      await settle(tester);
+
+      expect(find.widgetWithText(NvTextField, 'Height (cm)'), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 12));
+    });
+
+    testWidgets('a sex saved by Calculate my target follows a later import',
+        (tester) async {
+      final tab = await pumpHostedProfile(tester);
+
+      await tester.tap(find.text('Female'));
+      await settle(tester);
+      await tester.tap(find.text('Calculate my target'));
+      await settle(tester);
+
+      await DatabaseService.instance.saveSetting('sex', 'male');
+      await tab.currentState!.reload();
+      await settle(tester);
+
+      expect(selectedSex(tester), Sex.male);
+
+      await tester.pump(const Duration(seconds: 12));
     });
   });
 

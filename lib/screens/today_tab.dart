@@ -956,13 +956,16 @@ class TodayTabState extends State<TodayTab> {
     // saturated tones under a restrained system (QA ruling 2). The icon and
     // the label already identify the action.
     //
-    // `inverseSurface` rather than a container tone: `NvIconTile` paints its
-    // glyph `colorScheme.surface`, and `inverseSurface` is the one role
-    // whose authored foreground *is* `surface` (`onInverseSurface`, the
-    // snackbar pairing), so the glyph is legible by the scheme's own
-    // definition instead of by coincidence. A `surfaceContainerHigh` tile
-    // would put that glyph at about 1.2:1. It also leaves the accent for
-    // the two or three elements per screen `accents.dart` reserves it for.
+    // `inverseSurface` rather than a container tone: it is the one neutral
+    // that stands clear of the surface it sits on in both brightnesses, so
+    // the tile reads as a tile — a `surfaceContainerHigh` fill all but
+    // disappears into the card behind it. Measured ~17.2:1 light and
+    // ~15.6:1 dark against the glyph, both roles accent-independent, so
+    // those two numbers cover all ten combinations. `NvIconTile` derives
+    // that glyph from whatever fill it is handed, so this choice is about
+    // the fill against the *background*, not about the glyph. It also
+    // leaves the accent for the two or three elements per screen
+    // `accents.dart` reserves it for.
     final tileColor = Theme.of(context).colorScheme.inverseSurface;
 
     return [

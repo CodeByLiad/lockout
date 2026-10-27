@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest_all.dart' as tzdata;
@@ -29,7 +30,16 @@ class NotificationService {
 
   bool _ready = false;
 
-  /// Safe to call more than once; later calls are no-ops.
+  /// Brings the plugin up. Safe to call more than once: a no-op once it has
+  /// succeeded, a fresh attempt after it has not.
+  ///
+  /// **Throws** when the plugin cannot be initialised — a platform channel
+  /// that is not there is not something this class can paper over for the
+  /// one caller that genuinely wants to know. That caller is `main.dart`'s
+  /// boot path, which catches it, reports it and carries on booting.
+  /// Nothing else calls this directly: every reminder path in this class
+  /// goes through [_ensureReady] instead, so no UI call site has to repeat
+  /// that guard.
   Future<void> init() async {
     if (_ready) return;
 
@@ -55,10 +65,37 @@ class NotificationService {
     _ready = true;
   }
 
+  /// [init], with a start-up failure reported rather than thrown.
+  ///
+  /// The single guard every entry point below shares, and the reason none
+  /// of them needs one of its own. Before it, `init()`'s throw ran straight
+  /// out of `requestPermission()` and `rescheduleAll()` into five unguarded
+  /// call sites in `settings_screen.dart` as an unhandled async error —
+  /// the worst of them inside the import tail, where it took
+  /// `onSettingsUpdated()` and the "Import complete" toast with it, so a
+  /// restore applied while the OS kept the pre-restore schedule and the
+  /// user was told nothing. A service that cannot start and a user who
+  /// declines are the same outcome for every one of those callers: no
+  /// reminders. This reports it as that.
+  ///
+  /// A retry each time rather than a latched failure: nothing here can tell
+  /// a channel that is permanently absent from one that was not registered
+  /// yet, and the cost of being wrong is one caught error.
+  Future<bool> _ensureReady() async {
+    try {
+      await init();
+    } catch (error, stack) {
+      debugPrint('Notifications are unavailable: $error\n$stack');
+    }
+    return _ready;
+  }
+
   /// Asks the OS for permission. Returns false when the user declines, so the
-  /// settings toggle can refuse to switch on rather than lying to the user.
+  /// settings toggle can refuse to switch on rather than lying to the user —
+  /// and equally when the service never started, which costs the user the
+  /// same thing.
   Future<bool> requestPermission() async {
-    await init();
+    if (!await _ensureReady()) return false;
 
     final android = _plugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
@@ -102,7 +139,7 @@ class NotificationService {
   /// Rebuilds every scheduled reminder from current settings. Call after any
   /// settings change so the OS never holds a stale schedule.
   Future<void> rescheduleAll() async {
-    await init();
+    if (!await _ensureReady()) return;
     await cancelAll();
 
     final db = DatabaseService.instance;
@@ -175,8 +212,13 @@ class NotificationService {
   }
 
   /// Immediate confirmation so the user can see the channel actually works.
+  ///
+  /// Guarded like everything else here even though its only call site sits
+  /// behind a reminders toggle that cannot be on unless the service
+  /// started: the guard belongs to the method, not to the one caller that
+  /// happens to have checked already.
   Future<void> showTestNotification() async {
-    await init();
+    if (!await _ensureReady()) return;
     await _plugin.show(
       9999,
       'LOCKOUT reminders are on',
@@ -185,8 +227,10 @@ class NotificationService {
     );
   }
 
+  /// Same guard, same reasoning as [showTestNotification]: today the only
+  /// caller is [rescheduleAll], which has already checked.
   Future<void> cancelAll() async {
-    await init();
+    if (!await _ensureReady()) return;
     await _plugin.cancel(_workoutReminderId);
     await _plugin.cancel(_streakReminderId);
   }
