@@ -17,6 +17,8 @@ import 'package:lockout/services/nutrition_planner.dart';
 import 'package:lockout/services/schedule_service.dart';
 import 'package:lockout/theme/accents.dart';
 import 'package:lockout/theme/lockout_theme.dart';
+import 'package:lockout/theme/theme_controller.dart';
+import 'package:lockout/widgets/house/nv_button.dart';
 import 'package:lockout/widgets/house/nv_grouped_list.dart';
 import 'package:lockout/widgets/house/nv_segmented_button.dart';
 import 'package:lockout/widgets/house/nv_switch.dart';
@@ -662,8 +664,17 @@ void main() {
       // reaches a cast that throws. What is left is the unenumerable class
       // — a schema the running build does not know, a disk error — and the
       // consequence of leaving it unguarded is unchanged and is what this
-      // pins: the import applies, the OS keeps the pre-restore schedule,
-      // `onSettingsUpdated()` never fires and the user is told nothing.
+      // pins: the import applies, `onSettingsUpdated()` never fires and the
+      // user is told nothing.
+      //
+      // What the OS is left holding, checked rather than assumed:
+      // `rescheduleAll()` calls `await cancelAll()`
+      // (`notification_service.dart:143`) BEFORE it builds any body, so by
+      // the time the injected throw lands both reminder ids are already
+      // cancelled. Reminders are OFF — not stale — until the next settings
+      // change calls `rescheduleAll()` again. That is worse than keeping
+      // the pre-restore schedule, and it is what the toast has to be judged
+      // against.
       final realCalendar = ScheduleService.calendarDay;
       addTearDown(() => ScheduleService.calendarDay = realCalendar);
       ScheduleService.calendarDay =
@@ -705,9 +716,12 @@ void main() {
 
       expect(tester.takeException(), isNull,
           reason: 'an unguarded await here is an unhandled async error');
+      expect(imported.notificationCalls, contains('cancel'),
+          reason: 'the first half of the premise: the throw lands after '
+              '`cancelAll()`, so the OS has already been emptied');
       expect(imported.notificationCalls, isNot(contains('zonedSchedule')),
-          reason: 'the premise: the reschedule really did fail, so the OS '
-              'is still holding the pre-restore schedule');
+          reason: 'the second half: nothing was put back, so reminders are '
+              'off entirely until the next settings change');
       expect(imported.callbacks, 1,
           reason: 'the import applied, so the host has to re-read it '
               'whatever the reminder schedule did');
@@ -717,7 +731,50 @@ void main() {
       expect(find.textContaining('Reminders could not be rescheduled'),
           findsOneWidget,
           reason: 'and it must not report an unqualified success while the '
-              'OS holds a schedule the import replaced');
+              'OS holds no reminder at all');
+      expect(find.textContaining('Open Notifications to set them again'),
+          findsOneWidget,
+          reason: 'reminders are off, so the message has to name the repair '
+              'rather than leave the user assuming the old schedule '
+              'survived');
+      expect(imported.toast.backgroundColor,
+          lockoutTestTheme().colorScheme.errorContainer,
+          reason: 'it must look different from a clean import');
+    });
+
+    testWidgets(
+        'a throw in the theme re-read says the fields could not be read back',
+        (tester) async {
+      // `reloaded` started `true` and was falsified only by the INNER catch
+      // around `_loadSettings()`. `ThemeController.load()` runs AHEAD of it
+      // and is the tail's first await, so a throw there jumped straight to
+      // the outer catch with `_loadSettings()` never called at all: the
+      // toast read "Import complete. N rows restored." while every field on
+      // screen — height, age, target weight, the calorie target, the
+      // reminder switches — still held its pre-import value. The one
+      // sentence that would have warned the user is the one the flag
+      // suppressed.
+      //
+      // `ThemeController.readStoredChoice` is the seam that class documents
+      // for exactly this (restored below).
+      final realRead = ThemeController.readStoredChoice;
+      addTearDown(() => ThemeController.readStoredChoice = realRead);
+      ThemeController.readStoredChoice =
+          () => throw StateError('the theme read failed');
+
+      // A clean payload, so "could not be read back" can only have come
+      // from the failed re-read and not from a coerced cell.
+      final imported = await runImport(tester, backupJson(81.25));
+
+      expect(tester.takeException(), isNull,
+          reason: 'an unguarded await here is an unhandled async error');
+      expect(imported.callbacks, 1,
+          reason: 'the rows did land, so the host still has to re-read');
+      expect(find.textContaining('Import complete'), findsOneWidget,
+          reason: 'the restore applied and the user must be told so');
+      expect(find.textContaining('could not be read back'), findsOneWidget,
+          reason: 'the screen is showing pre-import values, so reporting a '
+              'clean read-back is a false report of what is on screen');
       expect(imported.toast.backgroundColor,
           lockoutTestTheme().colorScheme.errorContainer,
           reason: 'it must look different from a clean import');
@@ -825,6 +882,59 @@ void main() {
       );
     });
 
+    testWidgets('a section extra takes the margin its own kind asks for',
+        (tester) async {
+      // The half the assertion above could not reach. It pins the heading
+      // and the `rows` group — the two children that were already right —
+      // while `_section` handed everything in `extras` the grouped-list
+      // margin regardless of what it was. A paragraph, a text field and a
+      // save button are text and controls, not cards, so house line 226
+      // puts them on the same 20dp margin as the heading above them rather
+      // than 4dp inside it.
+      await pumpSettings(tester);
+
+      expect(
+        tester.getTopLeft(find.text('Applies instantly.')).dx,
+        LockoutTheme.screenPadding,
+        reason: 'a line of body text in a section is text',
+      );
+      expect(
+        tester.getTopLeft(find.widgetWithText(NvTextField, 'Height (cm)')).dx,
+        LockoutTheme.screenPadding,
+        reason: 'and so is a field the user types into',
+      );
+      expect(
+        tester.getTopLeft(find.widgetWithText(NvButton, 'Save height')).dx,
+        LockoutTheme.screenPadding,
+        reason: 'and a save button, which is neither a card nor a grouped '
+            'list',
+      );
+
+      // The other half, and the reason this cannot be "move extras to 20":
+      // a grouped list keeps the 16dp margin wherever it is passed in, so
+      // the split is by what the child IS, not by which slot it arrived in.
+      // Activity level is a real grouped list that reaches `_section`
+      // through `extras`, and it has to stay flush with the "Days per week"
+      // group three lines above it.
+      expect(
+        tester
+            .getTopLeft(find.ancestor(
+              of: find.text(ActivityLevel.sedentary.label),
+              matching: find.byType(NvGroupedList),
+            ))
+            .dx,
+        LockoutTheme.cardPadding,
+        reason: 'an extra that is a grouped list keeps the grouped-list '
+            'margin',
+      );
+      expect(
+        tester.getTopLeft(find.text('Activity level')).dx,
+        LockoutTheme.screenPadding,
+        reason: 'while the caption above it is text, exactly as the section '
+            'heading above the first group is',
+      );
+    });
+
     testWidgets('a tappable row clears the 48dp touch target', (tester) async {
       // An accent swatch draws no text, so the only handle on it is the
       // semantics label that makes it usable in the first place; enabled
@@ -843,24 +953,31 @@ void main() {
       expect(importButton.height, greaterThanOrEqualTo(LockoutTheme.minTouchTarget));
 
       // The training-days stepper now lives behind a sheet (section 8
-      // prefers a sheet to a dialog for a choice); open it to reach its
-      // hand-built buttons, which still take their size from `LockoutTheme`
-      // by their own `constraints:`, not from a component theme the two
-      // checks above already pin — so they need their own assertion.
+      // prefers a sheet to a dialog for a choice); open it to reach its two
+      // buttons, which are sized by `NvIconButton` rather than by the
+      // component theme the two checks above already pin — so they need
+      // their own assertion.
       await tester.tap(find.text('Days per week'));
       await settle(tester);
 
       final decrementButton = tester.getSize(
-        find.widgetWithIcon(IconButton, Icons.remove_circle_outline),
+        find.widgetWithIcon(NvIconButton, Icons.remove_circle_outline),
       );
       expect(decrementButton.width, greaterThanOrEqualTo(LockoutTheme.minTouchTarget));
       expect(decrementButton.height, greaterThanOrEqualTo(LockoutTheme.minTouchTarget));
 
       final incrementButton = tester.getSize(
-        find.widgetWithIcon(IconButton, Icons.add_circle_outline),
+        find.widgetWithIcon(NvIconButton, Icons.add_circle_outline),
       );
       expect(incrementButton.width, greaterThanOrEqualTo(LockoutTheme.minTouchTarget));
       expect(incrementButton.height, greaterThanOrEqualTo(LockoutTheme.minTouchTarget));
+
+      // Both ends announce what they do. The framework `IconButton` pair
+      // these replaced carried no tooltip and no label at all, so TalkBack
+      // reached a stepper of two unnamed buttons; `NvIconButton` makes the
+      // description a required parameter.
+      expect(find.bySemanticsLabel('One day fewer'), findsOneWidget);
+      expect(find.bySemanticsLabel('One day more'), findsOneWidget);
 
       // Dismiss the sheet by tapping its scrim before checking what sits
       // behind it.

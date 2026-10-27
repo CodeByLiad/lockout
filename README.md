@@ -92,7 +92,7 @@ The release APK lands at `build/app/outputs/flutter-apk/app-release.apk`. Prebui
 flutter test
 ```
 
-887 tests covering unit conversion and BMI, BMR/TDEE and goal clamping, streak edge cases, weekday resolution, catalog integrity and cuisine balance, WCAG contrast across all ten brightness-and-accent combinations, the Material 3 Expressive theme and its widgets, the lobed `CookieBorder` geometry, the two-axis theme migration, and a full backup export/import round-trip against a real SQLite database via `sqflite_common_ffi` — including six classes of malformed input that must be rejected without touching existing data.
+880+ tests covering unit conversion and BMI, BMR/TDEE and goal clamping, streak edge cases, weekday resolution, catalog integrity and cuisine balance, WCAG contrast across all ten brightness-and-accent combinations, the Material 3 Expressive theme and its widgets, the lobed `CookieBorder` geometry, the two-axis theme migration, and a full backup export/import round-trip against a real SQLite database via `sqflite_common_ffi` — including six classes of malformed input that must be rejected without touching existing data.
 
 ---
 

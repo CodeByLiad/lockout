@@ -83,8 +83,7 @@ class ThemeController extends ChangeNotifier {
   /// Writes back whenever the stored value was in the old format, so the
   /// migration happens once rather than on every launch.
   Future<void> load() async {
-    final saved =
-        await DatabaseService.instance.getSetting(_settingKey, defaultValue: '');
+    final saved = await readStoredChoice();
     final (brightness, accent) = _resolve(saved);
     _brightness = brightness;
     _accent = accent;
@@ -104,6 +103,26 @@ class ThemeController extends ChangeNotifier {
     }
     notifyListeners();
   }
+
+  /// The stored choice, behind a seam, because a throw out of it is
+  /// reachable and otherwise untestable.
+  ///
+  /// [load] is the FIRST await in the Settings import tail. A throw here is
+  /// the only way that tail reaches its outer catch before `_loadSettings()`
+  /// has run — the case where every field on screen still holds a pre-import
+  /// value while the toast would otherwise report a clean read-back. Nothing
+  /// a backup file can carry reproduces it: `user_settings.value` is
+  /// `TEXT NOT NULL`, so a null aborts the restore before the tail runs and a
+  /// JSON number is converted to text by the column's own affinity. What is
+  /// left is the unenumerable class — a disk error, a schema the running
+  /// build does not know — and the read is two singletons down with no
+  /// injected collaborator, so this is the seam, written the way
+  /// `ScheduleService.calendarDay` is.
+  @visibleForTesting
+  static Future<String> Function() readStoredChoice = _readStoredChoice;
+
+  static Future<String> _readStoredChoice() =>
+      DatabaseService.instance.getSetting(_settingKey, defaultValue: '');
 
   /// Persist first, then commit.
   ///

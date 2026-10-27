@@ -504,12 +504,14 @@ void main() {
       // `NvSegmentedButton` out of the match: there is no word boundary
       // inside an identifier.
       //
-      // The framework `IconButton` is deliberately NOT on this list yet.
-      // `settings_screen.dart:950` and `:967` still use two of them for
-      // the training-days stepper, and `NvIconButton` is the control they
-      // owe; adding it here turns this suite red on shipping code, which
-      // is the same bargain `exercise_picker.dart` is recorded under
-      // above. It is owed, not absolved.
+      // `IconButton` is on the list now. It was held off it while the
+      // training-days stepper in `settings_screen.dart` still built two of
+      // them — recorded only here, citing line numbers the same wave's
+      // edits had already moved, and pointing at no ledger entry. The
+      // stepper is two `NvIconButton`s today, which is a drop-in: 48dp by
+      // construction, a required tooltip, and a null `onPressed` for the
+      // disabled end of the range. So the rule's own title is true of
+      // every screen in its list again.
       const frameworkButtons = [
         'ElevatedButton',
         'FilledButton',
@@ -517,6 +519,7 @@ void main() {
         'TextButton',
         'MaterialButton',
         'CupertinoButton',
+        'IconButton',
       ];
 
       for (final path in _rebuiltScreens) {

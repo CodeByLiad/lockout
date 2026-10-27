@@ -42,10 +42,29 @@ class NvSegmentedButton<T> extends StatelessWidget {
       children: [
         for (var i = 0; i < segments.length; i++) ...[
           Expanded(
+            // `excludeSemantics`, and the tap on the annotation rather than
+            // only on the `GestureDetector`. Two separate reasons, one
+            // knot:
+            //
+            // Without the exclusion the `Text` below contributes the same
+            // string a second time. `SemanticsNode.absorb` CONCATENATES two
+            // labels instead of rejecting the merge, so the appearance
+            // picker announced "System, System" on every one of its three
+            // segments — a doubled label, where house section 11 asks for
+            // one.
+            //
+            // And the exclusion drops the `GestureDetector`'s own semantics,
+            // tap action included, so the action has to be restated here or
+            // the segment reaches a screen reader announced and unpressable.
+            // That is the Critical this catalog has already shipped once, on
+            // `NvButton`; `nv_button.dart:120-131` carries the same pair for
+            // the same reason.
             child: Semantics(
               button: true,
               selected: segments[i].value == selected,
               label: segments[i].label,
+              onTap: () => onChanged(segments[i].value),
+              excludeSemantics: true,
               child: GestureDetector(
                 onTap: () => onChanged(segments[i].value),
                 child: AnimatedContainer(

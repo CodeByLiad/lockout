@@ -171,6 +171,16 @@ void main() {
     expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue,
         reason: 'a row announced as a button must offer an activation');
 
+    // The row's own `Semantics` deliberately carries NO label, so the title
+    // and the supporting line merge up from the `Text` widgets and are
+    // announced once each. Pinned because the merge is a concatenation, not
+    // a rejection: the day someone adds `label: title` to that annotation to
+    // "fix" an unlabelled row, every row in the app starts announcing its
+    // title twice, which is exactly what `NvSegmentedButton` was doing.
+    expect(node.label, 'Row 0\n3 sets',
+        reason: 'the row announces its title and its supporting line once '
+            'each, in order');
+
     semanticTap(tester, find.byType(NvListItem).first);
     await tester.pumpAndSettle();
     expect(taps, 1,

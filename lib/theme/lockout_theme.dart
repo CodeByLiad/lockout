@@ -343,12 +343,18 @@ class LockoutTheme {
           animationDuration: LockoutMotion.springFast.duration,
         ).copyWith(
           // The button pill, not the large one: shape-as-state gives a
-          // button pill -> 12 and reserves the pill -> 16 for the 60dp
-          // hero control, which is `NvButton(large: true)` and styles
-          // itself. A `FilledButton` here is the 48dp main action, so it
-          // morphs to the same 12 its outlined and text siblings do —
-          // otherwise the finish sheet shows a 16dp press on one button
-          // and a 12dp press on the one beside it.
+          // button pill -> 12 and reserves the pill -> 16 for the 60dp hero
+          // control, which is `NvButton(large: true)` and styles itself.
+          //
+          // The size is NOT the reason, and saying it was got the number
+          // wrong in the direction that matters: `minimumSize` three lines
+          // up is `controlHeight`, 52, not 48 — the same 52-against-48
+          // mismatch that moved Today's three framework buttons onto
+          // `NvButton` in the first place. What makes 12 right here is that
+          // this is an ordinary button rather than the hero one: it morphs
+          // to the same 12 its outlined and text siblings do, or a sheet
+          // with two buttons side by side presses one to 16 and the other
+          // to 12.
           shape: _statefulShape(radiusButtonRest, radiusButtonActive),
         ),
       ),

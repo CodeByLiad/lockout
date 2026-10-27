@@ -89,6 +89,15 @@ void main() {
     expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue,
         reason: 'a segment announced as a button must offer an activation');
 
+    // What it announces, not merely that it announces something. The
+    // annotation's `label` and the `Text` underneath it are the same string,
+    // and `SemanticsNode.absorb` CONCATENATES two labels rather than
+    // rejecting the merge, so without `excludeSemantics` TalkBack read every
+    // segment of the appearance picker twice: "System, System".
+    expect(node.label, 'System',
+        reason: 'the segment and the text inside it are one node, so the '
+            'label must be carried once');
+
     semanticTap(tester, find.text('System'));
     await tester.pumpAndSettle();
     expect(chosen, 'system',

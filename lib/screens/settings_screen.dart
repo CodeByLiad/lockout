@@ -612,9 +612,19 @@ class SettingsBodyState extends State<SettingsBody> {
     // inner guard and its own wording.
     //
     // Unguarded, any of them took the reschedule, the callback and the
-    // "Import complete" toast with it: the import applied, the OS kept the
-    // pre-restore reminder schedule, and the user was told nothing at all.
-    var reloaded = true;
+    // "Import complete" toast with it: the import applied, nobody was told,
+    // and the OS was left either holding the pre-restore schedule or —
+    // once `rescheduleAll()` has run its own `await cancelAll()` — holding
+    // no reminder at all.
+    //
+    // `reloaded` is NOT "did `_loadSettings()` throw". It is "is what the
+    // user is looking at the thing that was just imported", and its starting
+    // value has to be the pessimistic one: `ThemeController.load()` below is
+    // the FIRST await in this try, and a throw there jumps to the outer
+    // catch with `_loadSettings()` never called at all. Started `true` and
+    // falsified only by the inner catch, that case reported a clean
+    // read-back over a screen still showing every pre-import value.
+    var reloaded = false;
     var tailFailed = false;
     try {
       // Restored settings include the theme, so re-read everything.
@@ -633,8 +643,11 @@ class SettingsBodyState extends State<SettingsBody> {
       // Re-reading settings is best-effort; everything after it is not.
       try {
         await _loadSettings();
+        reloaded = true;
       } catch (_) {
-        reloaded = false;
+        // Left false. Nothing else sets it, so every other way out of this
+        // try — including the two awaits that bracket this one — lands on
+        // the same honest answer.
       }
 
       await NotificationService.instance.rescheduleAll();
@@ -652,14 +665,26 @@ class SettingsBodyState extends State<SettingsBody> {
       widget.onSettingsUpdated();
 
       // Three different things can be worth warning about, and they are
-      // independent. `reloaded` is the belt above failing — rare, and now
-      // unreachable from an import. `coercedValues` is the common one: the
+      // independent. `reloaded` is "the fields on screen are the imported
+      // ones" — false if `_loadSettings()` threw, and equally false if
+      // anything ahead of it did. `coercedValues` is the common one: the
       // restore succeeded by rewriting cells it could not read as `0`, and
       // saying only "Import complete" there reports a silent edit of the
-      // user's own data as an unqualified success. `tailFailed` is the
-      // theme re-read or the reschedule going down, which leaves the OS
-      // holding a schedule this import replaced — an unqualified success
-      // there is the same lie in a different place.
+      // user's own data as an unqualified success. `tailFailed` is the theme
+      // re-read or the reschedule going down.
+      //
+      // What `tailFailed` leaves behind — which is what its copy has to be
+      // judged against, and it is NOT one state. A throw inside
+      // `rescheduleAll()` arrives after that method's own `await cancelAll()`
+      // (`notification_service.dart:143`), so the OS holds nothing and
+      // reminders are OFF until some later settings change reschedules them.
+      // A throw in `ThemeController.load()` arrives before `rescheduleAll()`
+      // is called at all, so the OS keeps the pre-restore schedule. "Could
+      // not be rescheduled" is true of both and promises neither — but on its
+      // own it reads as "the old schedule is still running", which in the
+      // first and likelier case is wrong, and leaves a user with no reminders
+      // and no reason to act. So it names the repair instead: changing any
+      // notification setting calls `rescheduleAll()` again.
       // `_toast` is a no-op once unmounted, so it needs no guard of its own.
       final rewritten = result.coercedValues > 0;
       final restored = reloaded
@@ -669,7 +694,8 @@ class SettingsBodyState extends State<SettingsBody> {
               'of them could not be read back. Check the backup file.';
       _toast(
         tailFailed
-            ? '$restored Reminders could not be rescheduled.'
+            ? '$restored Reminders could not be rescheduled. Open '
+                'Notifications to set them again.'
             : restored,
         warn: !reloaded || rewritten || tailFailed,
       );
@@ -751,6 +777,20 @@ class SettingsBodyState extends State<SettingsBody> {
   /// `_sectionCaption` this screen used to call ahead of every card: a
   /// grouped list reads as one object on its own, so the section no longer
   /// needs a bounding card to say the same thing twice.
+  ///
+  /// House line 226 gives text and headings a 20dp margin and grouped lists
+  /// and cards a 16dp one, and this method is the only thing that knows
+  /// which of its children is which. For [rows] that is settled by
+  /// construction. For [extras] it was not: every extra took the
+  /// grouped-list margin, so "Applies instantly.", two body paragraphs,
+  /// every [NvTextField], the "Activity level" caption and all three save
+  /// buttons sat 4dp inside the heading that named them.
+  ///
+  /// Marked per child with [_CardMargin] rather than split into two lists:
+  /// the Food section interleaves a paragraph, fields, a calculated card, a
+  /// warning card and a second field in the single order the user reads down
+  /// the screen, and two slots would force every card below every line of
+  /// text.
   Widget _section(
     BuildContext context, {
     required String heading,
@@ -767,25 +807,44 @@ class SettingsBodyState extends State<SettingsBody> {
           child: Text(heading, style: Theme.of(context).textTheme.titleMedium),
         ),
         const SizedBox(height: LockoutTheme.headingGap),
-        Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: LockoutTheme.cardPadding,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (rows.isNotEmpty) NvGroupedList(children: rows),
-              if (extras.isNotEmpty) ...[
-                const SizedBox(height: LockoutTheme.spaceMd),
-                ...extras,
-              ],
+        // One stretch column for both slots, so a save button still fills
+        // the width it had when the padding was on the column instead of on
+        // each child.
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (rows.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: LockoutTheme.cardPadding,
+                ),
+                child: NvGroupedList(children: rows),
+              ),
+            if (extras.isNotEmpty) ...[
+              const SizedBox(height: LockoutTheme.spaceMd),
+              for (final extra in extras)
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: _marginFor(extra)),
+                  child: extra,
+                ),
             ],
-          ),
+          ],
         ),
         const SizedBox(height: LockoutTheme.sectionGap),
       ],
     );
   }
+
+  /// 16 for a card or a grouped list, 20 for everything else.
+  ///
+  /// Text is the default rather than the exception because that is what the
+  /// extras mostly are, and because the failure mode of getting it wrong is
+  /// the quieter one: a paragraph 4dp out of line with its heading reads as
+  /// a mistake, while a card 4dp out of line with the group above it reads
+  /// as a different card.
+  static double _marginFor(Widget extra) => extra is _CardMargin
+      ? LockoutTheme.cardPadding
+      : LockoutTheme.screenPadding;
 
   /// Section 12.2's header: a large cookie avatar and the app name.
   ///
@@ -955,30 +1014,32 @@ class SettingsBodyState extends State<SettingsBody> {
       extras: [
         Text('Activity level', style: theme.textTheme.titleLarge),
         const SizedBox(height: LockoutTheme.headingGap),
-        NvGroupedList(
-          children: [
-            for (final a in ActivityLevel.values)
-              NvListItem(
-                title: a.label,
-                supporting: a.blurb,
-                onTap: () => _setActivity(a),
-                trailing: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text('x${a.multiplier}',
-                        style: theme.textTheme.labelMedium),
-                    if (a == _activity) ...[
-                      const SizedBox(height: LockoutTheme.spaceXs),
-                      const NvStatusBadge(
-                        label: 'Selected',
-                        kind: NvBadgeKind.accent,
-                      ),
+        _CardMargin(
+          child: NvGroupedList(
+            children: [
+              for (final a in ActivityLevel.values)
+                NvListItem(
+                  title: a.label,
+                  supporting: a.blurb,
+                  onTap: () => _setActivity(a),
+                  trailing: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text('x${a.multiplier}',
+                          style: theme.textTheme.labelMedium),
+                      if (a == _activity) ...[
+                        const SizedBox(height: LockoutTheme.spaceXs),
+                        const NvStatusBadge(
+                          label: 'Selected',
+                          kind: NvBadgeKind.accent,
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ],
     );
@@ -995,36 +1056,34 @@ class SettingsBodyState extends State<SettingsBody> {
         builder: (context, setSheetState) => Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            IconButton(
+            // `NvIconButton`, not the framework `IconButton` these two used
+            // to be. It is a drop-in — 48dp by construction rather than by a
+            // hand-written `BoxConstraints`, and `onPressed: null` is still
+            // what disables an end of the range — and it brings a tooltip
+            // the framework pair never carried, so each end of the stepper
+            // now announces what it does instead of the name of its icon.
+            NvIconButton(
+              icon: Icons.remove_circle_outline,
+              tooltip: 'One day fewer',
               onPressed: _daysPerWeek > 2
                   ? () {
                       _setDaysPerWeek(_daysPerWeek - 1);
                       setSheetState(() {});
                     }
                   : null,
-              icon: const Icon(Icons.remove_circle_outline),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(
-                minWidth: LockoutTheme.minTouchTarget,
-                minHeight: LockoutTheme.minTouchTarget,
-              ),
             ),
             const SizedBox(width: LockoutTheme.spaceMd),
             Text('$_daysPerWeek', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(width: LockoutTheme.spaceMd),
-            IconButton(
+            NvIconButton(
+              icon: Icons.add_circle_outline,
+              tooltip: 'One day more',
               onPressed: _daysPerWeek < 6
                   ? () {
                       _setDaysPerWeek(_daysPerWeek + 1);
                       setSheetState(() {});
                     }
                   : null,
-              icon: const Icon(Icons.add_circle_outline),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(
-                minWidth: LockoutTheme.minTouchTarget,
-                minHeight: LockoutTheme.minTouchTarget,
-              ),
             ),
           ],
         ),
@@ -1108,65 +1167,76 @@ class SettingsBodyState extends State<SettingsBody> {
         ),
         if (plan != null) ...[
           const SizedBox(height: LockoutTheme.spaceMd),
-          Container(
-            padding: const EdgeInsets.all(LockoutTheme.cardPadding),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.primaryContainer,
-              borderRadius: BorderRadius.circular(LockoutTheme.radiusCard),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Daily target',
-                      style: theme.textTheme.labelMedium
-                          ?.copyWith(color: theme.colorScheme.onPrimaryContainer),
-                    ),
-                    NvStatusBadge(
-                      label: plan.directionLabel,
-                      kind: NvBadgeKind.neutral,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: LockoutTheme.spaceXs),
-                Text(
-                  '${plan.targetKcal} kcal',
-                  style: theme.textTheme.headlineSmall
-                      ?.copyWith(color: theme.colorScheme.onPrimaryContainer),
-                ),
-                const SizedBox(height: LockoutTheme.spaceSm),
-                Text(
-                  'BMR ${plan.bmr.round()} -> TDEE ${plan.tdee.round()} -> '
-                  '${plan.dailyDeltaKcal >= 0 ? '+' : ''}${plan.dailyDeltaKcal} kcal/day',
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.onPrimaryContainer),
-                ),
-                const SizedBox(height: LockoutTheme.spaceXs),
-                Text(
-                  'P ${plan.proteinG}g  ·  C ${plan.carbG}g  ·  F ${plan.fatG}g',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onPrimaryContainer,
-                    fontWeight: FontWeight.w600,
+          // A card, so it takes the card margin and stays flush with the
+          // grouped lists on the rest of the screen rather than with the
+          // paragraph above it.
+          _CardMargin(
+            child: Container(
+              padding: const EdgeInsets.all(LockoutTheme.cardPadding),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer,
+                borderRadius: BorderRadius.circular(LockoutTheme.radiusCard),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Daily target',
+                        style: theme.textTheme.labelMedium
+                            ?.copyWith(color: theme.colorScheme.onPrimaryContainer),
+                      ),
+                      NvStatusBadge(
+                        label: plan.directionLabel,
+                        kind: NvBadgeKind.neutral,
+                      ),
+                    ],
                   ),
-                ),
-              ],
+                  const SizedBox(height: LockoutTheme.spaceXs),
+                  Text(
+                    '${plan.targetKcal} kcal',
+                    style: theme.textTheme.headlineSmall
+                        ?.copyWith(color: theme.colorScheme.onPrimaryContainer),
+                  ),
+                  const SizedBox(height: LockoutTheme.spaceSm),
+                  Text(
+                    'BMR ${plan.bmr.round()} -> TDEE ${plan.tdee.round()} -> '
+                    '${plan.dailyDeltaKcal >= 0 ? '+' : ''}${plan.dailyDeltaKcal} kcal/day',
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: theme.colorScheme.onPrimaryContainer),
+                  ),
+                  const SizedBox(height: LockoutTheme.spaceXs),
+                  Text(
+                    'P ${plan.proteinG}g  ·  C ${plan.carbG}g  ·  F ${plan.fatG}g',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onPrimaryContainer,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           if (plan.warning != null) ...[
             const SizedBox(height: LockoutTheme.spaceSm),
-            Container(
-              padding: const EdgeInsets.all(LockoutTheme.spaceMd),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.tertiaryContainer,
-                borderRadius: BorderRadius.circular(LockoutTheme.radiusField),
-              ),
-              child: Text(
-                plan.warning!,
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.onTertiaryContainer),
+            // Marked with the card above it rather than with the paragraph
+            // it reads like: it is a filled surface stacked directly under
+            // that card, and two filled surfaces on different margins read
+            // as a layout fault rather than as two kinds of thing.
+            _CardMargin(
+              child: Container(
+                padding: const EdgeInsets.all(LockoutTheme.spaceMd),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.tertiaryContainer,
+                  borderRadius: BorderRadius.circular(LockoutTheme.radiusField),
+                ),
+                child: Text(
+                  plan.warning!,
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.onTertiaryContainer),
+                ),
               ),
             ),
           ],
@@ -1383,4 +1453,22 @@ class _AccentSwatch extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Marks a `_section` extra as a card or a grouped list, so it takes the 16dp
+/// margin rather than the 20dp one text and controls take.
+///
+/// A pass-through marker rather than a wrapper that paints anything: the
+/// child decides how it looks, this decides only which margin `_section`
+/// gives it. It is the one thing a bare `Widget` cannot tell the frame about
+/// itself — `extra is NvGroupedList` would answer for one case and miss the
+/// two `Container` cards in the Food section, which are grouped-list-shaped
+/// surfaces without being that type.
+class _CardMargin extends StatelessWidget {
+  final Widget child;
+
+  const _CardMargin({required this.child});
+
+  @override
+  Widget build(BuildContext context) => child;
 }

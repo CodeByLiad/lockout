@@ -124,6 +124,22 @@ It is recorded rather than fixed, not recorded instead of fixed: adding the name
 `_preRebuildWidgets` today turns the suite red on shipping code, and a guard that is green
 because its list is short is not the same as code that is clean.
 
+## Catalog debt — recorded, not fixed on this branch
+
+**`NvButton` and `NvIconButton` are not keyboard-reachable.** Both are a
+`Semantics` wrapping a `GestureDetector` (`lib/widgets/house/nv_button.dart:120-131`
+and `:234-245`) with no `Focus`, no `FocusableActionDetector` and no focus
+highlight, so unlike the `FilledButton`/`OutlinedButton`/`IconButton` trio they
+replaced they cannot be reached with Tab or activated with Enter — Today now has
+no focusable button at all. TalkBack is **unaffected**: the semantic tap action is
+declared explicitly on the annotation (`onTap: widget.onPressed`), which is the
+path a screen reader uses, and it is covered by a `semanticTap` test on each
+control. This is catalog-wide rather than anything a screen did, so it is owed to
+a catalog task that adds focus to every interactive component at once — adding it
+to one control would make exactly one button on a screen tab-reachable, which is
+worse than none. Not a blocker for an Android-only touch app, which is why it is
+here rather than in the fix wave.
+
 ## Catalog-internal — reached only from `lib/widgets/house/`
 
 Not orphans. The two shape-as-state primitives are now consumed by the catalog rather than
