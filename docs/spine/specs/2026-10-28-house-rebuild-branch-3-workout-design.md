@@ -1,7 +1,9 @@
-# House rebuild — branch 2 (Workout)
+# House rebuild — branch 3 (Workout)
 
-Status: approved 2026-10-28. Branch: `house-rebuild-branch-2`, cut from `master` at `7fcce7f`
-(branch 1 merged via PR #2).
+Status: approved 2026-10-28 as branch 2, then deferred to branch 3 the same day. Branch 2 became
+the Expressive foundation (`docs/spine/specs/2026-10-28-expressive-foundation-design.md`), which
+this branch builds on, and task 1 (branch-1 loose ends) moved there. Re-frame before starting:
+colour roles, catalog APIs and icon shapes change underneath this design.
 
 Governing documents: `docs/design/nuvetrix-app-design-system.md` (the house system) and
 `docs/spine/specs/2026-10-07-house-rebuild-design.md` (branch 1). Everything branch 1's spec
