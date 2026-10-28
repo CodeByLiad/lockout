@@ -742,6 +742,13 @@ void main() {
           reason: 'it must look different from a clean import');
     });
 
+    // The test below replaces the seam; this one proves production holds the
+    // real read, the way `widget_test.dart` pins `calendarDay`.
+    test('the theme read production uses is the stored one', () {
+      expect(ThemeController.readStoredChoice,
+          same(ThemeController.defaultReadStoredChoice));
+    });
+
     testWidgets(
         'a throw in the theme re-read says the fields could not be read back',
         (tester) async {

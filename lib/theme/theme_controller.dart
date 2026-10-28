@@ -117,11 +117,12 @@ class ThemeController extends ChangeNotifier {
   /// left is the unenumerable class — a disk error, a schema the running
   /// build does not know — and the read is two singletons down with no
   /// injected collaborator, so this is the seam, written the way
-  /// `ScheduleService.calendarDay` is.
+  /// `ScheduleService.calendarDay` is. Tests that replace it must restore it.
   @visibleForTesting
-  static Future<String> Function() readStoredChoice = _readStoredChoice;
+  static Future<String> Function() readStoredChoice = defaultReadStoredChoice;
 
-  static Future<String> _readStoredChoice() =>
+  /// The production read [readStoredChoice] holds unless a test replaces it.
+  static Future<String> defaultReadStoredChoice() =>
       DatabaseService.instance.getSetting(_settingKey, defaultValue: '');
 
   /// Persist first, then commit.

@@ -48,6 +48,10 @@ token layer unchanged.
 - Any new package dependency. Shape, motion and the bespoke controls stay framework-only.
 - The token layer itself (`lib/theme/*`). It is sound and tested; it is consumed, not rewritten.
   `theme_controller.dart`'s migration in particular is not to be touched.
+  One recorded exception, made at dfe6b7c: `ThemeController` gained a `@visibleForTesting`
+  `readStoredChoice` seam over its stored-value read, so the Settings import tail's
+  `load()`-throws path could be tested. It is behaviour-preserving: the seam defaults to the same
+  read, and `_resolve`, the migration and the write-back are untouched.
 
 ---
 
