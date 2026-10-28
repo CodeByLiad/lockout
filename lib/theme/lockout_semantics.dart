@@ -81,8 +81,12 @@ class LockoutSemantics extends ThemeExtension<LockoutSemantics> {
   /// mid-tone accent can sit below any sensible threshold yet still need
   /// dark text, and a single threshold gets that case wrong.
   ///
-  /// `schemes_test.dart` holds both guarantees — >= 3.0 contrast for every
-  /// ramp accent of every scheme, and the argmax choice itself.
+  /// `palette_test.dart`'s `LockoutSemantics.onCategoryColor` group holds
+  /// both guarantees — >= 3.0 contrast for every ramp accent of both ramps,
+  /// and the argmax choice itself, pinned on #E23A2E because that is the
+  /// mid-tone a threshold implementation gets wrong. (They lived in
+  /// `schemes_test.dart` until it was deleted, and spent one review cycle
+  /// in no file at all.)
   static Color onCategoryColor(Color background) {
     final l = background.computeLuminance();
     final onDark = (max(l, _onDarkLuminance) + 0.05) /
@@ -142,9 +146,10 @@ class LockoutSemantics extends ThemeExtension<LockoutSemantics> {
       restDay: Color.lerp(restDay, other.restDay, t)!,
       chartLine: Color.lerp(chartLine, other.chartLine, t)!,
       chartFill: Color.lerp(chartFill, other.chartFill, t)!,
-      // Both ramps are always eight long — `schemes_test.dart` enforces it —
-      // so this pairs by index rather than guarding a length mismatch that
-      // cannot occur without that test already failing.
+      // Both ramps are always eight long — `palette_test.dart`'s "the ramp
+      // has eight entries, as categoryAt assumes" enforces it — so this
+      // pairs by index rather than guarding a length mismatch that cannot
+      // occur without that test already failing.
       categoryRamp: [
         for (var i = 0; i < categoryRamp.length; i++)
           Color.lerp(categoryRamp[i], other.categoryRamp[i], t)!,

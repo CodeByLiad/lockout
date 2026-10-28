@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/lockout_theme.dart';
+import 'morphing_surface.dart';
 
 /// One destination in the quick-action grid.
 class ActionItem {
@@ -46,23 +47,44 @@ class ActionGrid extends StatelessWidget {
 }
 
 /// A single quick-action tile.
-class ActionTile extends StatelessWidget {
+///
+/// Stateful only to carry its own pressed flag: shape-as-state means the
+/// corner radius is a function of the interaction, and a tile has to know
+/// whether it is being pressed to answer that. The morph itself lives in
+/// [MorphingSurface] so the duration and curve come from the motion tiers
+/// rather than from here.
+class ActionTile extends StatefulWidget {
   final ActionItem item;
 
   const ActionTile({super.key, required this.item});
 
   @override
+  State<ActionTile> createState() => _ActionTileState();
+}
+
+class _ActionTileState extends State<ActionTile> {
+  bool _pressed = false;
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final item = widget.item;
 
-    return Material(
+    return MorphingSurface(
+      restRadius: LockoutTheme.radiusField,
+      activeRadius: LockoutTheme.radiusButtonActive,
+      active: _pressed,
+      activeScale: LockoutTheme.pressScale,
       color: theme.colorScheme.surfaceContainer,
-      borderRadius: BorderRadius.circular(LockoutTheme.radiusButton),
-      child: InkWell(
-        onTap: item.onTap,
-        borderRadius: BorderRadius.circular(LockoutTheme.radiusButton),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: item.onTap,
+          onHighlightChanged: (pressed) {
+            if (pressed != _pressed) setState(() => _pressed = pressed);
+          },
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
             minWidth: LockoutTheme.minTouchTarget,
             minHeight: LockoutTheme.minTouchTarget,
           ),
@@ -78,7 +100,11 @@ class ActionTile extends StatelessWidget {
                   // full fill: legible against every scheme's surface without
                   // needing a per-colour foreground calculation.
                   color: item.color.withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(LockoutTheme.radiusPill),
+                  // One consistent squircle across every tile. These are
+                  // repeated small icon containers, so they must not rotate
+                  // a lobe count: colour already carries the category, and
+                  // two signals on one axis read as noise.
+                  borderRadius: BorderRadius.circular(LockoutTheme.radiusField),
                 ),
                 child: Icon(item.icon, size: 20, color: item.color),
               ),
@@ -95,7 +121,8 @@ class ActionTile extends StatelessWidget {
                   style: theme.textTheme.labelSmall,
                 ),
               ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

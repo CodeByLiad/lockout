@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'progress_tab.dart' show ProgressSegment;
+import '../theme/cookie_border.dart';
+import '../theme/lockout_motion.dart';
 import '../theme/lockout_semantics.dart';
 import '../theme/lockout_theme.dart';
 import '../models/models.dart';
@@ -10,11 +12,18 @@ import '../services/energy_estimator.dart';
 import '../services/goal_service.dart';
 import '../services/numeric_guard.dart';
 import '../services/schedule_service.dart';
-import '../widgets/action_grid.dart';
 import '../widgets/exercise_picker.dart';
-import '../widgets/home_hub.dart';
-import '../widgets/lockout_card.dart';
-import '../widgets/sheet_scaffold.dart';
+import '../widgets/house/nv_button.dart';
+import '../widgets/house/nv_cards.dart';
+import '../widgets/house/nv_empty_state.dart';
+import '../widgets/house/nv_grouped_list.dart';
+import '../widgets/house/nv_hero_card.dart';
+import '../widgets/house/nv_icon_tile.dart';
+import '../widgets/house/nv_dialog.dart';
+import '../widgets/house/nv_sheet.dart';
+import '../widgets/house/nv_status_badge.dart';
+import '../widgets/house/nv_wavy_progress.dart';
+import '../widgets/sparkline.dart';
 import 'exercise_video_screen.dart';
 
 /// One set inside a running session.
@@ -54,6 +63,56 @@ class _LiveExercise {
       .fold(0.0, (sum, s) => sum + s.weightKg * s.reps);
 }
 
+/// Everything Today's "numbers" rows need, resolved by the screen.
+///
+/// Nulls are meaningful: they mean "not on record", and a row renders a
+/// prompt instead of a number. A zero would be a lie.
+///
+/// Local to this screen rather than `_TodaySummary`: `home_hub.dart` was
+/// written for the previous design, and a rebuilt screen composes from
+/// `lib/widgets/house/` and the theme only.
+class _TodaySummary {
+  final int kcalEaten;
+
+  /// The daily calorie target. Nullable so a widget test can exercise the
+  /// "no target set" prompt with no database.
+  final int? kcalTarget;
+
+  final double? weightKg;
+  final double? weightDeltaKg;
+
+  /// Total estimated kcal burned today. Null means no session was logged
+  /// today at all. A non-null value of zero or less means a session *was*
+  /// logged but no estimate could be made for it, which reads as "estimate
+  /// unavailable" rather than denying the session happened.
+  final double? burnedTodayKcal;
+
+  /// The goal weight. Null when no goal is configured, in which case the
+  /// weight row states the weight without inventing a gap.
+  final double? targetWeightKg;
+
+  final double proteinEatenG;
+
+  /// Null until a nutrition plan exists to derive one from.
+  final int? proteinTargetG;
+
+  /// Recent weights, oldest first, for the trend line. Fewer than two points
+  /// cannot make a line.
+  final List<double> weightSeries;
+
+  const _TodaySummary({
+    required this.kcalEaten,
+    required this.kcalTarget,
+    required this.weightKg,
+    required this.weightDeltaKg,
+    required this.burnedTodayKcal,
+    this.targetWeightKg,
+    this.proteinEatenG = 0,
+    this.proteinTargetG,
+    this.weightSeries = const [],
+  });
+}
+
 class TodayTab extends StatefulWidget {
   /// Switches tabs by id — 'routines', 'food', 'body', 'log'. Supplied by
   /// MainScreen; null in tests that pump this tab on its own.
@@ -68,6 +127,17 @@ class TodayTab extends StatefulWidget {
   /// not offer a tap target that silently does nothing.
   final bool foodTabEnabled;
 
+  /// The wall clock every live-session reading goes through.
+  ///
+  /// Injectable for one case the ticker cannot reach on its own: Android
+  /// freezes a cached app mid-workout, so the process gets no timer
+  /// callbacks for minutes and then resumes with real time having moved.
+  /// A test can reproduce that exactly — advance this clock without
+  /// advancing the ticker — which is the only way to tell a self-correcting
+  /// clock apart from a tick-counted one. `DateTime.now` in production, and
+  /// nothing outside `lib/screens/today_tab.dart` passes it.
+  final DateTime Function() clock;
+
   // Non-const constructor: see "Why some constructors in this app are
   // not const" at the top of lib/widgets/day_block.dart.
   // ignore: prefer_const_constructors_in_immutables
@@ -75,6 +145,7 @@ class TodayTab extends StatefulWidget {
     super.key,
     this.onNavigate,
     this.foodTabEnabled = true,
+    this.clock = DateTime.now,
   });
 
   @override
@@ -85,7 +156,7 @@ class TodayTabState extends State<TodayTab> {
   ScheduledDay? _scheduled;
   bool _isLoading = true;
 
-  HomeHubSummary _summary = const HomeHubSummary(
+  _TodaySummary _summary = const _TodaySummary(
     kcalEaten: 0,
     kcalTarget: null,
     weightKg: null,
@@ -99,10 +170,21 @@ class TodayTabState extends State<TodayTab> {
   List<_LiveExercise> _liveExercises = [];
 
   int _elapsedSeconds = 0;
+
+  /// Seconds still to rest. Derived from [_restEndsAt] by `_syncRest`, never
+  /// counted down; it is a field only because the label and the bar both
+  /// read it on every build.
   int _restSeconds = 0;
-  // The rest duration `_beginRest` was called with, kept only so
-  // `_buildRestBar` can paint a remaining-time progress bar; the countdown
-  // itself is still driven solely by `_restSeconds`/`_restRunning` below.
+
+  /// When the running rest ends, in wall-clock time.
+  ///
+  /// The countdown's single source of truth, the way `_startedAt` is the
+  /// elapsed clock's. The +/-15s controls move this, not the counter.
+  DateTime? _restEndsAt;
+
+  /// The rest duration `_beginRest` was called with, kept so `_buildRestBar`
+  /// can paint a remaining-time progress bar. Moves with the +/-15s controls
+  /// so the bar's denominator never goes stale.
   int _restTotalSeconds = 0;
   bool _restRunning = false;
   Timer? _ticker;
@@ -118,6 +200,9 @@ class TodayTabState extends State<TodayTab> {
     _ticker?.cancel();
     super.dispose();
   }
+
+  /// The session's wall clock. See `TodayTab.clock`.
+  DateTime _now() => widget.clock();
 
   /// Called by MainScreen when the user returns to this tab, so a routine
   /// edited on the Routines tab, or a log entered on another tab, shows up
@@ -180,7 +265,7 @@ class TodayTabState extends State<TodayTab> {
 
     if (!mounted) return;
     setState(() {
-      _summary = HomeHubSummary(
+      _summary = _TodaySummary(
         kcalEaten: eaten,
         kcalTarget: snapshot.calorieTarget,
         weightKg: snapshot.currentWeightKg,
@@ -260,9 +345,10 @@ class TodayTabState extends State<TodayTab> {
       _sessionActive = true;
       _sessionTitle = title;
       _liveExercises = exercises;
-      _startedAt = DateTime.now();
+      _startedAt = _now();
       _elapsedSeconds = 0;
       _restSeconds = 0;
+      _restEndsAt = null;
       _restTotalSeconds = 0;
       _restRunning = false;
     });
@@ -284,24 +370,48 @@ class TodayTabState extends State<TodayTab> {
       if (!mounted) return;
       setState(() {
         if (_startedAt != null) {
-          _elapsedSeconds = DateTime.now().difference(_startedAt!).inSeconds;
+          _elapsedSeconds = _now().difference(_startedAt!).inSeconds;
         }
-        if (_restRunning) {
-          if (_restSeconds > 0) {
-            _restSeconds--;
-          } else {
-            _restRunning = false;
-          }
-        }
+        if (_restRunning) _syncRest();
       });
     });
   }
 
+  /// Recomputes the rest countdown from [_restEndsAt], exactly the way the
+  /// line above recomputes elapsed time from `_startedAt`.
+  ///
+  /// Decrementing a counter once per tick instead made the two clocks on
+  /// this screen disagree the moment the ticker missed a beat — and the case
+  /// where it misses is not an edge case, it is Android freezing a cached
+  /// app mid-workout. On resume elapsed snapped back to the truth and rest
+  /// did not: a 90s rest still read 60s after three real minutes.
+  ///
+  /// Call inside `setState`.
+  void _syncRest() {
+    final endsAt = _restEndsAt;
+    if (endsAt == null) {
+      _restSeconds = 0;
+      _restRunning = false;
+      return;
+    }
+    final msLeft = endsAt.difference(_now()).inMilliseconds;
+    if (msLeft <= 0) {
+      _restSeconds = 0;
+      _restRunning = false;
+      _restEndsAt = null;
+      return;
+    }
+    // Rounded up: a tick arriving a few milliseconds late still reads the
+    // second it is in. Truncating would skip a number on a slow frame.
+    _restSeconds = (msLeft / 1000).ceil();
+  }
+
   void _beginRest(int seconds) {
     setState(() {
-      _restSeconds = seconds;
+      _restEndsAt = _now().add(Duration(seconds: seconds));
       _restTotalSeconds = seconds;
       _restRunning = true;
+      _syncRest();
     });
   }
 
@@ -352,8 +462,8 @@ class TodayTabState extends State<TodayTab> {
     }
 
     final sessionId = DateTime.now().millisecondsSinceEpoch.toString();
-    final started = _startedAt ?? DateTime.now();
-    final duration = DateTime.now().difference(started).inSeconds;
+    final started = _startedAt ?? _now();
+    final duration = _now().difference(started).inSeconds;
     final sched = _scheduled;
 
     // Only completed sets are archived — an untouched set is not a data point.
@@ -412,8 +522,27 @@ class TodayTabState extends State<TodayTab> {
     // it, which nothing downstream can tell apart from a legitimately
     // detail-free entry. Same argument `deleteSessionLog` and
     // `restoreSessionLog` were given transactions for.
-    await DatabaseService.instance
-        .insertSessionWithSets(session.toMap(), setRows);
+    try {
+      await DatabaseService.instance
+          .insertSessionWithSets(session.toMap(), setRows);
+    } catch (_) {
+      // Nothing is cleared and the session stays live. This is the one
+      // moment the whole workout exists only in this widget's state, so
+      // ending the session on a failed write would destroy exactly the data
+      // the write failed to keep. Unguarded, the throw escaped this async
+      // callback: `_endSessionState` never ran, no snackbar appeared, and in
+      // release the user tapped Save and nothing happened at all.
+      //
+      // `ThemeController.load` guards a write whose loss costs nothing; this
+      // one costs a workout, so it is the one that has to say so out loud.
+      if (!mounted) return;
+      showNvSnackbar(
+        context: context,
+        message: 'Session not saved — the write failed. Your sets are still '
+            'here; tap Finish to try again.',
+      );
+      return;
+    }
 
     if (!mounted) return;
     // Refresh BURNED TODAY (and the rest of the summary) so the hub the user
@@ -422,46 +551,29 @@ class TodayTabState extends State<TodayTab> {
     await _loadSummary();
     if (!mounted) return;
     _endSessionState();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'SESSION SAVED - ${setRows.length} sets, ${_fmtWeight(session.totalVolumeKg)} kg volume',
-        ),
-      ),
+    showNvSnackbar(
+      context: context,
+      message: 'Session saved — ${setRows.length} sets, '
+          '${_fmtWeight(session.totalVolumeKg)} kg volume',
     );
   }
 
+  /// Section 8 allows a dialog for exactly this: a destructive
+  /// confirmation. The danger ink lives inside `showNvDestructiveDialog`,
+  /// which resolves `false` on a dismissal rather than null, so a caller
+  /// cannot read "dismissed" as "confirmed".
   Future<bool?> _confirmDiscard() {
-    final semantics = LockoutSemantics.of(context);
-    return showDialog<bool>(
+    return showNvDestructiveDialog(
       context: context,
-      // No `backgroundColor`/`shape` here — `LockoutTheme.build`'s
-      // `dialogTheme` already supplies both.
-      builder: (ctx) => AlertDialog(
-        title: const Text('Discard session?'),
-        content: Text(
-          _sessionCompletedSets > 0
-              ? '$_sessionCompletedSets logged '
-                  '${_sessionCompletedSets == 1 ? 'set' : 'sets'} will be '
-                  'lost. Discard ${_sessionCompletedSets == 1 ? 'it' : 'them'}?'
-              : 'No sets were logged, so there is nothing to archive. End the session?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Keep going'),
-          ),
-          TextButton(
-            // `semantics.danger`, not `colorScheme.error` — this is a
-            // destructive confirmation, exactly what that role is reserved
-            // for (see `LockoutSemantics`'s doc on `danger` vs `error`, and
-            // `log_tab.dart`'s DELETE ENTRY for the same rule).
-            style: TextButton.styleFrom(foregroundColor: semantics.danger),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Discard'),
-          ),
-        ],
-      ),
+      title: 'Discard session?',
+      body: _sessionCompletedSets > 0
+          ? '$_sessionCompletedSets logged '
+              '${_sessionCompletedSets == 1 ? 'set' : 'sets'} will be lost. '
+              'Discard ${_sessionCompletedSets == 1 ? 'it' : 'them'}?'
+          : 'No sets were logged, so there is nothing to archive. End the '
+              'session?',
+      confirmLabel: 'Discard',
+      cancelLabel: 'Keep going',
     );
   }
 
@@ -473,6 +585,7 @@ class TodayTabState extends State<TodayTab> {
       _startedAt = null;
       _restRunning = false;
       _restSeconds = 0;
+      _restEndsAt = null;
       _restTotalSeconds = 0;
       _elapsedSeconds = 0;
     });
@@ -507,11 +620,12 @@ class TodayTabState extends State<TodayTab> {
       // its own inset, and this tab's content should scroll under it.
       body: SafeArea(
         bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.all(LockoutTheme.screenPadding),
-          child:
-              _sessionActive ? _buildActiveSession() : _buildPreSession(context),
-        ),
+        child: _sessionActive
+            ? Padding(
+                padding: const EdgeInsets.all(LockoutTheme.screenPadding),
+                child: _buildActiveSession(),
+              )
+            : _buildPreSession(context),
       ),
       // Kept visible while the exercise list scrolls, rather than inline in
       // the body. This is TodayTab's own Scaffold (nested inside MainScreen's
@@ -521,9 +635,29 @@ class TodayTabState extends State<TodayTab> {
     );
   }
 
-  // --- PRE-SESSION (the HOME hub) ---
+  // --- PRE-SESSION (Today's landing surface) ---
+  //
+  // Rebuilt from the house component catalog rather than adapted from
+  // `HomeHub`. The hub was written for the previous design, and adapting it
+  // kept that design's decisions — a stack of uniform cards, an all-caps
+  // caption, a neutral hero — in places no token could reach.
+
+  /// One tile in the quick-action grid.
+  ///
+  /// Local to this screen rather than `ActionItem` from `action_grid.dart`:
+  /// a rebuilt screen composes from `lib/widgets/house/` and the theme only.
+  Widget _quickActionTile({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return NvIconTile(icon: icon, color: color, label: label, onTap: onTap);
+  }
 
   Widget _buildPreSession(BuildContext context) {
+    final theme = Theme.of(context);
+    final semantics = LockoutSemantics.of(context);
     final sched = _scheduled;
     final code = ScheduleService.weekdayCode(DateTime.now());
     final isRest = sched == null;
@@ -532,123 +666,381 @@ class TodayTabState extends State<TodayTab> {
     // start live — offer guidance to the Routines tab instead of a session
     // that would open with zero exercises.
     final isEmptyDay = sched != null && sched.exercises.isEmpty;
+    final setCount =
+        sched?.exercises.fold<int>(0, (sum, e) => sum + e.targetSets) ?? 0;
 
     return SingleChildScrollView(
-      child: HomeHub(
-        eyebrow: 'TODAY · $code',
-        title: isRest ? 'Rest day' : sched.day.name,
-        subtitle: isRest
-            ? 'Nothing scheduled. Train off-plan or take the day.'
-            : isEmptyDay
-                ? 'This training day has no exercises yet. Add them on the '
-                    'Routines tab, then come back to start the session.'
-                : _scheduleSubtitle(sched),
-        heroColor: LockoutSemantics.of(context).categoryAt(isRest ? 7 : 0),
-        heroActions: [
-          if (!isRest && !isEmptyDay)
-            FilledButton(
-              onPressed: _startScheduledSession,
-              child: const Text('Start session'),
+      padding: const EdgeInsets.only(
+        bottom: LockoutTheme.scrollBottomPadding,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Section 7.1: a tab screen starts with a large title, not a top
+          // app bar.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              LockoutTheme.screenPadding,
+              LockoutTheme.screenPadding,
+              LockoutTheme.screenPadding,
+              0,
             ),
-          FilledButton.tonal(
-            onPressed: _startCustomSession,
-            child: const Text('Custom session'),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isRest ? 'Rest day' : sched.day.name,
+                  style: theme.textTheme.displayMedium,
+                ),
+                const SizedBox(height: LockoutTheme.spaceXs),
+                Text(
+                  'Today · $code',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: LockoutTheme.headingGap),
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: LockoutTheme.cardPadding,
+            ),
+            child: NvHeroCard(
+              // Not the day's name: the screen title above already says it,
+              // and printing it twice in two sizes is not emphasis (device
+              // QA M2). A rest day carries no count at all rather than
+              // spending the one display-scale number on a zero (M1).
+              title: isRest ? 'Nothing scheduled' : "Today's session",
+              value: isRest ? null : '$setCount',
+              unit: isRest ? null : (setCount == 1 ? 'set' : 'sets'),
+              // The one subject-scale element on this screen, and the only
+              // place a lobed shape belongs: the lobe count is the register,
+              // 4 for rest and 6 for training.
+              marker: DecoratedBox(
+                decoration: ShapeDecoration(
+                  shape: isRest ? CookieBorder.rest : CookieBorder.training,
+                  color: semantics.categoryAt(isRest ? 7 : 0),
+                ),
+                child: const SizedBox(width: 56, height: 56),
+              ),
+              // A rest day's single action lives in the empty state below,
+              // which already asks for it. Two buttons doing the same job on
+              // one screen was device QA M1.
+              actions: [
+                if (!isRest) ...[
+                  if (!isEmptyDay)
+                    NvButton(
+                      variant: NvButtonVariant.accent,
+                      label: 'Start session',
+                      onPressed: _startScheduledSession,
+                    ),
+                  NvButton(
+                    variant: NvButtonVariant.tonal,
+                    label: 'Custom session',
+                    onPressed: _startCustomSession,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: LockoutTheme.sectionGap),
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: LockoutTheme.cardPadding,
+            ),
+            child: _buildDayBody(context, sched, isRest: isRest),
+          ),
+          const SizedBox(height: LockoutTheme.sectionGap),
+          _buildSectionHeading(context, "Today's numbers"),
+          const SizedBox(height: LockoutTheme.headingGap),
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: LockoutTheme.cardPadding,
+            ),
+            child: NvGroupedList(children: _summaryRows(context)),
+          ),
+          const SizedBox(height: LockoutTheme.sectionGap),
+          _buildSectionHeading(context, 'Quick actions'),
+          const SizedBox(height: LockoutTheme.headingGap),
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: LockoutTheme.cardPadding,
+            ),
+            child: GridView.count(
+              crossAxisCount: 4,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              childAspectRatio: 0.85,
+              children: _quickActions(context),
+            ),
           ),
         ],
-        summary: _summary,
-        foodTabEnabled: widget.foodTabEnabled,
-        onOpenFood: widget.foodTabEnabled
-            ? () => widget.onNavigate?.call('food')
-            : null,
-        onOpenBody: () =>
-            widget.onNavigate?.call('progress', segment: ProgressSegment.weight),
-        onOpenLog: () =>
-            widget.onNavigate?.call('progress', segment: ProgressSegment.history),
-        actions: _quickActions(context),
       ),
     );
   }
 
-  String _scheduleSubtitle(ScheduledDay sched) {
-    final sets = sched.exercises.fold<int>(0, (s, e) => s + e.targetSets);
-    final plural = sched.exercises.length == 1 ? 'exercise' : 'exercises';
-    return '${sched.exercises.length} $plural · $sets sets';
+  Widget _buildSectionHeading(BuildContext context, String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: LockoutTheme.screenPadding,
+      ),
+      child: Text(text, style: Theme.of(context).textTheme.titleMedium),
+    );
   }
 
-  List<ActionItem> _quickActions(BuildContext context) {
+  /// The day's own block: the exercise list, or the honest empty case.
+  Widget _buildDayBody(
+    BuildContext context,
+    ScheduledDay? sched, {
+    required bool isRest,
+  }) {
+    if (isRest) {
+      return NvEmptyState(
+        headline: 'No session today',
+        body: 'Nothing is scheduled. Train off-plan or take the day.',
+        actionLabel: 'Custom session',
+        onAction: _startCustomSession,
+      );
+    }
+
+    if (sched!.exercises.isEmpty) {
+      return const NvTbaCard(
+        message: 'This training day has no exercises yet. Add them on the '
+            'Routines tab, then come back to start the session.',
+      );
+    }
+
+    return NvGroupedList(
+      children: [
+        for (final exercise in sched.exercises)
+          NvListItem(
+            title: exercise.name,
+            supporting: '${exercise.targetSets} '
+                '${exercise.targetSets == 1 ? 'set' : 'sets'}',
+          ),
+      ],
+    );
+  }
+
+  /// What the hub's weight and nutrition cards used to say, as grouped-list
+  /// rows.
+  ///
+  /// The composition changed; the information did not. A null still means
+  /// "not on record" and renders a prompt rather than a zero.
+  List<Widget> _summaryRows(BuildContext context) {
+    final semantics = LockoutSemantics.of(context);
+    final rows = <Widget>[];
+
+    final series = _summary.weightSeries;
+    rows.add(
+      NvListItem(
+        title: 'Weight',
+        supporting: _weightSupporting(),
+        // Fewer than two points cannot make a line, and a flat stub would
+        // read as a trend that is not there.
+        trailing: series.length >= 2
+            ? SizedBox(
+                width: 72,
+                child: Sparkline(
+                  values: series,
+                  lineColor: semantics.chartLine,
+                  height: 28,
+                ),
+              )
+            : null,
+        onTap: () => widget.onNavigate?.call(
+          'progress',
+          segment: ProgressSegment.weight,
+        ),
+      ),
+    );
+
+    if (widget.foodTabEnabled) {
+      rows.add(
+        NvListItem(
+          title: 'Calories',
+          supporting: _caloriesSupporting(),
+          onTap: () => widget.onNavigate?.call('food'),
+        ),
+      );
+      rows.add(
+        NvListItem(
+          title: 'Protein',
+          supporting: _proteinSupporting(),
+          onTap: () => widget.onNavigate?.call('food'),
+        ),
+      );
+    }
+
+    rows.add(
+      NvListItem(
+        title: 'Burned today',
+        supporting: _burnSupporting(),
+        onTap: () => widget.onNavigate?.call(
+          'progress',
+          segment: ProgressSegment.history,
+        ),
+      ),
+    );
+
+    return rows;
+  }
+
+  String _weightSupporting() {
+    final weight = _summary.weightKg;
+    if (weight == null) return 'No weight on record yet';
+
+    final parts = <String>['${weight.toStringAsFixed(1)} kg'];
+
+    final delta = _summary.weightDeltaKg;
+    if (delta != null && delta != 0) {
+      final sign = delta > 0 ? '+' : '-';
+      parts.add('$sign${delta.abs().toStringAsFixed(1)} kg');
+    }
+
+    final target = _summary.targetWeightKg;
+    if (target != null) {
+      final gap = (weight - target).abs();
+      parts.add(
+        gap < 0.05
+            ? 'target reached'
+            : '${gap.toStringAsFixed(1)} kg to go',
+      );
+    }
+
+    return parts.join(' · ');
+  }
+
+  String _caloriesSupporting() {
+    final target = _summary.kcalTarget;
+    if (target == null) return '${_summary.kcalEaten} kcal · no target set';
+
+    final left = target - _summary.kcalEaten;
+    // Never a negative "left": past the target it reads as over, which is
+    // the arithmetic a reader can do in their head.
+    final tail = left >= 0 ? '$left kcal left' : '${left.abs()} kcal over';
+    return '${_summary.kcalEaten} of $target kcal · $tail';
+  }
+
+  String _proteinSupporting() {
+    final eaten = _summary.proteinEatenG.round();
+    final target = _summary.proteinTargetG;
+    if (target == null) return '$eaten g';
+
+    final left = target - eaten;
+    final tail = left >= 0 ? '$left g left' : '${left.abs()} g over';
+    return '$eaten of $target g · $tail';
+  }
+
+  String _burnSupporting() {
+    final burned = _summary.burnedTodayKcal;
+    // Null means no session was logged today at all. A value of zero or less
+    // means a session *was* logged but no estimate could be made for it, and
+    // saying "no session yet" there would deny something that happened.
+    if (burned == null) return 'No session logged yet';
+    if (burned <= 0) return 'Estimate unavailable';
+    return '${burned.round()} kcal';
+  }
+
+  List<Widget> _quickActions(BuildContext context) {
     final go = widget.onNavigate;
+    // One fill for all eight, not `semantics.categoryAt(0..7)`.
+    //
+    // `categoryRamp` exists to keep *categories* apart, and there are no
+    // categories here: index 0 was "Log food" only because it was first.
+    // The ramp is also double-booked — the same eight values mean "routine
+    // day category" on the Workout tab, so "Log food" and some Tuesday
+    // shared a colour asserting a relationship neither has, in eight fully
+    // saturated tones under a restrained system (QA ruling 2). The icon and
+    // the label already identify the action.
+    //
+    // `inverseSurface` rather than a container tone: it is the one neutral
+    // that stands clear of the surface it sits on in both brightnesses, so
+    // the tile reads as a tile — a `surfaceContainerHigh` fill all but
+    // disappears into the card behind it. Measured ~17.2:1 light and
+    // ~15.6:1 dark against the glyph, both roles accent-independent, so
+    // those two numbers cover all ten combinations. `NvIconTile` derives
+    // that glyph from whatever fill it is handed, so this choice is about
+    // the fill against the *background*, not about the glyph. It also
+    // leaves the accent for the two or three elements per screen
+    // `accents.dart` reserves it for.
+    final tileColor = Theme.of(context).colorScheme.inverseSurface;
+
     return [
-      // Hidden entirely when the Food tab is off, rather than left as a
-      // tile that taps to nowhere: `_goToTab` already no-ops for a hidden
-      // tab id, so a visible "LOG FOOD" tile would silently do nothing.
+      // Hidden entirely when the Food tab is off, rather than left as a tile
+      // that taps to nowhere: `_goToTab` already no-ops for a hidden tab id,
+      // so a visible "Log food" tile would silently do nothing.
       if (widget.foodTabEnabled)
-        ActionItem(
+        _quickActionTile(
           label: 'Log food',
           icon: Icons.restaurant,
-          color: LockoutSemantics.of(context).categoryAt(0),
+          color: tileColor,
           onTap: () => go?.call('food'),
         ),
-      ActionItem(
+      _quickActionTile(
         label: 'Weigh in',
         icon: Icons.monitor_weight,
-        color: LockoutSemantics.of(context).categoryAt(1),
+        color: tileColor,
         onTap: () => go?.call('progress', segment: ProgressSegment.weight),
       ),
-      ActionItem(
+      _quickActionTile(
         label: 'Workout',
         icon: Icons.fitness_center,
-        color: LockoutSemantics.of(context).categoryAt(2),
+        color: tileColor,
         onTap: () => go?.call('workout'),
       ),
-      ActionItem(
+      _quickActionTile(
         label: 'History',
         icon: Icons.calendar_month,
-        color: LockoutSemantics.of(context).categoryAt(3),
+        color: tileColor,
         onTap: () => go?.call('progress', segment: ProgressSegment.history),
       ),
-      ActionItem(
+      _quickActionTile(
         label: 'Custom',
         icon: Icons.add,
-        color: LockoutSemantics.of(context).categoryAt(4),
+        color: tileColor,
         onTap: _startCustomSession,
       ),
-      ActionItem(
+      _quickActionTile(
         label: 'Streak',
         icon: Icons.local_fire_department,
-        color: LockoutSemantics.of(context).categoryAt(5),
+        color: tileColor,
         onTap: () => go?.call('progress', segment: ProgressSegment.history),
       ),
-      ActionItem(
+      _quickActionTile(
         label: 'Plan',
         icon: Icons.insights,
-        color: LockoutSemantics.of(context).categoryAt(6),
+        color: tileColor,
         onTap: () => go?.call('progress', segment: ProgressSegment.weight),
       ),
-      ActionItem(
+      _quickActionTile(
         label: 'Exercises',
         icon: Icons.list,
-        color: LockoutSemantics.of(context).categoryAt(7),
+        color: tileColor,
         onTap: () => go?.call('workout'),
       ),
     ];
   }
 
+
   // --- ACTIVE SESSION ---
 
   Widget _buildActiveSession() {
-    final totalExercises = _liveExercises.length;
-    final completedExercises = totalExercises == 0
-        ? 0
-        : _liveExercises
-            .where((e) => e.sets.isNotEmpty && e.completedCount == e.sets.length)
-            .length;
-    final exerciseProgress =
-        totalExercises == 0 ? 0.0 : completedExercises / totalExercises;
+    // Sets, not exercises (QA ruling 1). The bar is painted as the last
+    // element of the same card whose 88pt numeral counts sets, and it
+    // carries no label, so it inherits that numeral's denominator in the
+    // reader's head. Per exercise it also sat at exactly 0.0 for the first
+    // third of a workout — least informative when feedback matters most.
+    final setProgress = _sessionTotalSets == 0
+        ? 0.0
+        : _sessionCompletedSets / _sessionTotalSets;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSessionHeader(exerciseProgress),
+        _buildSessionHeader(setProgress),
         const SizedBox(height: LockoutTheme.spaceMd),
         Expanded(child: _buildExerciseList()),
       ],
@@ -676,13 +1068,10 @@ class TodayTabState extends State<TodayTab> {
           );
         }
         if (index == lastIndex) {
-          // Plain text, not `.icon` — an `Icons.add` glyph here would sit
-          // alongside the weight/rep stepper's own plus buttons and get
-          // swept into any test that walks every `Icons.add` on screen
-          // expecting a stepper.
-          return OutlinedButton(
+          return NvButton(
+            variant: NvButtonVariant.outlined,
+            label: 'Add exercise',
             onPressed: _addExerciseMidSession,
-            child: const Text('Add exercise'),
           );
         }
         if (!hasExercises) {
@@ -702,12 +1091,17 @@ class TodayTabState extends State<TodayTab> {
     );
   }
 
-  /// The three-figure Duration / Volume / Sets row, a Finish action, and the
-  /// exercise-completion bar beneath it — see `_FinishSummarySheet` for what
+  /// The header leads with one big number — the sets still to go — beside a
+  /// lobed register marker, then a Duration / Volume row, a Finish action,
+  /// and the set-completion bar. The sets figure is deliberately not
+  /// repeated in the stat row: one big number per screen, stated once —
+  /// which is also why the bar counts sets rather than exercises and is left
+  /// unlabelled, instead of making a second, differently-denominated
+  /// progress claim inside one card. See `_FinishSummarySheet` for what
   /// tapping Finish opens.
-  Widget _buildSessionHeader(double exerciseProgress) {
+  Widget _buildSessionHeader(double setProgress) {
     final theme = Theme.of(context);
-    return LockoutCard(
+    return NvInfoCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -721,6 +1115,54 @@ class TodayTabState extends State<TodayTab> {
             ),
           ),
           const SizedBox(height: LockoutTheme.spaceXs),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              // The lobed marker reads as register: 6 lobes while a session
+              // is running, 4 when the day is rest. It is a subject-scale
+              // element, which is the only place a lobed shape is allowed.
+              Container(
+                width: 44,
+                height: 44,
+                alignment: Alignment.center,
+                decoration: ShapeDecoration(
+                  color: theme.colorScheme.primaryContainer,
+                  shape: _sessionTotalSets > 0
+                      ? CookieBorder.training
+                      : CookieBorder.rest,
+                ),
+                child: Icon(
+                  _sessionTotalSets > 0
+                      ? Icons.bolt_outlined
+                      : Icons.bedtime_outlined,
+                  size: 22,
+                  color: theme.colorScheme.onPrimaryContainer,
+                ),
+              ),
+              const SizedBox(width: LockoutTheme.spaceMd),
+              Text(
+                '${_sessionTotalSets - _sessionCompletedSets}',
+                style: LockoutTheme.countdown(theme.colorScheme),
+              ),
+              const SizedBox(width: LockoutTheme.spaceSm),
+              // Flexible, not a bare Padding: at 360dp the marker, the 88pt
+              // numeral and their gaps leave the label about 136dp, and a
+              // wide-metric face spills past that. It wraps rather than
+              // overflowing the header.
+              Flexible(
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 14),
+                  child: Text(
+                    _sessionTotalSets - _sessionCompletedSets == 1
+                        ? 'set left'
+                        : 'sets left',
+                    style: theme.textTheme.titleMedium,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: LockoutTheme.spaceMd),
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -740,23 +1182,15 @@ class TodayTabState extends State<TodayTab> {
                   value: _fmtWeight(_sessionVolumeKg),
                 ),
               ),
-              Expanded(
-                child: _SessionStat(
-                  label: 'Sets',
-                  value: '$_sessionCompletedSets/$_sessionTotalSets',
-                ),
-              ),
-              FilledButton.tonal(
+              NvButton(
+                variant: NvButtonVariant.tonal,
+                label: 'Finish',
                 onPressed: _confirmFinishSession,
-                child: const Text('Finish'),
               ),
             ],
           ),
           const SizedBox(height: LockoutTheme.spaceMd),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(LockoutTheme.radiusPill),
-            child: LinearProgressIndicator(value: exerciseProgress),
-          ),
+          NvWavyProgress(value: setProgress),
         ],
       ),
     );
@@ -767,10 +1201,10 @@ class TodayTabState extends State<TodayTab> {
   /// the write rather than discovered after it. `Save` calls the existing
   /// `_finishSession` unchanged; `Discard` ends the session with no write.
   Future<void> _confirmFinishSession() async {
-    final action = await showLockoutSheet<String>(
+    final action = await showNvSheet<String>(
       context: context,
       title: 'Finish session',
-      builder: (_) => _FinishSummarySheet(
+      child: _FinishSummarySheet(
         duration: _elapsedLabel,
         volume: _fmtWeight(_sessionVolumeKg),
         sets: '$_sessionCompletedSets/$_sessionTotalSets',
@@ -795,19 +1229,24 @@ class TodayTabState extends State<TodayTab> {
   Widget _buildLegSafetyNotice() {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    return LockoutCard(
-      color: colors.tertiaryContainer,
+    // An info card rather than a tinted card of its own: section 8 has one
+    // card for advisory content, and the warning is carried by the icon and
+    // the semantics layer's `warning` role rather than by a whole surface.
+    return NvInfoCard(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.warning_amber, color: colors.onTertiaryContainer),
+          Icon(
+            Icons.warning_amber,
+            color: LockoutSemantics.of(context).warning,
+          ),
           const SizedBox(width: LockoutTheme.spaceSm),
           Expanded(
             child: Text(
               'Pain-free movement only. Use moderate load, avoid forcing '
               'painful reps.',
               style: theme.textTheme.bodyMedium?.copyWith(
-                color: colors.onTertiaryContainer,
+                color: colors.onSurface,
               ),
             ),
           ),
@@ -819,50 +1258,49 @@ class TodayTabState extends State<TodayTab> {
   Widget _buildExerciseCard(_LiveExercise ex, int exerciseIndex) {
     final theme = Theme.of(context);
 
+    final done = ex.completedCount;
+    final total = ex.sets.length;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: LockoutTheme.spaceMd),
-      child: LockoutCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: NvGroupedList(
+        children: [
+          // The exercise's own row leads the group, carrying its progress in
+          // the trailing badge section 8 puts there.
+          NvListItem(
+            title: ex.name,
+            supporting: ex.lastPerformance.isEmpty
+                ? 'Target ${ex.targetLabel} - no previous data'
+                : 'Target ${ex.targetLabel} - last ${ex.lastPerformance}',
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(ex.name, style: theme.textTheme.titleMedium),
-                      const SizedBox(height: LockoutTheme.spaceXs),
-                      Text(
-                        'Target ${ex.targetLabel}',
-                        style: theme.textTheme.bodySmall,
-                      ),
-                      const SizedBox(height: LockoutTheme.spaceXs),
-                      Text(
-                        ex.lastPerformance.isEmpty
-                            ? 'No previous data'
-                            : 'Last ${ex.lastPerformance}',
-                        style: theme.textTheme.labelSmall,
-                      ),
-                    ],
-                  ),
+                NvStatusBadge(
+                  label: '$done/$total',
+                  kind: _setProgressKind(done, total),
                 ),
-                IconButton(
+                const SizedBox(width: LockoutTheme.spaceSm),
+                NvIconButton(
+                  icon: Icons.play_circle_outline,
                   tooltip: 'Watch video',
                   onPressed: () => _openVideo(ex.name, ex.videoUrl),
-                  icon: const Icon(Icons.play_circle_outline),
                 ),
               ],
             ),
-            const SizedBox(height: LockoutTheme.spaceSm),
-            for (var i = 0; i < ex.sets.length; i++)
-              _buildSetRow(ex, exerciseIndex, i, ex.sets[i]),
-            Align(
+          ),
+          for (var i = 0; i < ex.sets.length; i++)
+            _buildSetRow(ex, exerciseIndex, i, ex.sets[i]),
+          Container(
+            color: theme.colorScheme.surfaceContainer,
+            padding: const EdgeInsets.symmetric(
+              horizontal: LockoutTheme.spaceSm,
+              vertical: LockoutTheme.spaceXs,
+            ),
+            child: Align(
               alignment: Alignment.centerLeft,
-              // Plain text, not `.icon` — see the "Add exercise" button above
-              // for why an `Icons.add` glyph does not belong here either.
-              child: TextButton(
+              child: NvButton(
+                variant: NvButtonVariant.text,
+                label: 'Add set',
                 onPressed: () {
                   final last = ex.sets.isNotEmpty ? ex.sets.last : null;
                   setState(() => ex.sets.add(_LiveSet(
@@ -870,13 +1308,20 @@ class TodayTabState extends State<TodayTab> {
                         reps: last?.reps ?? 10,
                       )));
                 },
-                child: const Text('Add set'),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
+  }
+
+  /// What an exercise's set count is saying: nothing started, in progress,
+  /// or finished.
+  NvBadgeKind _setProgressKind(int done, int total) {
+    if (total > 0 && done >= total) return NvBadgeKind.done;
+    if (done > 0) return NvBadgeKind.accent;
+    return NvBadgeKind.neutral;
   }
 
   Widget _buildSetRow(
@@ -932,27 +1377,22 @@ class TodayTabState extends State<TodayTab> {
                   style: theme.textTheme.labelSmall,
                 ),
               ),
-              IconButton(
+              NvIconButton(
+                icon: Icons.close,
                 tooltip: 'Remove set',
-                icon: const Icon(Icons.close),
                 onPressed: ex.sets.length > 1
                     ? () => setState(() => ex.sets.removeAt(setIndex))
                     : null,
               ),
-              IconButton.filled(
+              NvIconButton(
                 key: ValueKey('set-complete-$exerciseIndex-$setIndex'),
+                icon: Icons.check,
                 tooltip: set.completed
                     ? 'Mark set incomplete'
                     : 'Mark set complete',
-                style: IconButton.styleFrom(
-                  backgroundColor: set.completed
-                      ? semantics.success
-                      : theme.colorScheme.surfaceContainerHighest,
-                  foregroundColor: set.completed
-                      ? semantics.onSuccess
-                      : theme.colorScheme.onSurfaceVariant,
-                ),
-                icon: const Icon(Icons.check),
+                tone: set.completed
+                    ? NvIconButtonTone.success
+                    : NvIconButtonTone.neutral,
                 onPressed: () {
                   final wasDone = set.completed;
                   setState(() => set.completed = !wasDone);
@@ -995,21 +1435,36 @@ class TodayTabState extends State<TodayTab> {
 
     // A completed row tints its whole background, not just the tick — a
     // TweenAnimationBuilder rather than a plain DecoratedBox so the tint
-    // eases in over the M3 "standard" motion token instead of snapping,
-    // while the keyed widget the tests read stays a real `DecoratedBox`.
+    // fades in instead of snapping, while the keyed widget the tests read
+    // stays a real `DecoratedBox`.
+    //
+    // `effects` is the tier for colour and opacity: 200ms on an ease-out,
+    // with none of the spring tiers' overshoot, since a colour that passes
+    // its target lands on a hue nobody authored. Taken through
+    // `durationFor` so the fade collapses to nothing when the user has
+    // asked the OS to remove animations.
+    // The row's own surface is the group's, not transparent: a set row lives
+    // inside an `NvGroupedList`, and a transparent one left its steppers and
+    // tick floating on the page background with no row behind them (device
+    // QA B2). The completion tint is composited over that surface rather
+    // than standing in for it.
+    final rowSurface = theme.colorScheme.surfaceContainer;
     final targetColor = set.completed
-        ? semantics.success.withValues(alpha: 0.12)
-        : Colors.transparent;
+        ? Color.alphaBlend(
+            semantics.success.withValues(alpha: 0.12),
+            rowSurface,
+          )
+        : rowSurface;
     return TweenAnimationBuilder<Color?>(
       key: ObjectKey(set),
       tween: ColorTween(end: targetColor),
-      duration: Durations.medium1,
-      curve: Easing.standard,
+      duration: LockoutMotion.effects.durationFor(context),
+      curve: LockoutMotion.effects.curve,
       builder: (context, color, child) => DecoratedBox(
         key: ValueKey('set-row-$exerciseIndex-$setIndex'),
         decoration: BoxDecoration(
           color: color,
-          borderRadius: BorderRadius.circular(LockoutTheme.radiusButton),
+          borderRadius: BorderRadius.circular(LockoutTheme.radiusField),
         ),
         child: child,
       ),
@@ -1023,17 +1478,14 @@ class TodayTabState extends State<TodayTab> {
     required VoidCallback onMinus,
     required VoidCallback onPlus,
   }) {
-    const constraints = BoxConstraints(
-      minWidth: LockoutTheme.minTouchTarget,
-      minHeight: LockoutTheme.minTouchTarget,
-    );
+    // `NvIconButton` is 48dp square by construction, so the explicit
+    // constraints the framework `IconButton` needed are gone with it.
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        IconButton(
+        NvIconButton(
+          icon: Icons.remove,
           tooltip: 'Decrease $label',
-          icon: const Icon(Icons.remove),
-          constraints: constraints,
           onPressed: onMinus,
         ),
         // `Flexible` still, so this can never overflow its Row regardless
@@ -1067,10 +1519,9 @@ class TodayTabState extends State<TodayTab> {
             ),
           ),
         ),
-        IconButton(
+        NvIconButton(
+          icon: Icons.add,
           tooltip: 'Increase $label',
-          icon: const Icon(Icons.add),
-          constraints: constraints,
           onPressed: onPlus,
         ),
       ],
@@ -1097,10 +1548,7 @@ class TodayTabState extends State<TodayTab> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(LockoutTheme.radiusPill),
-                child: LinearProgressIndicator(value: progress),
-              ),
+              NvWavyProgress(value: progress),
               const SizedBox(height: LockoutTheme.spaceSm),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1111,40 +1559,59 @@ class TodayTabState extends State<TodayTab> {
                   ),
                   Row(
                     children: [
-                      TextButton(
+                      NvButton(
+                        variant: NvButtonVariant.text,
+                        label: '-15s',
                         onPressed: () => setState(() {
+                          // The end time, not the counter: a control that
+                          // only moved `_restSeconds` would read right until
+                          // the next tick recomputed it away.
+                          //
                           // `_restTotalSeconds` is the progress bar's
-                          // denominator, so it has to shrink by the same
-                          // amount `_restSeconds` does — otherwise the bar
-                          // reads a stale, too-large total. And when this
-                          // adjustment reaches zero, `_restRunning` clears
-                          // immediately rather than waiting up to a second
-                          // for the next ticker frame to notice.
-                          final next =
-                              _restSeconds > 15 ? _restSeconds - 15 : 0;
-                          final spent = _restSeconds - next;
-                          final remainingTotal = _restTotalSeconds - spent;
+                          // denominator, so it shrinks by the same amount
+                          // the remaining time does — otherwise the bar
+                          // reads a stale, too-large total. Taking the last
+                          // 15 seconds off ends the rest now rather than
+                          // pushing the end time into the past, and
+                          // `_syncRest` clears `_restRunning` with it
+                          // instead of leaving a finished rest on screen
+                          // for up to a second.
+                          final endsAt = _restEndsAt;
+                          if (endsAt == null) return;
+                          final before = _restSeconds;
+                          _restEndsAt = before > 15
+                              ? endsAt.subtract(const Duration(seconds: 15))
+                              : _now();
+                          _syncRest();
+                          final remainingTotal =
+                              _restTotalSeconds - (before - _restSeconds);
                           _restTotalSeconds =
                               remainingTotal < 0 ? 0 : remainingTotal;
-                          _restSeconds = next;
-                          if (_restSeconds == 0) _restRunning = false;
                         }),
-                        child: const Text('-15s'),
                       ),
-                      TextButton(
+                      NvButton(
+                        variant: NvButtonVariant.text,
+                        label: '+15s',
                         onPressed: () => setState(() {
                           // Symmetric with the total above: extending the
                           // rest also extends what "full" means for the bar,
                           // or +15s would pin it at 100% until the clock
                           // fell back under the original total.
-                          _restSeconds += 15;
+                          final endsAt = _restEndsAt;
+                          if (endsAt == null) return;
+                          _restEndsAt =
+                              endsAt.add(const Duration(seconds: 15));
                           _restTotalSeconds += 15;
+                          _syncRest();
                         }),
-                        child: const Text('+15s'),
                       ),
-                      TextButton(
-                        onPressed: () => setState(() => _restRunning = false),
-                        child: const Text('Skip'),
+                      NvButton(
+                        variant: NvButtonVariant.text,
+                        label: 'Skip',
+                        onPressed: () => setState(() {
+                          _restRunning = false;
+                          _restEndsAt = null;
+                        }),
                       ),
                     ],
                   ),
@@ -1191,16 +1658,18 @@ class _FinishSummarySheet extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: OutlinedButton(
+              child: NvButton(
+                variant: NvButtonVariant.outlined,
+                label: 'Discard',
                 onPressed: () => Navigator.pop(context, 'discard'),
-                child: const Text('Discard'),
               ),
             ),
             const SizedBox(width: LockoutTheme.spaceMd),
             Expanded(
-              child: FilledButton(
+              child: NvButton(
+                variant: NvButtonVariant.filled,
+                label: 'Save',
                 onPressed: () => Navigator.pop(context, 'save'),
-                child: const Text('Save'),
               ),
             ),
           ],

@@ -1,14 +1,41 @@
 import 'package:flutter/material.dart';
 
 import '../services/database_service.dart';
+import 'accents.dart';
 import 'lockout_theme.dart';
-import 'schemes.dart';
+import 'palette.dart';
+
+/// The brightness axis: what the user asked for, not what is on screen.
+///
+/// `system` is a real choice rather than the absence of one, which is why it
+/// is a value here instead of a null brightness.
+enum LockoutBrightnessChoice {
+  system('system'),
+  light('light'),
+  dark('dark');
+
+  const LockoutBrightnessChoice(this.key);
+
+  final String key;
+
+  static LockoutBrightnessChoice byKey(String key) {
+    for (final choice in values) {
+      if (choice.key == key) return choice;
+    }
+    return system;
+  }
+}
 
 /// Owns which appearance is active and turns it into `ThemeData`.
 ///
 /// A `ChangeNotifier` rather than an `InheritedWidget` of its own: the app
 /// root listens once and rebuilds `MaterialApp`, which is all the framework
 /// needs to repaint every `Theme.of(context)` reader beneath it.
+///
+/// Two axes, not three. Material You was removed with the `dynamic_color`
+/// dependency because the house system forbids wallpaper-derived colour
+/// (section 2): an app whose surfaces come from the phone stops looking like
+/// the family it belongs to.
 class ThemeController extends ChangeNotifier {
   ThemeController._();
 
@@ -16,145 +43,224 @@ class ThemeController extends ChangeNotifier {
 
   static const String _settingKey = 'theme_key';
 
-  String _selectedKey = LockoutScheme.fallback.key;
-  ColorScheme? _dynamicLight;
-  ColorScheme? _dynamicDark;
+  /// The two axes are stored in one setting as `brightness|accent`, so the
+  /// schema does not change. A single separator rather than JSON: there are
+  /// exactly two fields and there always will be.
+  static const String _separator = '|';
 
-  String get selectedKey => _selectedKey;
+  LockoutBrightnessChoice _brightness = LockoutBrightnessChoice.system;
+  LockoutAccent _accent = LockoutAccent.fallback;
 
-  /// True once the platform has handed us a wallpaper-derived scheme. False on
-  /// Android 11 and below, and on every non-Android target.
-  bool get dynamicAvailable => _dynamicLight != null && _dynamicDark != null;
+  LockoutBrightnessChoice get brightnessChoice => _brightness;
+  LockoutAccent get accent => _accent;
 
-  /// The keys the picker should offer, in order.
-  ///
-  /// Dynamic is appended only when the platform actually supplied schemes. An
-  /// option that is present but silently does nothing is worse than an option
-  /// that is not there.
-  List<String> get pickerKeys => [
-        for (final scheme in LockoutScheme.all) scheme.key,
-        if (dynamicAvailable) LockoutScheme.dynamicKey,
-      ];
-
-  /// Whether dynamic is both chosen AND servable.
-  ///
-  /// The two are separate on purpose: a saved dynamic choice on a device that
-  /// cannot provide one is *unservable*, not wrong, so [_selectedKey] keeps
-  /// saying `dynamic` and starts working the moment schemes arrive.
-  bool get _usingDynamic =>
-      _selectedKey == LockoutScheme.dynamicKey && dynamicAvailable;
-
-  /// The authored scheme in force. For a dynamic selection this is still the
-  /// fallback, because dynamic borrows its semantic colours from it.
-  LockoutScheme get _base => _selectedKey == LockoutScheme.dynamicKey
-      ? LockoutScheme.fallback
-      : LockoutScheme.byKey(_selectedKey);
-
-  ThemeData get lightTheme {
-    if (_usingDynamic) {
-      return LockoutTheme.build(
-        colors: _harmonised(_dynamicLight!),
-        semantics: LockoutScheme.fallback.semantics,
+  ThemeData get lightTheme => LockoutTheme.build(
+        colors: LockoutPalette.schemeFor(Brightness.light, _accent),
+        semantics: LockoutPalette.semanticsFor(Brightness.light, _accent),
       );
-    }
-    final scheme = _base;
-    return LockoutTheme.build(
-      colors: scheme.colors,
-      semantics: scheme.semantics,
-    );
-  }
 
-  /// Null unless a dynamic scheme is in force.
+  /// Always non-null now.
   ///
-  /// An authored scheme already carries its own brightness, so offering a
-  /// second one would let the system's light/dark setting override an explicit
-  /// choice — picking "Graphite" and getting a white app at sunrise.
-  ThemeData? get darkTheme {
-    if (!_usingDynamic) return null;
-    return LockoutTheme.build(
-      colors: _harmonised(_dynamicDark!),
-      semantics: LockoutScheme.fallback.semantics,
-    );
-  }
+  /// The old controller returned null unless a dynamic scheme was in force,
+  /// because an authored scheme carried its own brightness and offering a
+  /// second one would let the system override an explicit choice. With
+  /// brightness as its own axis that problem is gone: `themeMode` says which
+  /// of the two to use, so both can always be supplied.
+  ThemeData get darkTheme => LockoutTheme.build(
+        colors: LockoutPalette.schemeFor(Brightness.dark, _accent),
+        semantics: LockoutPalette.semanticsFor(Brightness.dark, _accent),
+      );
 
-  ThemeMode get themeMode => _usingDynamic ? ThemeMode.system : ThemeMode.light;
-
-  /// Wallpaper colours decide hue; we decide meaning.
-  ///
-  /// A wallpaper can easily yield a green-ish `error` or a red-ish `tertiary`,
-  /// at which point a destructive confirmation and a completed set are the
-  /// same colour. Overwriting those two role groups — and leaving the
-  /// `LockoutSemantics` ramp authored — keeps the things that must never be
-  /// ambiguous unambiguous, while `primary` and the surfaces still come from
-  /// the phone.
-  ColorScheme _harmonised(ColorScheme platform) {
-    final authored = LockoutScheme.fallback.colors;
-    return platform.copyWith(
-      error: authored.error,
-      onError: authored.onError,
-      errorContainer: authored.errorContainer,
-      onErrorContainer: authored.onErrorContainer,
-      tertiary: authored.tertiary,
-      onTertiary: authored.onTertiary,
-      tertiaryContainer: authored.tertiaryContainer,
-      onTertiaryContainer: authored.onTertiaryContainer,
-    );
-  }
+  ThemeMode get themeMode => switch (_brightness) {
+        LockoutBrightnessChoice.system => ThemeMode.system,
+        LockoutBrightnessChoice.light => ThemeMode.light,
+        LockoutBrightnessChoice.dark => ThemeMode.dark,
+      };
 
   /// Reads the saved choice. Call before the first frame so the app never
   /// flashes the default theme on top of the chosen one.
-  Future<void> load() async {
-    final saved = await DatabaseService.instance
-        .getSetting(_settingKey, defaultValue: LockoutScheme.fallback.key);
-    _selectedKey = _resolveKey(saved);
-    notifyListeners();
-  }
-
-  Future<void> select(String key) async {
-    final resolved = _resolveKey(key);
-    if (resolved == _selectedKey) return;
-    _selectedKey = resolved;
-    await DatabaseService.instance.saveSetting(_settingKey, resolved);
-    notifyListeners();
-  }
-
-  /// `dynamic` passes through untouched; anything else goes through
-  /// [LockoutScheme.byKey], which maps legacy palette keys and falls back on
-  /// junk.
-  String _resolveKey(String key) => key == LockoutScheme.dynamicKey
-      ? LockoutScheme.dynamicKey
-      : LockoutScheme.byKey(key).key;
-
-  /// Called by `DynamicColorBuilder` at the app root whenever the platform
-  /// palette changes.
   ///
-  /// Notifies only when the new schemes can actually change what is on screen
-  /// — that is, when Dynamic is the selected theme. Storing them while an
-  /// authored scheme is selected still updates [pickerKeys], but rebuilding
-  /// the whole app for a value nobody is painting is waste at best: the app
-  /// root publishes these from a post-frame callback inside the very
-  /// `DynamicColorBuilder` that a notification rebuilds, so on a device that
-  /// supplies a palette it fed straight back into itself and the first
-  /// seconds after launch went to rebuilding `MaterialApp` instead of
-  /// answering input.
-  void setDynamicSchemes({ColorScheme? light, ColorScheme? dark}) {
-    if (light == _dynamicLight && dark == _dynamicDark) return;
+  /// Writes back whenever the stored value was in the old format, so the
+  /// migration happens once rather than on every launch.
+  Future<void> load() async {
+    final saved = await readStoredChoice();
+    final (brightness, accent) = _resolve(saved);
+    _brightness = brightness;
+    _accent = accent;
 
-    final wasUsingDynamic = _usingDynamic;
-    _dynamicLight = light;
-    _dynamicDark = dark;
+    final canonical = _encode(brightness, accent);
+    if (saved != canonical) {
+      try {
+        await DatabaseService.instance.saveSetting(_settingKey, canonical);
+      } catch (_) {
+        // The write is an optimisation, not the migration: the resolved
+        // choice is already in the fields above. `main` awaits this before
+        // `runApp`, so letting the failure out would replace the app with a
+        // blank screen on every launch, with no widget alive to offer a way
+        // back. Dropping it costs one re-migration next launch instead, and
+        // the stored value is left intact for it — never cleared.
+      }
+    }
+    notifyListeners();
+  }
 
-    if (wasUsingDynamic || _usingDynamic) notifyListeners();
+  /// The stored choice, behind a seam, because a throw out of it is
+  /// reachable and otherwise untestable.
+  ///
+  /// [load] is the FIRST await in the Settings import tail. A throw here is
+  /// the only way that tail reaches its outer catch before `_loadSettings()`
+  /// has run — the case where every field on screen still holds a pre-import
+  /// value while the toast would otherwise report a clean read-back. Nothing
+  /// a backup file can carry reproduces it: `user_settings.value` is
+  /// `TEXT NOT NULL`, so a null aborts the restore before the tail runs and a
+  /// JSON number is converted to text by the column's own affinity. What is
+  /// left is the unenumerable class — a disk error, a schema the running
+  /// build does not know — and the read is two singletons down with no
+  /// injected collaborator, so this is the seam, written the way
+  /// `ScheduleService.calendarDay` is. Tests that replace it must restore it.
+  @visibleForTesting
+  static Future<String> Function() readStoredChoice = defaultReadStoredChoice;
+
+  /// The production read [readStoredChoice] holds unless a test replaces it.
+  static Future<String> defaultReadStoredChoice() =>
+      DatabaseService.instance.getSetting(_settingKey, defaultValue: '');
+
+  /// Persist first, then commit.
+  ///
+  /// The write is the part that can fail, so the field is only moved once
+  /// the database has taken the value. The alternative — assign, then write —
+  /// leaves the controller claiming a choice the database refused, with no
+  /// `notifyListeners` to repaint the app to match, and the equality guard
+  /// below then turns the user's retry into a no-op. The throw is deliberate:
+  /// the caller shows the failure.
+  /// What the most recent call is trying to store, which is not what the
+  /// fields say while a write is in flight.
+  ///
+  /// The equality guard has to compare against this rather than against the
+  /// field, or the "I tapped the wrong one, tap back" gesture loses: tap
+  /// teal, then lime before the first write lands, and a guard reading
+  /// `_accent` still sees lime, returns early, writes nothing — and teal
+  /// then commits underneath. The user's last choice is the one that must
+  /// win.
+  LockoutBrightnessChoice? _pendingBrightness;
+  LockoutAccent? _pendingAccent;
+
+  Future<void> selectBrightness(LockoutBrightnessChoice choice) async {
+    if (choice == (_pendingBrightness ?? _brightness)) return;
+    _pendingBrightness = choice;
+    try {
+      await _persist(choice, _pendingAccent ?? _accent);
+      // Commit only while this call is still the latest selection — the same
+      // question the `finally` below asks, now actually acted on. A newer tap
+      // owns the choice, and its own write is either already stored or about
+      // to be; committing here would repaint the whole app in a choice the
+      // user has already moved away from. sqflite's FIFO write ordering hides
+      // the end state, so the flash was the only symptom.
+      if (_pendingBrightness != choice) return;
+      _brightness = choice;
+      notifyListeners();
+    } finally {
+      // Cleared only if this call is still the latest; a newer selection owns
+      // the slot and will clear it when its own write returns.
+      if (_pendingBrightness == choice) _pendingBrightness = null;
+    }
+  }
+
+  Future<void> selectAccent(LockoutAccent accent) async {
+    if (accent == (_pendingAccent ?? _accent)) return;
+    _pendingAccent = accent;
+    try {
+      await _persist(_pendingBrightness ?? _brightness, accent);
+      if (_pendingAccent != accent) return;
+      _accent = accent;
+      notifyListeners();
+    } finally {
+      if (_pendingAccent == accent) _pendingAccent = null;
+    }
+  }
+
+  /// Takes the pair explicitly rather than reading the fields, so it cannot
+  /// be called in an order that writes a half-applied state.
+  Future<void> _persist(
+    LockoutBrightnessChoice brightness,
+    LockoutAccent accent,
+  ) =>
+      DatabaseService.instance
+          .saveSetting(_settingKey, _encode(brightness, accent));
+
+  static String _encode(
+    LockoutBrightnessChoice brightness,
+    LockoutAccent accent,
+  ) =>
+      '${brightness.key}$_separator${accent.key}';
+
+  /// The keys of the palette system that preceded the six named schemes.
+  ///
+  /// They used to migrate in two hops — `schemes.dart` mapped them onto one
+  /// of the six, and the six map to an axis pair below. That file is gone,
+  /// so the first hop is folded in here. Dropping it would silently reset
+  /// the appearance of every install that has not launched since the
+  /// Jinatra layer was deleted.
+  static const Map<String, String> _preSchemeKeys = {
+    'carbon_lime': 'graphite',
+    'midnight_cyan': 'indigo',
+    'ash_amber': 'ember',
+    'void_magenta': 'graphite',
+    'jinatra_cream': 'paper',
+    'paper_press': 'paper',
+    'mint_lab': 'frost',
+    'sunblock': 'linen',
+  };
+
+  /// The brightness each retired scheme was authored at.
+  ///
+  /// Waking up to a white app because a palette was retired is the one
+  /// outcome worse than losing the exact hue, so brightness is preserved
+  /// exactly; the accent comes from [LockoutAccent.byKey], which maps each
+  /// retired key onto the closest hue it offers.
+  static const Map<String, LockoutBrightnessChoice> _legacyBrightness = {
+    'graphite': LockoutBrightnessChoice.dark,
+    'ember': LockoutBrightnessChoice.dark,
+    'indigo': LockoutBrightnessChoice.dark,
+    'paper': LockoutBrightnessChoice.light,
+    'linen': LockoutBrightnessChoice.light,
+    'frost': LockoutBrightnessChoice.light,
+    'dynamic': LockoutBrightnessChoice.system,
+  };
+
+  /// Reads either format.
+  ///
+  /// A stored value with no separator is one of the retired scheme keys (or
+  /// junk). Each maps to the brightness it was authored at and the accent
+  /// closest to its hue; `dynamic` maps to the fresh-install default,
+  /// because Material You no longer exists and there is no hue to preserve.
+  /// Junk falls back rather than throwing, and the caller rewrites the
+  /// setting — it is never cleared.
+  static (LockoutBrightnessChoice, LockoutAccent) _resolve(String saved) {
+    if (saved.contains(_separator)) {
+      final parts = saved.split(_separator);
+      return (
+        LockoutBrightnessChoice.byKey(parts.first),
+        LockoutAccent.byKey(parts.length > 1 ? parts[1] : ''),
+      );
+    }
+
+    final key = _preSchemeKeys[saved] ?? saved;
+    return (
+      _legacyBrightness[key] ?? LockoutBrightnessChoice.system,
+      LockoutAccent.byKey(key),
+    );
   }
 
   /// Returns the controller to its fresh-install state.
   ///
   /// The singleton outlives an individual test, so without this a suite that
-  /// selected `paper` would leak that choice into the next one.
+  /// selected `coral` would leak that choice into the next one.
   @visibleForTesting
   void resetForTest() {
-    _selectedKey = LockoutScheme.fallback.key;
-    _dynamicLight = null;
-    _dynamicDark = null;
+    _brightness = LockoutBrightnessChoice.system;
+    _accent = LockoutAccent.fallback;
+    _pendingBrightness = null;
+    _pendingAccent = null;
   }
 }

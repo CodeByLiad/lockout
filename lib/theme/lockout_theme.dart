@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'lockout_motion.dart';
 import 'lockout_semantics.dart';
 
 /// Builds the app's `ThemeData` from a colour scheme.
@@ -13,13 +14,53 @@ import 'lockout_semantics.dart';
 class LockoutTheme {
   LockoutTheme._();
 
-  // Shape scale.
-  static const double radiusButton = 14;
-  static const double radiusCard = 18;
-  static const double radiusDialog = 24;
-  static const double radiusSheet = 28;
-  static const double radiusField = 14;
+  // Shape scale. SHAPE IS A STATE, NOT A CONSTANT: every interactive
+  // surface carries a rest radius and an active (pressed or selected)
+  // radius and animates between them. The pairs come from
+  // `docs/design/nuvetrix-app-design-system.md` section 5.2.
+  static const double radiusButtonRest = 999;
+  static const double radiusButtonActive = 12;
+  static const double radiusButtonLargeActive = 16;
+
+  static const double radiusRowRest = 8;
+  static const double radiusRowActive = 20;
+
+  static const double radiusChipRest = 12;
+  static const double radiusChipActive = 999;
+
+  static const double radiusSegmentInner = 8;
+  static const double radiusSegmentEnd = 22;
+
+  /// The outer corners of a connected group's first and last child.
+  static const double radiusGroupEnd = 26;
+
+  /// How far apart rows sit inside a connected group.
+  static const double groupGap = 3;
+
+  /// How far a pressed surface shrinks.
+  static const double pressScale = 0.97;
+
+  // Non-interactive surfaces keep a single radius: shape-as-state applies to
+  // interaction, and a dialog does not have a pressed state.
+  static const double radiusCard = 28;
+  static const double radiusDialog = 32;
+  static const double radiusSheet = 32;
+  static const double radiusField = 16;
   static const double radiusPill = 999;
+
+  /// The family's signature card outline — 36dp on three corners, 12dp on
+  /// the bottom-left.
+  ///
+  /// Static rather than a rest/active pair: the house document makes this
+  /// outline the identity of a hero card, and a card has no pressed state.
+  static const RoundedRectangleBorder heroCardShape = RoundedRectangleBorder(
+    borderRadius: BorderRadius.only(
+      topLeft: Radius.circular(36),
+      topRight: Radius.circular(36),
+      bottomRight: Radius.circular(36),
+      bottomLeft: Radius.circular(12),
+    ),
+  );
 
   // 8dp spacing grid.
   static const double spaceXs = 4;
@@ -30,7 +71,20 @@ class LockoutTheme {
 
   static const double screenPadding = 20;
   static const double cardPadding = 16;
-  static const double sectionGap = 24;
+
+  /// The hero card's own padding, section 8. It is the one card the house
+  /// document pads differently from the rest, so it needs its own token: a
+  /// 22 typed at the call site is exactly what the raw-padding guard exists
+  /// to catch.
+  static const double heroCardPadding = 22;
+  static const double sectionGap = 28;
+
+  /// The gap between a section heading and its content.
+  static const double headingGap = 12;
+
+  /// Bottom padding for a scrollable screen that carries both a nav bar and
+  /// a FAB, so the last row is never hidden behind either.
+  static const double scrollBottomPadding = 128;
 
   static const double navBarHeight = 80;
   static const double minTouchTarget = 48;
@@ -43,65 +97,104 @@ class LockoutTheme {
   /// screen is: a ratio makes every narrower column a shorter tile, so the
   /// same grid that fits on a 430dp phone clips on a 360dp one.
   ///
-  /// The number is set by text scale, not by design taste. Measured against
-  /// this theme, the label line, the 4dp gap, the 16pt mono value and the
-  /// tile's own 12dp padding come to 66dp at scale 1.0, 68 at 1.05, 71 at
-  /// 1.10 and 72 at 1.15. 72 is therefore the smallest value on the 8dp grid
-  /// that survives Android's "Large" font setting, which is the largest step
-  /// a user reaches without opening accessibility settings.
-  /// `body_tab_test.dart` pins that.
-  static const double statTileHeight = 72;
+  /// The number is set by text scale, not by design taste. It was 72, sized
+  /// against Inter's `labelSmall` at 11pt with 1.2 leading — a 13.2dp label
+  /// line. The house scale makes `labelSmall` 12/16, a 16dp line, so the
+  /// tile needs 2.8dp more and 72 overflowed by exactly 3dp at text scale
+  /// 1.15. The face change is incidental; the label style is the cause.
+  ///
+  /// 80 is the next step on the 8dp grid above the measured need, and the
+  /// smallest that survives Android's "Large" font setting — the largest
+  /// step a user reaches without opening accessibility settings.
+  /// `measured_constants_test.dart` measures it against the real styles and
+  /// `body_tab_test.dart` pins it.
+  static const double statTileHeight = 80;
 
-  // The theme picker's swatch card — the only raw dimensions left outside
-  // this file before this constraint was enforced.
-  static const double swatchWidth = 104;
-  static const double swatchPreviewHeight = 44;
-  static const double swatchCheckOffset = -6;
-  static const double swatchCheckSize = 18;
-
-  static const String fontSans = 'Inter';
+  static const String fontDisplay = 'BricolageGrotesque';
+  static const String fontBody = 'Figtree';
   static const String fontMono = 'JetBrainsMono';
 
-  /// The Material type scale, stated rather than derived.
+  /// The house type scale, stated rather than derived.
   ///
-  /// Sizes come from the design brief. They are written out instead of scaled
-  /// from one base size so that changing `titleMedium` cannot silently move
-  /// `bodySmall` with it.
+  /// Sizes, weights, line heights and tracking come from
+  /// `docs/design/nuvetrix-app-design-system.md` section 4.1. They are
+  /// written out instead of scaled from one base size so that changing
+  /// `titleMedium` cannot silently move `bodySmall` with it.
+  ///
+  /// Flutter's `letterSpacing` is in logical pixels, not em, so each em
+  /// figure from the house document is multiplied by its own size here.
+  ///
+  /// `displaySmall` and `headlineSmall` have no house entry: the document's
+  /// scale has thirteen styles and Flutter's `TextTheme` has fifteen. They
+  /// are interpolated between their neighbours at the same family, weight
+  /// and tracking ratio, and are the only two styles in this method not
+  /// copied from the document.
   static TextTheme textThemeFor(ColorScheme colors) {
-    TextStyle sans(
+    TextStyle display(
       double size,
-      FontWeight weight, {
+      FontWeight weight,
+      double lineHeight,
+      double em, {
       Color? color,
-      double? height,
     }) {
       return TextStyle(
-        fontFamily: fontSans,
+        fontFamily: fontDisplay,
         fontSize: size,
         fontWeight: weight,
+        height: lineHeight / size,
+        letterSpacing: size * em,
         color: color ?? colors.onSurface,
-        height: height,
+      );
+    }
+
+    TextStyle body(
+      double size,
+      FontWeight weight,
+      double lineHeight, {
+      Color? color,
+    }) {
+      return TextStyle(
+        fontFamily: fontBody,
+        fontSize: size,
+        fontWeight: weight,
+        height: lineHeight / size,
+        letterSpacing: 0,
+        color: color ?? colors.onSurface,
       );
     }
 
     return TextTheme(
-      displayLarge: sans(45, FontWeight.w700, height: 1.05),
-      displayMedium: sans(40, FontWeight.w700, height: 1.05),
-      displaySmall: sans(36, FontWeight.w700, height: 1.08),
-      headlineLarge: sans(32, FontWeight.w700, height: 1.15),
-      headlineMedium: sans(28, FontWeight.w700, height: 1.15),
-      headlineSmall: sans(24, FontWeight.w600, height: 1.2),
-      titleLarge: sans(22, FontWeight.w600, height: 1.25),
-      titleMedium: sans(18, FontWeight.w600, height: 1.3),
-      titleSmall: sans(16, FontWeight.w600, height: 1.3),
-      bodyLarge: sans(16, FontWeight.w400, height: 1.45),
-      bodyMedium: sans(14, FontWeight.w400, height: 1.45),
-      bodySmall: sans(13, FontWeight.w400,
-          color: colors.onSurfaceVariant, height: 1.4),
-      labelLarge: sans(14, FontWeight.w600, height: 1.2),
-      labelMedium: sans(12, FontWeight.w500,
-          color: colors.onSurfaceVariant, height: 1.2),
-      labelSmall: sans(11, FontWeight.w500,
-          color: colors.onSurfaceVariant, height: 1.2),
+      displayLarge: display(44, FontWeight.w800, 46, -0.03),
+      displayMedium: display(36, FontWeight.w800, 38, -0.03),
+      displaySmall: display(32, FontWeight.w800, 34, -0.03),
+      headlineLarge: display(28, FontWeight.w800, 31, -0.025),
+      headlineMedium: display(22, FontWeight.w700, 26, -0.02),
+      headlineSmall: display(20, FontWeight.w700, 24, -0.02),
+      titleLarge: display(19, FontWeight.w700, 23, -0.01),
+      titleMedium: body(16, FontWeight.w700, 22),
+      titleSmall: body(14, FontWeight.w600, 20),
+      bodyLarge: body(17, FontWeight.w400, 25),
+      bodyMedium: body(15, FontWeight.w400, 22),
+      bodySmall: body(13, FontWeight.w400, 18, color: colors.onSurfaceVariant),
+      labelLarge: body(15, FontWeight.w600, 20),
+      labelMedium: body(13, FontWeight.w700, 18),
+      labelSmall: body(12, FontWeight.w600, 16,
+          color: colors.onSurfaceVariant),
+    );
+  }
+
+  /// The one big number on a hero card — the house `countdown` style.
+  ///
+  /// Not part of `TextTheme` because Flutter has no slot for it. At most one
+  /// per screen; the house document is explicit about that.
+  static TextStyle countdown(ColorScheme colors, {Color? color}) {
+    return TextStyle(
+      fontFamily: fontDisplay,
+      fontSize: 88,
+      fontWeight: FontWeight.w800,
+      height: 72 / 88,
+      letterSpacing: 88 * -0.05,
+      color: color ?? colors.onSurface,
     );
   }
 
@@ -109,20 +202,61 @@ class LockoutTheme {
   /// the rest timer, log rows.
   ///
   /// Mono, so a digit does not change width between 1 and 8 and a column of
-  /// numbers does not shimmer as it counts down.
+  /// numbers does not shimmer as it counts down. The house `numericTable`
+  /// style.
+  ///
+  /// The house document defines no monospace face of its own; this is
+  /// deviation register entry D1, and the role was filed upstream before use.
+  ///
+  /// [height] defaults to null, meaning the face's own metrics. The house
+  /// `numericTable` leading — [numericTableHeight] — was authored for a 15pt
+  /// table row, and applying that ratio at every call size is a category
+  /// error: it gives a 28pt display numeral a table's airiness, and it is
+  /// what pushed the stat tile 3dp past its box when this style first took
+  /// the house metrics. Pass it explicitly where a real column of figures
+  /// needs the house row rhythm.
   static TextStyle numeric(
     BuildContext context, {
-    double size = 14,
+    double size = 15,
     FontWeight weight = FontWeight.w700,
     Color? color,
+    double? height,
   }) {
     return TextStyle(
       fontFamily: fontMono,
       fontSize: size,
       fontWeight: weight,
+      height: height,
       color: color ?? Theme.of(context).colorScheme.onSurface,
-      letterSpacing: 0.2,
+      letterSpacing: 0,
     );
+  }
+
+  /// The house `numericTable` leading, 15/22. See [numeric].
+  ///
+  /// The style's weight is 700, not the 500 the house table first carried:
+  /// JetBrains Mono is bundled at 400 and 700 only, so a 500 request matches
+  /// down to Regular and the weight silently stops meaning anything. The
+  /// house document was corrected to agree.
+  static const double numericTableHeight = 22 / 15;
+
+  /// A shape that answers the interaction state, which is what the contract
+  /// means by shape-as-state: a surface carries a rest radius and an active
+  /// (pressed or selected) radius and resolves between them.
+  ///
+  /// `WidgetStateProperty` rather than an animated widget, because component
+  /// themes have no build context to animate in. `MorphingSurface` is the
+  /// animated form, for surfaces a screen owns directly.
+  static WidgetStateProperty<OutlinedBorder?> _statefulShape(
+    double rest,
+    double active, {
+    BorderSide? side,
+  }) {
+    return WidgetStateProperty.resolveWith((states) {
+      final engaged = states.contains(WidgetState.pressed) ||
+          states.contains(WidgetState.selected);
+      return _rounded(engaged ? active : rest, side: side);
+    });
   }
 
   static RoundedRectangleBorder _rounded(double radius, {BorderSide? side}) {
@@ -201,7 +335,27 @@ class LockoutTheme {
           minimumSize: const Size(0, controlHeight),
           padding: const EdgeInsets.symmetric(horizontal: spaceLg),
           textStyle: text.labelLarge,
-          shape: _rounded(radiusButton),
+          // The press morph is animated by `_MaterialInterior` inside
+          // `ButtonStyleButton`, which defaults to `kThemeChangeDuration`.
+          // Pinning it to the fast tier keeps the one motion the theme layer
+          // can reach on the shared vocabulary; it still cannot honour
+          // reduced motion, because `build` has no context — see D10.
+          animationDuration: LockoutMotion.springFast.duration,
+        ).copyWith(
+          // The button pill, not the large one: shape-as-state gives a
+          // button pill -> 12 and reserves the pill -> 16 for the 60dp hero
+          // control, which is `NvButton(large: true)` and styles itself.
+          //
+          // The size is NOT the reason, and saying it was got the number
+          // wrong in the direction that matters: `minimumSize` three lines
+          // up is `controlHeight`, 52, not 48 — the same 52-against-48
+          // mismatch that moved Today's three framework buttons onto
+          // `NvButton` in the first place. What makes 12 right here is that
+          // this is an ordinary button rather than the hero one: it morphs
+          // to the same 12 its outlined and text siblings do, or a sheet
+          // with two buttons side by side presses one to 16 and the other
+          // to 12.
+          shape: _statefulShape(radiusButtonRest, radiusButtonActive),
         ),
       ),
 
@@ -211,8 +365,18 @@ class LockoutTheme {
           padding: const EdgeInsets.symmetric(horizontal: spaceLg),
           textStyle: text.labelLarge,
           foregroundColor: colors.onSurface,
-          side: BorderSide(color: colors.outline),
-          shape: _rounded(radiusButton),
+          // The press morph is animated by `_MaterialInterior` inside
+          // `ButtonStyleButton`, which defaults to `kThemeChangeDuration`.
+          // Pinning it to the fast tier keeps the one motion the theme layer
+          // can reach on the shared vocabulary; it still cannot honour
+          // reduced motion, because `build` has no context — see D10.
+          animationDuration: LockoutMotion.springFast.duration,
+        ).copyWith(
+          shape: _statefulShape(
+            radiusButtonRest,
+            radiusButtonActive,
+            side: BorderSide(color: colors.outline),
+          ),
         ),
       ),
 
@@ -220,7 +384,14 @@ class LockoutTheme {
         style: TextButton.styleFrom(
           minimumSize: const Size(0, minTouchTarget),
           textStyle: text.labelLarge,
-          shape: _rounded(radiusButton),
+          // The press morph is animated by `_MaterialInterior` inside
+          // `ButtonStyleButton`, which defaults to `kThemeChangeDuration`.
+          // Pinning it to the fast tier keeps the one motion the theme layer
+          // can reach on the shared vocabulary; it still cannot honour
+          // reduced motion, because `build` has no context — see D10.
+          animationDuration: LockoutMotion.springFast.duration,
+        ).copyWith(
+          shape: _statefulShape(radiusButtonRest, radiusButtonActive),
         ),
       ),
 
@@ -267,14 +438,19 @@ class LockoutTheme {
         height: navBarHeight,
         backgroundColor: colors.surfaceContainerLow,
         surfaceTintColor: Colors.transparent,
-        indicatorColor: colors.primaryContainer,
+        // The house document assigns the nav indicator `secondaryContainer`
+        // (sections 3.1 and 7.1), not the accent. The accent is for emphasis
+        // on two or three elements per screen, and a persistent nav pill plus
+        // the FAB would spend that budget before a screen drew anything.
+        indicatorColor: colors.secondaryContainer,
         indicatorShape: const StadiumBorder(),
         elevation: 0,
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           final selected = states.contains(WidgetState.selected);
           return text.labelMedium?.copyWith(
-            color: selected ? colors.primary : colors.onSurfaceVariant,
+            color:
+                selected ? colors.onSecondaryContainer : colors.onSurfaceVariant,
             fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
           );
         }),
@@ -282,8 +458,14 @@ class LockoutTheme {
           final selected = states.contains(WidgetState.selected);
           return IconThemeData(
             size: 24,
-            color:
-                selected ? colors.onPrimaryContainer : colors.onSurfaceVariant,
+            // Paired with the indicator, not with the accent. When the
+            // indicator moved to `secondaryContainer` this was left on
+            // `onPrimaryContainer`, which in dark is the accent's near-black
+            // ink — 1.08:1 on the new pill, so the selected tab's icon
+            // vanished while all four unselected ones stayed bright.
+            color: selected
+                ? colors.onSecondaryContainer
+                : colors.onSurfaceVariant,
           );
         }),
       ),
@@ -296,6 +478,15 @@ class LockoutTheme {
           side: BorderSide(color: colors.outlineVariant),
           textStyle: text.labelLarge,
           minimumSize: const Size(0, minTouchTarget),
+        ).copyWith(
+          // The bar's own outline only. `SegmentedButton` hardcodes each
+          // segment's shape (`segment_button.dart`'s `segmentStyleFor`), and
+          // resolves this style with `selected` permanently set for a
+          // single-select group, so a state-resolved shape here would be
+          // both inert and misleading. The house section 5.2 segment shapes
+          // are therefore not implementable through the theme; see the
+          // deviation register.
+          shape: WidgetStatePropertyAll(_rounded(radiusSegmentEnd)),
         ),
       ),
 
@@ -304,7 +495,7 @@ class LockoutTheme {
         selectedColor: colors.secondaryContainer,
         side: BorderSide(color: colors.outlineVariant),
         labelStyle: text.labelMedium!,
-        shape: const StadiumBorder(),
+        shape: _ChipBorder(BorderSide(color: colors.outlineVariant)),
         padding: const EdgeInsets.symmetric(
           horizontal: spaceSm,
           vertical: spaceXs,
@@ -328,7 +519,9 @@ class LockoutTheme {
         titleTextStyle: text.titleSmall,
         subtitleTextStyle: text.bodySmall,
         iconColor: colors.onSurfaceVariant,
-        shape: _rounded(radiusButton),
+        shape: _rounded(radiusRowRest),
+        // The pressed radius is applied by `MorphingSurface` where a row is
+        // interactive; `ListTileThemeData.shape` takes no state resolver.
         contentPadding: const EdgeInsets.symmetric(horizontal: spaceMd),
         minTileHeight: minTouchTarget,
       ),
@@ -338,15 +531,15 @@ class LockoutTheme {
         contentTextStyle:
             text.bodyMedium?.copyWith(color: colors.onInverseSurface),
         // `inversePrimary`, the primary tone meant for an inverse-surface
-        // background — `primary` itself measures 1.37:1 on graphite here.
-        // Nothing in this app builds a `SnackBarAction` today, so this line
-        // has never painted; it is stated correctly so that the first one
-        // that does is readable. `schemes_test.dart` holds the pairing at
-        // >= 4.5:1 across all six schemes, and `undo_banner.dart` (which
-        // borrows these colours) is the live consumer.
+        // background. Nothing in this app builds a `SnackBarAction` today,
+        // so this line has never painted; it is stated correctly so that the
+        // first one that does is readable. `palette_test.dart` holds the
+        // pairing at >= 4.5:1 across all ten brightness-and-accent
+        // combinations, and `undo_banner.dart` (which borrows these colours)
+        // is the live consumer.
         actionTextColor: colors.inversePrimary,
         behavior: SnackBarBehavior.floating,
-        shape: _rounded(radiusButton),
+        shape: _rounded(radiusField),
         insetPadding: const EdgeInsets.all(spaceMd),
       ),
 
@@ -361,7 +554,7 @@ class LockoutTheme {
         color: colors.surfaceContainerHigh,
         surfaceTintColor: Colors.transparent,
         elevation: 3,
-        shape: _rounded(radiusButton),
+        shape: _rounded(radiusField),
         textStyle: text.bodyMedium,
       ),
 
@@ -381,10 +574,39 @@ class LockoutTheme {
       tooltipTheme: TooltipThemeData(
         decoration: BoxDecoration(
           color: colors.inverseSurface,
-          borderRadius: BorderRadius.circular(radiusButton),
+          borderRadius: BorderRadius.circular(radiusChipRest),
         ),
         textStyle: text.labelMedium?.copyWith(color: colors.onInverseSurface),
       ),
+    );
+  }
+}
+
+/// A chip outline that answers selection: 12dp at rest, a full pill once
+/// chosen, per the house document's section 5.2.
+///
+/// `ChipThemeData.shape` takes a plain `OutlinedBorder`, so a constant there
+/// can never morph. Flutter resolves it against the chip's states only when
+/// it is also a `WidgetStateOutlinedBorder`, which is what this is.
+@immutable
+class _ChipBorder extends RoundedRectangleBorder
+    implements WidgetStateOutlinedBorder {
+  const _ChipBorder(BorderSide side)
+      : super(
+          side: side,
+          borderRadius: const BorderRadius.all(
+            Radius.circular(LockoutTheme.radiusChipRest),
+          ),
+        );
+
+  @override
+  OutlinedBorder? resolve(Set<WidgetState> states) {
+    final radius = states.contains(WidgetState.selected)
+        ? LockoutTheme.radiusChipActive
+        : LockoutTheme.radiusChipRest;
+    return RoundedRectangleBorder(
+      side: side,
+      borderRadius: BorderRadius.all(Radius.circular(radius)),
     );
   }
 }

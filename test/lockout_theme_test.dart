@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lockout/theme/lockout_semantics.dart';
 import 'package:lockout/theme/lockout_theme.dart';
-import 'package:lockout/theme/schemes.dart';
 
-ThemeData _themeFor(LockoutScheme scheme) =>
+import 'test_helpers.dart';
+
+
+ThemeData _themeFor(TestAppearance scheme) =>
     LockoutTheme.build(colors: scheme.colors, semantics: scheme.semantics);
 
 double _radiusOf(ShapeBorder? shape) {
@@ -14,28 +16,28 @@ double _radiusOf(ShapeBorder? shape) {
 
 void main() {
   test('build registers the semantics extension', () {
-    final theme = _themeFor(LockoutScheme.graphite);
+    final theme = _themeFor(darkAppearance);
     final semantics = theme.extension<LockoutSemantics>();
 
     expect(semantics, isNotNull);
     expect(semantics!.categoryRamp.length, 8);
-    expect(semantics.success, LockoutScheme.graphite.semantics.success);
+    expect(semantics.success, darkAppearance.semantics.success);
   });
 
   test('build uses Material 3 and carries the scheme through', () {
-    final theme = _themeFor(LockoutScheme.graphite);
+    final theme = _themeFor(darkAppearance);
 
     expect(theme.useMaterial3, isTrue);
-    expect(theme.colorScheme.primary, LockoutScheme.graphite.colors.primary);
-    expect(theme.scaffoldBackgroundColor, LockoutScheme.graphite.colors.surface);
+    expect(theme.colorScheme.primary, darkAppearance.colors.primary);
+    expect(theme.scaffoldBackgroundColor, darkAppearance.colors.surface);
     expect(theme.brightness, Brightness.dark);
   });
 
   test('a light scheme builds a light theme', () {
-    final theme = _themeFor(LockoutScheme.paper);
+    final theme = _themeFor(lightAppearance);
 
     expect(theme.brightness, Brightness.light);
-    expect(theme.scaffoldBackgroundColor, LockoutScheme.paper.colors.surface);
+    expect(theme.scaffoldBackgroundColor, lightAppearance.colors.surface);
   });
 
   /// Rehomed from `theme_tokens_test.dart`, which pinned the Jinatra radii
@@ -49,32 +51,53 @@ void main() {
   /// component themes agree with whatever the tokens currently say, so a
   /// coordinated drift of every token together would pass it unnoticed. This
   /// test is the one that pins the actual numbers.
-  test('the shape scale is the pinned Lockout values', () {
-    expect(LockoutTheme.radiusButton, 14.0);
-    expect(LockoutTheme.radiusCard, 18.0);
-    expect(LockoutTheme.radiusDialog, 24.0);
-    expect(LockoutTheme.radiusSheet, 28.0);
-    expect(LockoutTheme.radiusField, 14.0);
+  test('the shape scale is the pinned house values', () {
+    // Interactive surfaces are pairs, not constants: a single fixed radius
+    // on one of them is a contract violation.
+    expect(LockoutTheme.radiusButtonRest, 999.0);
+    expect(LockoutTheme.radiusButtonActive, 12.0);
+    expect(LockoutTheme.radiusButtonLargeActive, 16.0);
+    expect(LockoutTheme.radiusRowRest, 8.0);
+    expect(LockoutTheme.radiusRowActive, 20.0);
+    expect(LockoutTheme.radiusChipRest, 12.0);
+    expect(LockoutTheme.radiusChipActive, 999.0);
+    expect(LockoutTheme.radiusSegmentInner, 8.0);
+    expect(LockoutTheme.radiusSegmentEnd, 22.0);
+    expect(LockoutTheme.radiusGroupEnd, 26.0);
+
+    // Non-interactive surfaces keep one radius.
+    expect(LockoutTheme.radiusCard, 28.0);
+    expect(LockoutTheme.radiusDialog, 32.0);
+    expect(LockoutTheme.radiusSheet, 32.0);
+    expect(LockoutTheme.radiusField, 16.0);
     expect(LockoutTheme.radiusPill, 999.0);
   });
 
+  test('the hero card wears the signature asymmetric outline', () {
+    final radius = LockoutTheme.heroCardShape.borderRadius as BorderRadius;
+    expect(radius.topLeft.x, 36.0);
+    expect(radius.topRight.x, 36.0);
+    expect(radius.bottomRight.x, 36.0);
+    expect(radius.bottomLeft.x, 12.0);
+  });
+
   test('the shape scale reaches the component themes', () {
-    final theme = _themeFor(LockoutScheme.graphite);
+    final theme = _themeFor(darkAppearance);
 
     expect(_radiusOf(theme.cardTheme.shape), LockoutTheme.radiusCard);
     expect(_radiusOf(theme.dialogTheme.shape), LockoutTheme.radiusDialog);
     expect(
       _radiusOf(theme.filledButtonTheme.style!.shape!.resolve({})),
-      LockoutTheme.radiusButton,
+      LockoutTheme.radiusButtonRest,
     );
     expect(
       _radiusOf(theme.outlinedButtonTheme.style!.shape!.resolve({})),
-      LockoutTheme.radiusButton,
+      LockoutTheme.radiusButtonRest,
     );
   });
 
   test('the bottom sheet rounds its top corners only', () {
-    final theme = _themeFor(LockoutScheme.graphite);
+    final theme = _themeFor(darkAppearance);
     final radius = (theme.bottomSheetTheme.shape as RoundedRectangleBorder)
         .borderRadius
         .resolve(TextDirection.ltr);
@@ -86,7 +109,7 @@ void main() {
   });
 
   test('every text style resolves to a bundled family', () {
-    final text = _themeFor(LockoutScheme.graphite).textTheme;
+    final text = _themeFor(darkAppearance).textTheme;
 
     for (final style in <TextStyle?>[
       text.displayLarge,
@@ -108,30 +131,42 @@ void main() {
       expect(style, isNotNull);
       expect(
         style!.fontFamily,
-        anyOf('Inter', 'JetBrainsMono'),
+        anyOf(
+          LockoutTheme.fontDisplay,
+          LockoutTheme.fontBody,
+          LockoutTheme.fontMono,
+        ),
         reason: 'unbundled family ${style.fontFamily}',
       );
     }
   });
 
-  test('the type scale matches the design brief', () {
-    final text = _themeFor(LockoutScheme.graphite).textTheme;
+  test('the type scale matches the house document', () {
+    final text = _themeFor(darkAppearance).textTheme;
 
-    expect(text.displaySmall!.fontSize, 36);
-    expect(text.displaySmall!.fontWeight, FontWeight.w700);
-    expect(text.headlineMedium!.fontSize, 28);
+    expect(text.displayLarge!.fontSize, 44);
+    expect(text.displayLarge!.fontWeight, FontWeight.w800);
+    expect(text.headlineLarge!.fontSize, 28);
+    expect(text.headlineLarge!.fontWeight, FontWeight.w800);
+    expect(text.headlineMedium!.fontSize, 22);
     expect(text.headlineMedium!.fontWeight, FontWeight.w700);
-    expect(text.titleMedium!.fontSize, 18);
-    expect(text.titleMedium!.fontWeight, FontWeight.w600);
-    expect(text.bodyMedium!.fontSize, 14);
-    expect(text.labelMedium!.fontSize, 12);
-    expect(text.labelSmall!.fontSize, 11);
+    expect(text.titleLarge!.fontSize, 19);
+    expect(text.titleMedium!.fontSize, 16);
+    expect(text.titleMedium!.fontWeight, FontWeight.w700);
+    expect(text.bodyMedium!.fontSize, 15);
+    expect(text.labelMedium!.fontSize, 13);
+    expect(text.labelSmall!.fontSize, 12);
+
+    // `displaySmall` and `headlineSmall` are the two styles the house scale
+    // does not name; they are interpolated between their neighbours.
+    expect(text.displaySmall!.fontSize, 32);
+    expect(text.headlineSmall!.fontSize, 20);
   });
 
   testWidgets('numeric() is mono so digits keep their column', (tester) async {
     late TextStyle style;
     await tester.pumpWidget(MaterialApp(
-      theme: _themeFor(LockoutScheme.graphite),
+      theme: _themeFor(darkAppearance),
       home: Builder(
         builder: (context) {
           style = LockoutTheme.numeric(context);
@@ -141,11 +176,11 @@ void main() {
     ));
 
     expect(style.fontFamily, 'JetBrainsMono');
-    expect(style.color, LockoutScheme.graphite.colors.onSurface);
+    expect(style.color, darkAppearance.colors.onSurface);
   });
 
   test('the navigation bar is 80dp with a pill indicator', () {
-    final theme = _themeFor(LockoutScheme.graphite);
+    final theme = _themeFor(darkAppearance);
 
     expect(theme.navigationBarTheme.height, LockoutTheme.navBarHeight);
     expect(theme.navigationBarTheme.indicatorShape, isA<StadiumBorder>());
@@ -156,14 +191,14 @@ void main() {
   });
 
   test('a filled button clears the 52dp control height', () {
-    final theme = _themeFor(LockoutScheme.graphite);
+    final theme = _themeFor(darkAppearance);
     final size = theme.filledButtonTheme.style!.minimumSize!.resolve({})!;
 
     expect(size.height, greaterThanOrEqualTo(52));
   });
 
   test('no theme paints a hard border or a heavy shadow', () {
-    for (final scheme in LockoutScheme.all) {
+    for (final scheme in allAppearances) {
       final theme = _themeFor(scheme);
 
       expect(theme.cardTheme.elevation, lessThanOrEqualTo(3.0), reason: scheme.key);
@@ -177,23 +212,23 @@ void main() {
   });
 
   test('the progress track is a rounded 8dp bar in the primary role', () {
-    final theme = _themeFor(LockoutScheme.graphite);
+    final theme = _themeFor(darkAppearance);
 
     expect(theme.progressIndicatorTheme.linearMinHeight, 8);
     expect(
       theme.progressIndicatorTheme.color,
-      LockoutScheme.graphite.colors.primary,
+      darkAppearance.colors.primary,
     );
   });
 
   test('builds for every scheme without throwing', () {
-    for (final scheme in LockoutScheme.all) {
+    for (final scheme in allAppearances) {
       expect(() => _themeFor(scheme), returnsNormally, reason: scheme.key);
     }
   });
 
   test('pushed routes fade forwards rather than zooming', () {
-    final theme = _themeFor(LockoutScheme.graphite);
+    final theme = _themeFor(darkAppearance);
     final builder = theme.pageTransitionsTheme.builders[TargetPlatform.android];
 
     // PredictiveBackPageTransitionsBuilder is the SDK default and is the

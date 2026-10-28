@@ -53,7 +53,7 @@ class WeekDayRow extends StatelessWidget {
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: accent.withValues(alpha: 0.16),
-          borderRadius: BorderRadius.circular(LockoutTheme.radiusButton),
+          borderRadius: BorderRadius.circular(LockoutTheme.radiusField),
         ),
         child: Text(
           day.tag.trim().toUpperCase(),

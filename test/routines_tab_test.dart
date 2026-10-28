@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-
 import 'package:lockout/models/models.dart';
 import 'package:lockout/screens/routines_tab.dart';
 import 'package:lockout/widgets/today_day_card.dart';
@@ -9,7 +8,6 @@ import 'package:lockout/widgets/week_day_row.dart';
 import 'package:lockout/services/database_service.dart';
 import 'package:lockout/services/schedule_service.dart';
 import 'package:lockout/theme/lockout_theme.dart';
-import 'package:lockout/theme/schemes.dart';
 import 'package:lockout/widgets/day_block.dart';
 import 'package:lockout/widgets/lockout_field.dart';
 import 'package:lockout/widgets/sheet_scaffold.dart';
@@ -129,8 +127,8 @@ void main() {
   /// compared against that value would go on passing if the button were
   /// wired back to `error`.
   ThemeData themeWithSentinelDanger(Color danger) => LockoutTheme.build(
-        colors: LockoutScheme.graphite.colors,
-        semantics: LockoutScheme.graphite.semantics.copyWith(danger: danger),
+        colors: darkAppearance.colors,
+        semantics: darkAppearance.semantics.copyWith(danger: danger),
       );
 
   testWidgets(
@@ -154,7 +152,7 @@ void main() {
     final confirm =
         tester.widget<TextButton>(find.widgetWithText(TextButton, 'Delete'));
     expect(confirm.style?.foregroundColor?.resolve(<WidgetState>{}), sentinel);
-    expect(sentinel, isNot(LockoutScheme.graphite.colors.error));
+    expect(sentinel, isNot(darkAppearance.colors.error));
 
     // The dialog is a confirmation: declining must leave the routine alone.
     await tester.tap(find.text('Cancel'));
@@ -173,7 +171,7 @@ void main() {
       (tester) async {
     await seedRoutineWithDay();
     const sentinel = Color(0xFF00FF00);
-    expect(sentinel, isNot(LockoutScheme.graphite.colors.error));
+    expect(sentinel, isNot(darkAppearance.colors.error));
 
     await tester.pumpWidget(MaterialApp(
       theme: themeWithSentinelDanger(sentinel),

@@ -5,6 +5,7 @@ import 'food_tab.dart';
 import 'profile_tab.dart';
 import 'progress_tab.dart';
 import 'routines_tab.dart';
+import 'settings_screen.dart';
 import 'today_tab.dart';
 
 class MainScreen extends StatefulWidget {
@@ -83,18 +84,27 @@ class _MainScreenState extends State<MainScreen> {
           ),
       };
 
+  /// Re-reads the data behind whichever tab is on screen.
+  ///
+  /// Dispatches over the `NavTab` enum, not over `_tabIds`, for the reason
+  /// [_screenFor] already gives: a `String`-keyed switch is not exhaustive,
+  /// so a tab added to `BottomNav._allTabs` simply never refreshed — no
+  /// `StateError`, no missing screen, just a tab showing stale data for the
+  /// life of the session. A switch over the enum is a compile error until
+  /// the new tab is handled here too.
   void _refreshVisibleTab() {
-    if (_currentIndex >= _tabIds.length) return;
-    switch (_tabIds[_currentIndex]) {
-      case 'home':
+    final tabs = BottomNav.visibleTabs(foodTabEnabled: _foodTabEnabled);
+    if (_currentIndex >= tabs.length) return;
+    switch (tabs[_currentIndex].tab) {
+      case NavTab.home:
         _todayKey.currentState?.reload();
-      case 'workout':
+      case NavTab.workout:
         _routinesKey.currentState?.reload();
-      case 'progress':
+      case NavTab.progress:
         _progressKey.currentState?.reload();
-      case 'food':
+      case NavTab.food:
         _foodKey.currentState?.reload();
-      case 'profile':
+      case NavTab.profile:
         _profileKey.currentState?.reload();
     }
   }
@@ -155,11 +165,34 @@ class _MainScreenState extends State<MainScreen> {
     // moved from the old gear icon here into the Profile tab.
     return Scaffold(
       backgroundColor: surface,
-      body: IndexedStack(index: _currentIndex, children: screens),
-      bottomNavigationBar: BottomNav(
-        currentIndex: _currentIndex,
-        foodTabEnabled: _foodTabEnabled,
-        onTap: _onTabTapped,
+      // `IndexedStack` keeps every tab mounted — that is what lets an
+      // in-progress live session survive a trip to another tab — but it
+      // installs no `TickerMode`, so an off-screen tab's animations keep
+      // running: measured, an unselected child's `NvWavyProgress` advanced
+      // its wave phase 0.0067 -> 0.2567 over 600ms with a transient frame
+      // callback still registered. A workout is the longest screen-on period
+      // this app has, and that is where the cost lands. Muting here rather
+      // than inside any one widget covers every animation a tab grows later.
+      body: IndexedStack(
+        index: _currentIndex,
+        children: [
+          for (var i = 0; i < screens.length; i++)
+            TickerMode(enabled: i == _currentIndex, child: screens[i]),
+        ],
+      ),
+      // The nav is locked for the one operation that replaces the database
+      // under every other tab. `SettingsBody`'s own `AbsorbPointer` cannot
+      // reach this far: it wraps the body it owns, and this bar is that
+      // body's sibling. See `SettingsBody.importInFlight`.
+      bottomNavigationBar: ValueListenableBuilder<bool>(
+        valueListenable: SettingsBody.importInFlight,
+        builder: (_, importing, child) =>
+            AbsorbPointer(absorbing: importing, child: child),
+        child: BottomNav(
+          currentIndex: _currentIndex,
+          foodTabEnabled: _foodTabEnabled,
+          onTap: _onTabTapped,
+        ),
       ),
     );
   }

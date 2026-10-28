@@ -2,9 +2,9 @@
 
 An offline-first strength training tracker for Android, built with Flutter.
 
-Routines, workout logs, nutrition and body metrics live in a local SQLite database on your device. No account, no analytics, no ads, no server. The network is used for exactly one thing: streaming exercise form videos from YouTube when you tap **WATCH**.
+Routines, workout logs, nutrition and body metrics live in a local SQLite database on your device. No account, no analytics, no ads, no server. The network is used for exactly one thing: streaming exercise form videos from YouTube when you tap **Watch**.
 
-Interface follows the Lockout design system — Material 3, a rounded shape scale, tonal surface elevation and Inter/JetBrains Mono bundled with the app — with six selectable colour schemes.
+Interface follows the Nuvetrix App Design System — Material 3 Expressive, shape as a state, spring motion and Bricolage Grotesque/Figtree/JetBrains Mono bundled with the app — with a brightness and an accent the user picks independently.
 
 ---
 
@@ -50,15 +50,23 @@ Interface follows the Lockout design system — Material 3, a rounded shape scal
 - Import validates the entire document before writing a single row, then restores inside one transaction. A malformed file leaves your data untouched.
 
 ### Themes
-Six Material 3 colour schemes, three light and three dark, applied instantly and persisted:
+Lockout follows the Nuvetrix App Design System, vendored at `docs/design/nuvetrix-app-design-system.md`. Appearance has two independent axes, applied instantly and persisted:
 
-| Light | Dark |
+| Brightness | Accent |
 |---|---|
-| Paper | Graphite |
-| Linen | Ember |
-| Frost | Indigo |
+| System | Rep lime (default) |
+| Light | Violet, Teal |
+| Dark | Coral, Steel |
 
-Every foreground role is contrast-checked against the surface it sits on, and each scheme carries an eight-colour category ramp plus semantic success, warning, danger and rest-day tones. A theme key written by the previous palette system is migrated to the nearest scheme of the same brightness, so an existing install never wakes up light after choosing dark.
+Rep lime `#C2EE7B` is Lockout's registered identity accent. The accent is for emphasis, so in light mode it fills hero cards, the FAB and badges while filled buttons stay the house indigo; in dark mode it carries `primary` as well.
+
+Every foreground role is contrast-checked against the surface it sits on, across all ten brightness-and-accent combinations, and each brightness carries an eight-colour category ramp plus semantic success, warning, danger and rest-day tones. The six colour schemes earlier versions shipped, and the palette keys before them, both migrate onto the nearest accent at their original brightness — so an existing install never wakes up light after choosing dark.
+
+There is no wallpaper-derived (Material You) colour. The house system reserves colour identity for the app, so that every Nuvetrix app looks like one family.
+
+Typefaces are bundled rather than downloaded, so the app renders correctly with no network: Bricolage Grotesque for display, Figtree for body text, and JetBrains Mono for figures that must line up in a column.
+
+`test/expressive_contract_test.dart` asserts the app against the vendored house document — palette hexes, the type scale, the corner scale and the signature hero outline — so drift from the family standard fails a test rather than a review.
 
 ---
 
@@ -84,7 +92,7 @@ The release APK lands at `build/app/outputs/flutter-apk/app-release.apk`. Prebui
 flutter test
 ```
 
-580+ tests covering unit conversion and BMI, BMR/TDEE and goal clamping, streak edge cases, weekday resolution, catalog integrity and cuisine balance, WCAG contrast across every colour scheme, the Material 3 theme and its widgets, and a full backup export/import round-trip against a real SQLite database via `sqflite_common_ffi` — including six classes of malformed input that must be rejected without touching existing data.
+880+ tests covering unit conversion and BMI, BMR/TDEE and goal clamping, streak edge cases, weekday resolution, catalog integrity and cuisine balance, WCAG contrast across all ten brightness-and-accent combinations, the Material 3 Expressive theme and its widgets, the lobed `CookieBorder` geometry, the two-axis theme migration, and a full backup export/import round-trip against a real SQLite database via `sqflite_common_ffi` — including six classes of malformed input that must be rejected without touching existing data.
 
 ---
 
@@ -96,11 +104,11 @@ lib/
 ├── models/         # Entities and their SQLite row mapping
 ├── screens/        # One file per tab, plus settings and the video view
 ├── services/       # Database, scheduling, nutrition/training planners, backup, notifications
-├── theme/          # Colour schemes, semantic tokens and the Material 3 theme
+├── theme/          # Palette, accents, motion, shape and the Material 3 Expressive theme
 └── widgets/        # Shared components
 ```
 
-Colour, type and shape resolve through `Theme.of(context)`, `ColorScheme` and the `LockoutSemantics` theme extension rather than through compile-time constants, so a scheme change repaints the whole app without touching call sites. Literal colours live only in `lib/theme/schemes.dart`, and a test fails the build if one appears anywhere else.
+Colour, type and shape resolve through `Theme.of(context)`, `ColorScheme` and the `LockoutSemantics` theme extension rather than through compile-time constants, so a scheme change repaints the whole app without touching call sites. Literal colours live only in `lib/theme/palette.dart` and `lib/theme/accents.dart`, and a test fails the build if one appears anywhere else.
 
 The database migrates in place across schema versions; existing installs keep their data.
 
@@ -110,7 +118,7 @@ The database migrates in place across schema versions; existing installs keep th
 
 | Permission | Why |
 |---|---|
-| `INTERNET` | Streaming exercise form videos when you tap WATCH. Nothing else. |
+| `INTERNET` | Streaming exercise form videos when you tap Watch. Nothing else. |
 | `POST_NOTIFICATIONS` | Local training reminders, scheduled on-device from local data. |
 | `RECEIVE_BOOT_COMPLETED` | Re-arming those reminders after a restart. |
 

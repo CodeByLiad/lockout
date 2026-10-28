@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lockout/theme/lockout_semantics.dart';
 import 'package:lockout/theme/lockout_theme.dart';
-import 'package:lockout/theme/schemes.dart';
 import 'package:lockout/widgets/action_grid.dart';
 import 'package:lockout/widgets/hero_card.dart';
 import 'package:lockout/widgets/home_hub.dart';
+
+import 'test_helpers.dart';
 
 
 // What this file covers, and what it does not:
@@ -19,10 +20,10 @@ import 'package:lockout/widgets/home_hub.dart';
 // What is left here is the surface contract: the hub paints on themed cards,
 // takes every colour from the theme, and keeps its touch targets.
 
-ThemeData _theme([LockoutScheme scheme = LockoutScheme.graphite]) =>
+ThemeData _theme([TestAppearance scheme = darkAppearance]) =>
     LockoutTheme.build(colors: scheme.colors, semantics: scheme.semantics);
 
-Widget _host(Widget child, {LockoutScheme scheme = LockoutScheme.graphite}) =>
+Widget _host(Widget child, {TestAppearance scheme = darkAppearance}) =>
     MaterialApp(
       theme: _theme(scheme),
       home: Scaffold(body: SingleChildScrollView(child: child)),
@@ -32,7 +33,7 @@ HomeHub _hub({List<ActionItem> actions = const []}) => HomeHub(
       eyebrow: 'TODAY · MON',
       title: 'Legs',
       subtitle: '4 exercises · 12 sets',
-      heroColor: LockoutScheme.graphite.semantics.categoryAt(0),
+      heroColor: darkAppearance.semantics.categoryAt(0),
       heroActions: const [],
       summary: const HomeHubSummary(
         kcalEaten: 1240,
@@ -53,7 +54,7 @@ List<ActionItem> _eightActions() => List.generate(
       (i) => ActionItem(
         label: 'A$i',
         icon: Icons.circle,
-        color: LockoutScheme.graphite.semantics.categoryAt(i),
+        color: darkAppearance.semantics.categoryAt(i),
         onTap: () {},
       ),
     );
@@ -96,7 +97,7 @@ void main() {
 
   testWidgets('every semantic colour follows the active scheme',
       (tester) async {
-    for (final scheme in LockoutScheme.all) {
+    for (final scheme in allAppearances) {
       await tester.pumpWidget(_host(_hub(), scheme: scheme));
       await tester.pumpAndSettle();
 

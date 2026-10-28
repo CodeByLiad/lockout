@@ -5,15 +5,14 @@ import 'package:lockout/screens/log_tab.dart';
 import 'package:lockout/screens/progress_tab.dart';
 import 'package:lockout/services/database_service.dart';
 import 'package:lockout/theme/lockout_theme.dart';
-import 'package:lockout/theme/schemes.dart';
 import 'package:lockout/widgets/weight_card.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'test_helpers.dart';
 
 ThemeData _theme() => LockoutTheme.build(
-      colors: LockoutScheme.graphite.colors,
-      semantics: LockoutScheme.graphite.semantics,
+      colors: darkAppearance.colors,
+      semantics: darkAppearance.semantics,
     );
 
 Widget _host({

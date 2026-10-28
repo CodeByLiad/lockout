@@ -824,7 +824,7 @@ class RoutinesTabState extends State<RoutinesTab> {
   ) {
     final theme = Theme.of(context);
     final shape = RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(LockoutTheme.radiusButton),
+      borderRadius: BorderRadius.circular(LockoutTheme.radiusField),
     );
 
     return ExpansionTile(
@@ -991,7 +991,7 @@ class _CreateRoutineFormState extends State<_CreateRoutineForm> {
                 _template = t;
                 _showTemplateError = false;
               }),
-              borderRadius: BorderRadius.circular(LockoutTheme.radiusButton),
+              borderRadius: BorderRadius.circular(LockoutTheme.radiusField),
               // Ink, not Container: Container's opaque BoxDecoration paints
               // over the InkWell's splash (which draws on the ancestor
               // Material), so a selected tile — the one with a fill — gave no
@@ -1003,7 +1003,7 @@ class _CreateRoutineFormState extends State<_CreateRoutineForm> {
                 decoration: BoxDecoration(
                   color: selected ? theme.colorScheme.secondaryContainer : null,
                   borderRadius:
-                      BorderRadius.circular(LockoutTheme.radiusButton),
+                      BorderRadius.circular(LockoutTheme.radiusField),
                   border: Border.all(
                     color: selected
                         ? theme.colorScheme.primary

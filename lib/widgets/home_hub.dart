@@ -135,7 +135,6 @@ class HomeHub extends StatelessWidget {
           eyebrow: eyebrow,
           title: title,
           subtitle: _daySubtitle,
-          accent: heroColor,
           actions: heroActions,
         ),
         WeightCard(
@@ -157,7 +156,7 @@ class HomeHub extends StatelessWidget {
         ],
         if (actions.isNotEmpty) ...[
           const SizedBox(height: LockoutTheme.spaceLg),
-          Text('QUICK ACTIONS', style: Theme.of(context).textTheme.labelSmall),
+          Text('Quick actions', style: Theme.of(context).textTheme.labelSmall),
           const SizedBox(height: LockoutTheme.spaceSm),
           ActionGrid(items: actions),
         ],

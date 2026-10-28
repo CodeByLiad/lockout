@@ -47,7 +47,7 @@ class CalmRow extends StatelessWidget {
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: theme.colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(LockoutTheme.radiusButton),
+                borderRadius: BorderRadius.circular(LockoutTheme.radiusField),
               ),
               child: Icon(icon, size: 20, color: tint),
             ),

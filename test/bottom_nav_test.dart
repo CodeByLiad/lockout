@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lockout/theme/lockout_theme.dart';
-import 'package:lockout/theme/schemes.dart';
 import 'package:lockout/widgets/bottom_nav.dart';
 
+import 'test_helpers.dart';
+
 ThemeData _theme() => LockoutTheme.build(
-      colors: LockoutScheme.graphite.colors,
-      semantics: LockoutScheme.graphite.semantics,
+      colors: darkAppearance.colors,
+      semantics: darkAppearance.semantics,
     );
 
 Widget _host({

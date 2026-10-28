@@ -6,13 +6,20 @@ import '../services/notification_service.dart';
 import '../services/numeric_guard.dart';
 import '../services/nutrition_planner.dart';
 import '../services/units.dart';
-import '../theme/lockout_semantics.dart';
+import '../theme/accents.dart';
+import '../theme/cookie_border.dart';
+import '../theme/lockout_motion.dart';
 import '../theme/lockout_theme.dart';
-import '../theme/schemes.dart';
 import '../theme/theme_controller.dart';
-import '../widgets/calm_row.dart';
-import '../widgets/lockout_card.dart';
-import '../widgets/lockout_field.dart';
+import '../widgets/house/nv_button.dart';
+import '../widgets/house/nv_dialog.dart';
+import '../widgets/house/nv_grouped_list.dart';
+import '../widgets/house/nv_segmented_button.dart';
+import '../widgets/house/nv_sheet.dart';
+import '../widgets/house/nv_status_badge.dart';
+import '../widgets/house/nv_switch.dart';
+import '../widgets/house/nv_text_field.dart';
+import 'about_screen.dart';
 
 /// The settings content, independent of how it is presented.
 ///
@@ -34,6 +41,22 @@ class SettingsBody extends StatefulWidget {
     required this.onSettingsUpdated,
     this.showAppBar = true,
   });
+
+  /// True while [_import] is replacing the database.
+  ///
+  /// The busy lock inside this screen is an `AbsorbPointer` around the body
+  /// it owns, and that is as far as it can reach: `BottomNav` is a sibling of
+  /// this body one level up in `MainScreen`, so a user could switch tabs
+  /// mid-import and land on a tab reading a half-restored database. This is
+  /// the smaller of the two repairs the review offered — a notifier plus one
+  /// `AbsorbPointer` at the nav, against threading a busy flag up through
+  /// `ProfileTab` into `MainScreen`'s state, which would add a parameter to
+  /// two widgets and a `setState` hop to keep in step with this one.
+  ///
+  /// Raised only for the import. Export is not destructive: leaving the
+  /// screen while a backup is written costs nothing, and locking the nav for
+  /// it would be a lock the user cannot explain.
+  static final ValueNotifier<bool> importInFlight = ValueNotifier<bool>(false);
 
   @override
   State<SettingsBody> createState() => SettingsBodyState();
@@ -97,6 +120,93 @@ class SettingsBodyState extends State<SettingsBody> {
     super.dispose();
   }
 
+  /// What [_loadSettings] last put into each text controller.
+  ///
+  /// Saving any one card calls `widget.onSettingsUpdated()`, which is
+  /// `MainScreen._loadSettings` -> `_refreshVisibleTab()` ->
+  /// `ProfileTabState.reload()` -> [reload] -> [_loadSettings]: the screen
+  /// asks the app to refresh and the app refreshes the screen that asked.
+  /// With every controller overwritten unconditionally, that discarded
+  /// unsaved typing in every other field — one long scroll, seven
+  /// controllers and several save buttons, so being mid-type in one card
+  /// while saving another is ordinary use, not a corner.
+  ///
+  /// Of the two repairs the review offered, this is the one that does not
+  /// depend on who asked. Ignoring a self-triggered reload would still let
+  /// the reload `MainScreen` fires on every tab switch wipe the same text,
+  /// and would leave the next caller to remember the rule. Comparing the
+  /// field against what was last loaded into it answers the question the
+  /// code actually needs answered — did the user change this, or did the
+  /// database change underneath it — so an import still refreshes every
+  /// field nobody is editing.
+  final Map<TextEditingController, String> _loadedText = {};
+
+  /// Writes a freshly read value into [controller], unless the user has
+  /// edited it since it was last loaded.
+  void _loadInto(TextEditingController controller, String value) {
+    final loaded = _loadedText[controller];
+    if (loaded != null && controller.text != loaded) return;
+    _setField(controller, value);
+  }
+
+  /// Writes text this screen chose itself — a recalculated target, a height
+  /// re-rendered in the other unit — rather than a value read from the
+  /// database. It moves the baseline with it, so the next reload does not
+  /// mistake the screen's own edit for the user's and refuse to refresh the
+  /// field ever again.
+  void _setField(TextEditingController controller, String value) {
+    controller.text = value;
+    _loadedText[controller] = value;
+  }
+
+  /// Moves the baseline of every controller a save has just persisted onto
+  /// what that controller now holds.
+  ///
+  /// The counterpart of [_markSaved] for text, and the half of the dirty
+  /// check that is easy to forget: a field whose text sits above its
+  /// baseline is treated as unsaved typing, and nothing about saving it
+  /// changes its text. Without this the field stays "edited" for the rest
+  /// of the session — it stops following the database, so an import lands
+  /// under it and leaves it showing the old value, and the next press of
+  /// the same save button writes that stale value back over the imported
+  /// row. [_setField] is not used here on purpose: assigning
+  /// `controller.text` collapses the selection to the end, which would move
+  /// the caret of a field the user may still be typing in.
+  void _markFieldsSaved(List<TextEditingController> controllers) {
+    for (final controller in controllers) {
+      _loadedText[controller] = controller.text;
+    }
+  }
+
+  /// The three controllers that hold one value between them.
+  List<TextEditingController> get _heightCtrls =>
+      [_heightCmCtrl, _heightFtCtrl, _heightInCtrl];
+
+  /// The non-text half of [_loadedText].
+  ///
+  /// A controller is only one of the ways a card holds a choice the user has
+  /// not committed yet. The nutrition switch, the height unit and the sex
+  /// control are each set by one widget and written by a button somewhere
+  /// else, so a reload between those two moments discards them for exactly
+  /// the same reason unguarded controllers lost typing. The reminder
+  /// toggles, the activity radio and the days stepper need nothing here:
+  /// each persists the instant it changes, so a reload re-reads what the
+  /// user just chose.
+  final Map<String, Object?> _loadedValues = {};
+
+  /// Returns [incoming], unless the user has moved [current] away from what
+  /// was last loaded into [slot] — then their choice stands.
+  T _loadValue<T>(String slot, T current, T incoming) {
+    final loaded = _loadedValues[slot];
+    if (loaded != null && current != loaded) return current;
+    _loadedValues[slot] = incoming;
+    return incoming;
+  }
+
+  /// Moves a [_loadValue] baseline onto a value this screen has just
+  /// written, so the choice stops reading as unsaved once it is saved.
+  void _markSaved(String slot, Object? value) => _loadedValues[slot] = value;
+
   /// Re-reads every setting. Public so `ProfileTab` can refresh the hosted
   /// body the same way the other tabs are refreshed on the way in.
   Future<void> reload() => _loadSettings();
@@ -134,13 +244,16 @@ class SettingsBodyState extends State<SettingsBody> {
 
     if (!mounted) return;
     setState(() {
-      _heightCmCtrl.text = cm.toStringAsFixed(cm % 1 == 0 ? 0 : 1);
-      _heightFtCtrl.text = split.feet.toString();
-      _heightInCtrl.text =
-          split.inches.toStringAsFixed(split.inches % 1 == 0 ? 0 : 1);
-      _calorieCtrl.text = c;
-      _foodTabEnabled = f == 'true';
-      _heightUnit = u == 'ft' ? 'ft' : 'cm';
+      // `_loadInto`, not a bare assignment: see [_loadedText].
+      _loadInto(_heightCmCtrl, cm.toStringAsFixed(cm % 1 == 0 ? 0 : 1));
+      _loadInto(_heightFtCtrl, split.feet.toString());
+      _loadInto(_heightInCtrl,
+          split.inches.toStringAsFixed(split.inches % 1 == 0 ? 0 : 1));
+      _loadInto(_calorieCtrl, c);
+      // `_loadValue`, not a bare assignment: see [_loadedValues].
+      _foodTabEnabled = _loadValue('food_tab_enabled', _foodTabEnabled, f == 'true');
+      _heightUnit =
+          _loadValue('height_unit', _heightUnit, u == 'ft' ? 'ft' : 'cm');
       _remindersEnabled = rEnabled == 'true';
       _streakAlertsEnabled = sAlerts == 'true';
       _reminderTime = TimeOfDay(
@@ -148,11 +261,11 @@ class SettingsBodyState extends State<SettingsBody> {
         minute: int.tryParse(rMin) ?? 0,
       );
 
-      _ageCtrl.text = goal.age > 0 ? goal.age.toString() : '';
-      _targetWeightCtrl.text =
-          goal.targetWeightKg > 0 ? goal.targetWeightKg.toString() : '';
-      _weeksCtrl.text = goal.weeks.toString();
-      _sex = goal.sex;
+      _loadInto(_ageCtrl, goal.age > 0 ? goal.age.toString() : '');
+      _loadInto(_targetWeightCtrl,
+          goal.targetWeightKg > 0 ? goal.targetWeightKg.toString() : '');
+      _loadInto(_weeksCtrl, goal.weeks.toString());
+      _sex = _loadValue('sex', _sex, goal.sex);
       _activity = goal.activity;
       _daysPerWeek = goal.daysPerWeek;
       _plan = snap.nutrition;
@@ -200,6 +313,8 @@ class SettingsBodyState extends State<SettingsBody> {
     final cm = _resolveHeightCm();
     await db.saveSetting('height_cm', cm.toStringAsFixed(2));
     await db.saveSetting('height_unit', _heightUnit);
+    _markSaved('height_unit', _heightUnit);
+    _markFieldsSaved(_heightCtrls);
     widget.onSettingsUpdated();
     _toast('Saved height ${Units.formatHeight(cm, _heightUnit)}.');
   }
@@ -212,6 +327,8 @@ class SettingsBodyState extends State<SettingsBody> {
       'food_tab_enabled',
       _foodTabEnabled ? 'true' : 'false',
     );
+    _markSaved('food_tab_enabled', _foodTabEnabled);
+    _markFieldsSaved([_calorieCtrl]);
     widget.onSettingsUpdated();
     _toast('Saved food settings.');
   }
@@ -224,6 +341,8 @@ class SettingsBodyState extends State<SettingsBody> {
     await db.saveSetting('height_unit', _heightUnit);
     await db.saveSetting('age', _ageCtrl.text.trim());
     await db.saveSetting('sex', _sex.name);
+    _markSaved('height_unit', _heightUnit);
+    _markSaved('sex', _sex);
     await db.saveSetting('activity_level', _activity.name);
     await db.saveSetting(
       'target_weight_kg',
@@ -231,13 +350,18 @@ class SettingsBodyState extends State<SettingsBody> {
     );
     await db.saveSetting('goal_weeks', _weeksCtrl.text.trim());
     await db.saveSetting('training_days_per_week', _daysPerWeek.toString());
+    // Every field this card owns is now on disk, so none of them is
+    // unsaved typing any more. `_calorieCtrl` is not in the list: this path
+    // does not persist what is in it — it replaces it below, through
+    // `_setField`, which moves that baseline itself.
+    _markFieldsSaved([..._heightCtrls, _ageCtrl, _targetWeightCtrl, _weeksCtrl]);
 
     final plan = await GoalService.instance.recalculateAndSaveTarget();
     if (!mounted) return;
 
     setState(() {
       _plan = plan;
-      if (plan != null) _calorieCtrl.text = plan.targetKcal.toString();
+      if (plan != null) _setField(_calorieCtrl, plan.targetKcal.toString());
     });
     widget.onSettingsUpdated();
 
@@ -296,15 +420,28 @@ class SettingsBodyState extends State<SettingsBody> {
 
   /// Keeps the hidden unit's fields in sync so switching units never loses
   /// the value the user just typed.
+  ///
+  /// Through [_setField], not a bare `controller.text =`: this is the
+  /// screen writing its own re-rendering of a value, not the user editing
+  /// one, and a bare assignment left all three controllers reading as
+  /// edited forever after. It does not even take a typed value to trigger
+  /// that — a round trip through `_resolveHeightCm` turns a loaded `175`
+  /// into `175.0` (`Units.feetInchesToCm(5, 8.9)` is 175.006), and that one
+  /// character is the whole difference the dirty check looks at. The cost
+  /// is the symmetrical one: a height typed but not saved, then carried
+  /// through a unit switch, is a value the screen has re-rendered, so a
+  /// reload refreshes it like any other unedited field. That is the smaller
+  /// loss — the field is two taps from its own save button, and the
+  /// alternative was an import being silently overwritten.
   void _switchHeightUnit(String unit) {
     final cm = _resolveHeightCm();
     setState(() {
       _heightUnit = unit;
-      _heightCmCtrl.text = cm.toStringAsFixed(cm % 1 == 0 ? 0 : 1);
+      _setField(_heightCmCtrl, cm.toStringAsFixed(cm % 1 == 0 ? 0 : 1));
       final split = Units.cmToFeetInches(cm);
-      _heightFtCtrl.text = split.feet.toString();
-      _heightInCtrl.text =
-          split.inches.toStringAsFixed(split.inches % 1 == 0 ? 0 : 1);
+      _setField(_heightFtCtrl, split.feet.toString());
+      _setField(_heightInCtrl,
+          split.inches.toStringAsFixed(split.inches % 1 == 0 ? 0 : 1));
     });
   }
 
@@ -326,19 +463,34 @@ class SettingsBodyState extends State<SettingsBody> {
 
   // --- THEME ---
 
-  /// `key` is a [LockoutScheme.key], or [LockoutScheme.dynamicKey].
-  Future<void> _applyTheme(String key) => ThemeController.instance.select(key);
+  // Two handlers rather than one, because the picker is two independent
+  // axes: a brightness tap must not disturb the accent, and vice versa.
+  // Each persists through `ThemeController`; a throw there (storage
+  // failure) must not vanish as a silent, unhandled async error — surface
+  // it the same way every other write on this screen does.
+  //
+  // The `setState` is not redundant with the controller's own notification:
+  // this body reads `ThemeController.instance` directly rather than through
+  // a `ListenableBuilder`, so without it the segmented button and the
+  // swatches would keep painting the previous selection until something
+  // else rebuilt the screen.
 
-  /// Tap handler for a theme swatch. `_applyTheme` persists the selection;
-  /// a throw there (bad key, storage failure) must not vanish as a silent,
-  /// unhandled async error — surface it the same way every other write on
-  /// this screen does.
-  Future<void> _selectTheme(String key) async {
+  Future<void> _applyBrightness(LockoutBrightnessChoice choice) async {
     try {
-      await _applyTheme(key);
+      await ThemeController.instance.selectBrightness(choice);
     } catch (_) {
-      _toast('Could not apply theme.', warn: true);
+      _toast('Could not apply the theme.', warn: true);
     }
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _applyAccent(LockoutAccent accent) async {
+    try {
+      await ThemeController.instance.selectAccent(accent);
+    } catch (_) {
+      _toast('Could not apply the accent.', warn: true);
+    }
+    if (mounted) setState(() {});
   }
 
   // --- REMINDERS ---
@@ -400,42 +552,43 @@ class SettingsBodyState extends State<SettingsBody> {
   }
 
   Future<void> _import() async {
-    final semantics = LockoutSemantics.of(context);
-    final confirmed = await showDialog<bool>(
+    // Routed through the house destructive dialog (section 8: a dialog is
+    // allowed for one thing only, a destructive confirmation). The trigger
+    // that opens it is a neutral `NvButtonVariant.outlined` — "Neutral
+    // alternatives" per the design doc's button table — so the `danger` ink
+    // lives only on this confirmation, not on the button that merely offers
+    // it.
+    final confirmed = await showNvDestructiveDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Replace all data?'),
-        content: const Text(
-          'Importing a backup deletes every routine, workout, meal and body '
-          'entry currently on this device and replaces them with the file\'s '
-          'contents. This cannot be undone — export a backup first if you are '
-          'not sure.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            // `semantics.danger`, not `colorScheme.error` — replacing every
-            // row in the database is a destructive confirmation, the role
-            // `LockoutSemantics` reserves `danger` for (see that class's
-            // doc, and today_tab's discard dialog for the same rule). The
-            // Import button that opens this dialog carries the same role:
-            // the trigger and its confirmation are one action, so they
-            // cannot resolve to two different reds.
-            style: TextButton.styleFrom(foregroundColor: semantics.danger),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Choose file'),
-          ),
-        ],
-      ),
+      title: 'Replace all data?',
+      body: 'Importing a backup deletes every routine, workout, meal and '
+          'body entry currently on this device and replaces them with the '
+          'file\'s contents. This cannot be undone — export a backup first '
+          'if you are not sure.',
+      confirmLabel: 'Choose file',
     );
 
-    if (confirmed != true) return;
+    if (!confirmed) return;
 
     setState(() => _busy = true);
-    final result = await BackupService.instance.pickAndImport();
+    SettingsBody.importInFlight.value = true;
+    final ImportResult result;
+    try {
+      result = await BackupService.instance.pickAndImport();
+    } finally {
+      // Dropped in a `finally`, and ahead of the `mounted` guard, for the
+      // same reason twice over: a lock this method fails to clear is not
+      // undone by anything else. `pickAndImport` turns every fault it
+      // authors into an `ImportResult`, but it says itself that a database
+      // which will not open at all is "outside that structure and throws",
+      // and its `columnTypes` read is unguarded. Cleared after the call
+      // instead, that throw leaves the lock up for the life of the process
+      // — a bottom nav bar that never works again, with nothing on screen
+      // to explain it. And this future outlives the widget, so a clear
+      // behind the `mounted` guard would survive the screen that raised it
+      // in exactly the same way.
+      SettingsBody.importInFlight.value = false;
+    }
     if (!mounted) return;
     setState(() => _busy = false);
 
@@ -444,49 +597,109 @@ class SettingsBodyState extends State<SettingsBody> {
       return;
     }
 
-    // Restored settings include the theme, so re-read everything.
-    final db = DatabaseService.instance;
-    final restoredTheme =
-        await db.getSetting('theme_key', defaultValue: LockoutScheme.fallback.key);
-    await ThemeController.instance.select(restoredTheme);
-    if (!mounted) return;
-
-    // A belt, and deliberately kept as one now that both braces hold:
-    // `BackupService` coerces numeric columns on import, and every read on
-    // the far side of this `await` goes through `NumericGuard` rather than
-    // a cast, so nothing arriving through an import can still throw here.
-    // What that leaves is an unenumerable class — any future failure in
-    // `_loadSettings`, from a schema the running build does not know to a
-    // disk error — and the consequence has not changed: unguarded, the
-    // throw takes the reschedule, the callback and the toast with it, so
-    // the import applies while the OS keeps the pre-restore reminder
-    // schedule and the user is told nothing.
-    // Re-reading settings is best-effort; everything after it is not.
-    var reloaded = true;
+    // Everything from here on is the import TAIL: the restore has already
+    // applied, so the one thing that must happen whatever else does is that
+    // the host re-reads and the user is told. Hence one `try` over the
+    // whole tail with both of those in a `finally`.
+    //
+    // Three awaits live in it and all three can throw.
+    // `ThemeController.load()` lets a failed read escape on purpose.
+    // `rescheduleAll()`'s own `_ensureReady` guard covers `init()` and
+    // nothing else, so `_plugin.cancel`, `_plugin.zonedSchedule` and
+    // `_workoutReminderBody()` — which reads the database this import has
+    // just replaced the contents of — are all still live. `_loadSettings`
+    // is the one whose failure is merely best-effort, so it keeps its own
+    // inner guard and its own wording.
+    //
+    // Unguarded, any of them took the reschedule, the callback and the
+    // "Import complete" toast with it: the import applied, nobody was told,
+    // and the OS was left either holding the pre-restore schedule or —
+    // once `rescheduleAll()` has run its own `await cancelAll()` — holding
+    // no reminder at all.
+    //
+    // `reloaded` is NOT "did `_loadSettings()` throw". It is "is what the
+    // user is looking at the thing that was just imported", and its starting
+    // value has to be the pessimistic one: `ThemeController.load()` below is
+    // the FIRST await in this try, and a throw there jumps to the outer
+    // catch with `_loadSettings()` never called at all. Started `true` and
+    // falsified only by the inner catch, that case reported a clean
+    // read-back over a screen still showing every pre-import value.
+    var reloaded = false;
+    var tailFailed = false;
     try {
-      await _loadSettings();
-    } catch (_) {
-      reloaded = false;
-    }
-    await NotificationService.instance.rescheduleAll();
-    widget.onSettingsUpdated();
+      // Restored settings include the theme, so re-read everything.
+      // `load()` rather than a read-then-select pair: it is the one place
+      // that knows both axes and the legacy formats, and an imported backup
+      // can carry a `theme_key` written by any older build.
+      await ThemeController.instance.load();
 
-    if (!mounted) return;
-    // Two different things can be worth warning about, and they are
-    // independent. `reloaded` is the belt above failing — rare, and now
-    // unreachable from an import. `coercedValues` is the common one: the
-    // restore succeeded by rewriting cells it could not read as `0`, and
-    // saying only "Import complete" there reports a silent edit of the
-    // user's own data as an unqualified success.
-    final rewritten = result.coercedValues > 0;
-    _toast(
-      reloaded
+      // A belt, and deliberately kept as one now that both braces hold:
+      // `BackupService` coerces numeric columns on import, and every read
+      // on the far side of this `await` goes through `NumericGuard` rather
+      // than a cast, so nothing arriving through an import can still throw
+      // here. What that leaves is an unenumerable class — any future
+      // failure in `_loadSettings`, from a schema the running build does
+      // not know to a disk error.
+      // Re-reading settings is best-effort; everything after it is not.
+      try {
+        await _loadSettings();
+        reloaded = true;
+      } catch (_) {
+        // Left false. Nothing else sets it, so every other way out of this
+        // try — including the two awaits that bracket this one — lands on
+        // the same honest answer.
+      }
+
+      await NotificationService.instance.rescheduleAll();
+    } catch (error, stack) {
+      // Reported rather than rethrown: this is the one place in the app
+      // where a failure after the restore must not be allowed to hide the
+      // restore itself.
+      debugPrint('The import tail failed after the restore applied: '
+          '$error\n$stack');
+      tailFailed = true;
+    } finally {
+      // Unconditional, and deliberately not behind `mounted`: the data on
+      // disk has changed, so every other tab is holding a stale read
+      // whether or not THIS screen survived the import.
+      widget.onSettingsUpdated();
+
+      // Three different things can be worth warning about, and they are
+      // independent. `reloaded` is "the fields on screen are the imported
+      // ones" — false if `_loadSettings()` threw, and equally false if
+      // anything ahead of it did. `coercedValues` is the common one: the
+      // restore succeeded by rewriting cells it could not read as `0`, and
+      // saying only "Import complete" there reports a silent edit of the
+      // user's own data as an unqualified success. `tailFailed` is the theme
+      // re-read or the reschedule going down.
+      //
+      // What `tailFailed` leaves behind — which is what its copy has to be
+      // judged against, and it is NOT one state. A throw inside
+      // `rescheduleAll()` arrives after that method's own `await cancelAll()`
+      // (`notification_service.dart:143`), so the OS holds nothing and
+      // reminders are OFF until some later settings change reschedules them.
+      // A throw in `ThemeController.load()` arrives before `rescheduleAll()`
+      // is called at all, so the OS keeps the pre-restore schedule. "Could
+      // not be rescheduled" is true of both and promises neither — but on its
+      // own it reads as "the old schedule is still running", which in the
+      // first and likelier case is wrong, and leaves a user with no reminders
+      // and no reason to act. So it names the repair instead: changing any
+      // notification setting calls `rescheduleAll()` again.
+      // `_toast` is a no-op once unmounted, so it needs no guard of its own.
+      final rewritten = result.coercedValues > 0;
+      final restored = reloaded
           ? 'Import complete. ${result.rowsRestored} rows restored.'
               '${ImportResult.coercionNote(result.coercedValues)}'
           : 'Import complete. ${result.rowsRestored} rows restored, but some '
-              'of them could not be read back. Check the backup file.',
-      warn: !reloaded || rewritten,
-    );
+              'of them could not be read back. Check the backup file.';
+      _toast(
+        tailFailed
+            ? '$restored Reminders could not be rescheduled. Open '
+                'Notifications to set them again.'
+            : restored,
+        warn: !reloaded || rewritten || tailFailed,
+      );
+    }
   }
 
   // --- BUILD ---
@@ -516,35 +729,38 @@ class SettingsBodyState extends State<SettingsBody> {
           // `viewPadding` ignores insets, so it would reserve another chunk
           // of dead space above the keyboard. `padding.bottom` collapses to 0
           // in exactly that case.
+          //
+          // Vertical only. The house system gives text and headings a 20dp
+          // margin and grouped lists and cards a 16dp one, and `_section`
+          // is the one thing that knows which of its children is which —
+          // so a horizontal padding here is a second margin underneath
+          // that one, which put every heading at 40 and every group at 36.
+          // `today_tab.dart` pads per element for the same reason.
           padding: EdgeInsets.fromLTRB(
-            LockoutTheme.screenPadding,
+            0,
             LockoutTheme.spaceMd,
-            LockoutTheme.screenPadding,
+            0,
             LockoutTheme.spaceMd + MediaQuery.paddingOf(context).bottom,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _sectionCaption(context, 'Appearance'),
+              // The header is text at subject scale, so it takes the text
+              // margin rather than the grouped-list one.
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: LockoutTheme.screenPadding,
+                ),
+                child: _buildHeader(context),
+              ),
+              const SizedBox(height: LockoutTheme.sectionGap),
               _buildAppearanceCard(context),
-              const SizedBox(height: LockoutTheme.sectionGap),
-              _sectionCaption(context, 'Units'),
               _buildUnitsCard(context),
-              const SizedBox(height: LockoutTheme.sectionGap),
-              _sectionCaption(context, 'Training'),
               _buildTrainingCard(context),
-              const SizedBox(height: LockoutTheme.sectionGap),
-              _sectionCaption(context, 'Food'),
               _buildFoodCard(context),
-              const SizedBox(height: LockoutTheme.sectionGap),
-              _sectionCaption(context, 'Notifications'),
               _buildNotificationsCard(context),
-              const SizedBox(height: LockoutTheme.sectionGap),
-              _sectionCaption(context, 'Data'),
               _buildDataCard(context),
-              const SizedBox(height: LockoutTheme.sectionGap),
-              _sectionCaption(context, 'About'),
-              _buildAboutCard(context),
+              _buildAboutSection(context),
             ],
           ),
         ),
@@ -552,185 +768,325 @@ class SettingsBodyState extends State<SettingsBody> {
     );
   }
 
-  Widget _sectionCaption(BuildContext context, String label) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: LockoutTheme.spaceSm),
-      child: Text(label, style: Theme.of(context).textTheme.labelSmall),
+  /// The frame every section shares: a sentence-case heading, the rows that
+  /// are genuinely rows inside an [NvGroupedList], and anything else — a
+  /// field, a calculated summary, the section's own save button — below the
+  /// group but still inside the section's frame.
+  ///
+  /// Replaces the old `LockoutCard` wrapper and the all-caps
+  /// `_sectionCaption` this screen used to call ahead of every card: a
+  /// grouped list reads as one object on its own, so the section no longer
+  /// needs a bounding card to say the same thing twice.
+  ///
+  /// House line 226 gives text and headings a 20dp margin and grouped lists
+  /// and cards a 16dp one, and this method is the only thing that knows
+  /// which of its children is which. For [rows] that is settled by
+  /// construction. For [extras] it was not: every extra took the
+  /// grouped-list margin, so "Applies instantly.", two body paragraphs,
+  /// every [NvTextField], the "Activity level" caption and all three save
+  /// buttons sat 4dp inside the heading that named them.
+  ///
+  /// Marked per child with [_CardMargin] rather than split into two lists:
+  /// the Food section interleaves a paragraph, fields, a calculated card, a
+  /// warning card and a second field in the single order the user reads down
+  /// the screen, and two slots would force every card below every line of
+  /// text.
+  Widget _section(
+    BuildContext context, {
+    required String heading,
+    required List<Widget> rows,
+    List<Widget> extras = const [],
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: LockoutTheme.screenPadding,
+          ),
+          child: Text(heading, style: Theme.of(context).textTheme.titleMedium),
+        ),
+        const SizedBox(height: LockoutTheme.headingGap),
+        // One stretch column for both slots, so a save button still fills
+        // the width it had when the padding was on the column instead of on
+        // each child.
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (rows.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: LockoutTheme.cardPadding,
+                ),
+                child: NvGroupedList(children: rows),
+              ),
+            if (extras.isNotEmpty) ...[
+              const SizedBox(height: LockoutTheme.spaceMd),
+              for (final extra in extras)
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: _marginFor(extra)),
+                  child: extra,
+                ),
+            ],
+          ],
+        ),
+        const SizedBox(height: LockoutTheme.sectionGap),
+      ],
     );
   }
 
+  /// 16 for a card or a grouped list, 20 for everything else.
+  ///
+  /// Text is the default rather than the exception because that is what the
+  /// extras mostly are, and because the failure mode of getting it wrong is
+  /// the quieter one: a paragraph 4dp out of line with its heading reads as
+  /// a mistake, while a card 4dp out of line with the group above it reads
+  /// as a different card.
+  static double _marginFor(Widget extra) => extra is _CardMargin
+      ? LockoutTheme.cardPadding
+      : LockoutTheme.screenPadding;
+
+  /// Section 12.2's header: a large cookie avatar and the app name.
+  ///
+  /// The house spec also asks for a name, an email and a Pro badge, but this
+  /// app has no account and no Pro tier (deviation D2) — there is nothing
+  /// for either to say, so inventing one would be fiction rather than data.
+  /// The 12-lobe register is section 5.3's "Profile avatar (large)".
+  Widget _buildHeader(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    return Row(
+      children: [
+        Container(
+          width: 72,
+          height: 72,
+          alignment: Alignment.center,
+          decoration: ShapeDecoration(
+            color: colors.secondaryContainer,
+            shape: const CookieBorder(lobes: 12, amplitude: 0.04),
+          ),
+          child: Icon(
+            Icons.fitness_center,
+            size: 32,
+            color: colors.onSecondaryContainer,
+          ),
+        ),
+        const SizedBox(width: LockoutTheme.spaceMd),
+        Text('Lockout', style: theme.textTheme.headlineSmall),
+      ],
+    );
+  }
+
+  /// The appearance picker: two independent axes, nothing else.
+  ///
+  /// Brightness is a segmented button rather than a switch because "system"
+  /// is a real third choice, not the absence of the other two. Accent is a
+  /// row of swatches with no text beside them — the colour *is* the label,
+  /// and each swatch carries its name in semantics so a screen reader is
+  /// not left reading five identical buttons.
   Widget _buildAppearanceCard(BuildContext context) {
     final theme = Theme.of(context);
     final controller = ThemeController.instance;
 
-    return LockoutCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Applies instantly.', style: theme.textTheme.bodySmall),
-          const SizedBox(height: LockoutTheme.spaceMd),
-          Wrap(
-            spacing: LockoutTheme.spaceMd,
-            runSpacing: LockoutTheme.spaceMd,
-            // `pickerKeys` is the single source of "what the picker should
-            // offer, in order" — it already gates the dynamic entry on
-            // `dynamicAvailable`, so re-deriving that gate here would just be
-            // a second copy of the same rule to keep in sync.
-            children: [
-              for (final key in controller.pickerKeys)
-                if (key == LockoutScheme.dynamicKey)
-                  _ThemeSwatch(
-                    name: 'Match my phone',
-                    colors: null,
-                    icon: Icons.palette,
-                    selected: controller.selectedKey == LockoutScheme.dynamicKey,
-                    onTap: () => _selectTheme(LockoutScheme.dynamicKey),
-                  )
-                else
-                  _ThemeSwatch(
-                    name: LockoutScheme.byKey(key).name,
-                    colors: LockoutScheme.byKey(key).colors,
-                    selected: controller.selectedKey == key,
-                    onTap: () => _selectTheme(key),
-                  ),
-            ],
-          ),
-        ],
-      ),
+    return _section(
+      context,
+      heading: 'Look and feel',
+      rows: const [],
+      extras: [
+        Text('Applies instantly.', style: theme.textTheme.bodySmall),
+        const SizedBox(height: LockoutTheme.headingGap),
+        NvSegmentedButton<LockoutBrightnessChoice>(
+          segments: const [
+            NvSegment(
+              value: LockoutBrightnessChoice.system,
+              label: 'System',
+            ),
+            NvSegment(
+              value: LockoutBrightnessChoice.light,
+              label: 'Light',
+            ),
+            NvSegment(
+              value: LockoutBrightnessChoice.dark,
+              label: 'Dark',
+            ),
+          ],
+          selected: controller.brightnessChoice,
+          onChanged: _applyBrightness,
+        ),
+        const SizedBox(height: LockoutTheme.sectionGap),
+        Text('Accent', style: theme.textTheme.titleLarge),
+        const SizedBox(height: LockoutTheme.headingGap),
+        // A `Wrap`, not a `Row`: five 48dp targets plus their gaps clear
+        // 360dp only just, and a device at a large display scale has less
+        // room than that. Wrapping onto a second line is the one failure
+        // mode here that is not an overflow stripe.
+        Wrap(
+          spacing: LockoutTheme.spaceSm,
+          runSpacing: LockoutTheme.spaceSm,
+          children: [
+            for (final accent in LockoutAccent.all)
+              _AccentSwatch(
+                accent: accent,
+                selected: controller.accent == accent,
+                onTap: () => _applyAccent(accent),
+              ),
+          ],
+        ),
+      ],
     );
   }
 
   Widget _buildUnitsCard(BuildContext context) {
-    return LockoutCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: double.infinity,
-            child: SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(value: 'cm', label: Text('Centimetres')),
-                ButtonSegment(value: 'ft', label: Text('Feet / inches')),
-              ],
-              selected: {_heightUnit},
-              showSelectedIcon: false,
-              onSelectionChanged: (s) => _switchHeightUnit(s.first),
-            ),
-          ),
-          const SizedBox(height: LockoutTheme.spaceMd),
-          if (_heightUnit == 'ft')
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: LockoutField(
-                    label: 'Height (ft)',
-                    controller: _heightFtCtrl,
-                    hint: '5',
-                    keyboardType: TextInputType.number,
-                  ),
+    return _section(
+      context,
+      heading: 'Units',
+      rows: const [],
+      extras: [
+        NvSegmentedButton<String>(
+          segments: const [
+            NvSegment(value: 'cm', label: 'Centimetres'),
+            NvSegment(value: 'ft', label: 'Feet / inches'),
+          ],
+          selected: _heightUnit,
+          onChanged: _switchHeightUnit,
+        ),
+        const SizedBox(height: LockoutTheme.spaceMd),
+        if (_heightUnit == 'ft')
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: NvTextField(
+                  label: 'Height (ft)',
+                  controller: _heightFtCtrl,
+                  hintText: '5',
+                  keyboardType: TextInputType.number,
                 ),
-                const SizedBox(width: LockoutTheme.spaceSm),
-                Expanded(
-                  child: LockoutField(
-                    label: 'Height (in)',
-                    controller: _heightInCtrl,
-                    hint: '9',
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                  ),
+              ),
+              const SizedBox(width: LockoutTheme.spaceSm),
+              Expanded(
+                child: NvTextField(
+                  label: 'Height (in)',
+                  controller: _heightInCtrl,
+                  hintText: '9',
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
                 ),
-              ],
-            )
-          else
-            LockoutField(
-              label: 'Height (cm)',
-              controller: _heightCmCtrl,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-            ),
-          const SizedBox(height: LockoutTheme.spaceSm),
-          FilledButton(
-            onPressed: _saveHeightSettings,
-            child: const Text('Save height'),
+              ),
+            ],
+          )
+        else
+          NvTextField(
+            label: 'Height (cm)',
+            controller: _heightCmCtrl,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
           ),
-        ],
-      ),
+        const SizedBox(height: LockoutTheme.spaceMd),
+        NvButton(
+          variant: NvButtonVariant.filled,
+          label: 'Save height',
+          onPressed: _saveHeightSettings,
+        ),
+      ],
     );
   }
 
   Widget _buildTrainingCard(BuildContext context) {
     final theme = Theme.of(context);
 
-    return LockoutCard(
-      padding: EdgeInsets.zero,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              LockoutTheme.cardPadding,
-              LockoutTheme.cardPadding,
-              LockoutTheme.cardPadding,
-              LockoutTheme.spaceSm,
-            ),
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: LockoutTheme.spaceMd,
-                vertical: LockoutTheme.spaceSm,
-              ),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(LockoutTheme.radiusButton),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Training days per week',
-                      style: theme.textTheme.titleSmall,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+    return _section(
+      context,
+      heading: 'Training',
+      rows: [
+        NvListItem(
+          title: 'Days per week',
+          supporting: '$_daysPerWeek',
+          onTap: () => _openDaysPerWeekSheet(context),
+        ),
+      ],
+      // The five Sedentary..Athlete rows used to sit in the group above,
+      // directly under "Days per week", with nothing saying what the choice
+      // was: five rows reading as peers of the stepper, told apart only by a
+      // "Selected" badge. They are a named choice now, captioned the way
+      // "Accent" captions the swatches in the Look and feel section, and in
+      // their own group so the caption has something to be above.
+      extras: [
+        Text('Activity level', style: theme.textTheme.titleLarge),
+        const SizedBox(height: LockoutTheme.headingGap),
+        _CardMargin(
+          child: NvGroupedList(
+            children: [
+              for (final a in ActivityLevel.values)
+                NvListItem(
+                  title: a.label,
+                  supporting: a.blurb,
+                  onTap: () => _setActivity(a),
+                  trailing: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text('x${a.multiplier}',
+                          style: theme.textTheme.labelMedium),
+                      if (a == _activity) ...[
+                        const SizedBox(height: LockoutTheme.spaceXs),
+                        const NvStatusBadge(
+                          label: 'Selected',
+                          kind: NvBadgeKind.accent,
+                        ),
+                      ],
+                    ],
                   ),
-                  IconButton(
-                    onPressed: _daysPerWeek > 2
-                        ? () => _setDaysPerWeek(_daysPerWeek - 1)
-                        : null,
-                    icon: const Icon(Icons.remove_circle_outline),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: LockoutTheme.minTouchTarget,
-                      minHeight: LockoutTheme.minTouchTarget,
-                    ),
-                  ),
-                  Text('$_daysPerWeek', style: theme.textTheme.titleMedium),
-                  IconButton(
-                    onPressed: _daysPerWeek < 6
-                        ? () => _setDaysPerWeek(_daysPerWeek + 1)
-                        : null,
-                    icon: const Icon(Icons.add_circle_outline),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: LockoutTheme.minTouchTarget,
-                      minHeight: LockoutTheme.minTouchTarget,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+                ),
+            ],
           ),
-          for (final a in ActivityLevel.values)
-            RadioListTile<ActivityLevel>(
-              value: a,
-              groupValue: _activity,
-              onChanged: (v) => _setActivity(v ?? _activity),
-              title: Text(a.label),
-              subtitle: Text(a.blurb),
-              secondary: Text('x${a.multiplier}', style: theme.textTheme.labelMedium),
+        ),
+      ],
+    );
+  }
+
+  /// The "Days per week" stepper, opened from its row rather than drawn
+  /// inline — section 8 prefers a sheet for a choice over a row that grows
+  /// its own controls.
+  Future<void> _openDaysPerWeekSheet(BuildContext context) {
+    return showNvSheet<void>(
+      context: context,
+      title: 'Days per week',
+      child: StatefulBuilder(
+        builder: (context, setSheetState) => Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // `NvIconButton`, not the framework `IconButton` these two used
+            // to be. It is a drop-in — 48dp by construction rather than by a
+            // hand-written `BoxConstraints`, and `onPressed: null` is still
+            // what disables an end of the range — and it brings a tooltip
+            // the framework pair never carried, so each end of the stepper
+            // now announces what it does instead of the name of its icon.
+            NvIconButton(
+              icon: Icons.remove_circle_outline,
+              tooltip: 'One day fewer',
+              onPressed: _daysPerWeek > 2
+                  ? () {
+                      _setDaysPerWeek(_daysPerWeek - 1);
+                      setSheetState(() {});
+                    }
+                  : null,
             ),
-          const SizedBox(height: LockoutTheme.spaceXs),
-        ],
+            const SizedBox(width: LockoutTheme.spaceMd),
+            Text('$_daysPerWeek', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(width: LockoutTheme.spaceMd),
+            NvIconButton(
+              icon: Icons.add_circle_outline,
+              tooltip: 'One day more',
+              onPressed: _daysPerWeek < 6
+                  ? () {
+                      _setDaysPerWeek(_daysPerWeek + 1);
+                      setSheetState(() {});
+                    }
+                  : null,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -739,67 +1095,83 @@ class SettingsBodyState extends State<SettingsBody> {
     final theme = Theme.of(context);
     final plan = _plan;
 
-    return LockoutCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Calories are calculated from these, not guessed — BMR by the '
-            'Mifflin-St Jeor equation, then activity, then the deficit or '
-            'surplus your goal needs.',
-            style: theme.textTheme.bodySmall,
-          ),
-          const SizedBox(height: LockoutTheme.spaceMd),
-          Row(
-            children: [
-              Expanded(
-                child: LockoutField(
-                  label: 'Age',
-                  controller: _ageCtrl,
-                  hint: '28',
-                  keyboardType: TextInputType.number,
-                ),
+    return _section(
+      context,
+      heading: 'Food',
+      rows: [
+        NvSwitchRow(
+          title: 'Enable nutrition tab',
+          value: _foodTabEnabled,
+          onChanged: (val) => setState(() => _foodTabEnabled = val),
+        ),
+      ],
+      extras: [
+        Text(
+          'Calories are calculated from these, not guessed — BMR by the '
+          'Mifflin-St Jeor equation, then activity, then the deficit or '
+          'surplus your goal needs.',
+          style: theme.textTheme.bodySmall,
+        ),
+        const SizedBox(height: LockoutTheme.spaceMd),
+        Row(
+          children: [
+            Expanded(
+              child: NvTextField(
+                label: 'Age',
+                controller: _ageCtrl,
+                hintText: '28',
+                keyboardType: TextInputType.number,
               ),
-              const SizedBox(width: LockoutTheme.spaceSm),
-              Expanded(
-                child: LockoutField(
-                  label: 'Target weight (kg)',
-                  controller: _targetWeightCtrl,
-                  hint: '72',
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: LockoutTheme.spaceSm),
-          SizedBox(
-            width: double.infinity,
-            child: SegmentedButton<Sex>(
-              segments: const [
-                ButtonSegment(value: Sex.male, label: Text('Male')),
-                ButtonSegment(value: Sex.female, label: Text('Female')),
-              ],
-              selected: {_sex},
-              showSelectedIcon: false,
-              onSelectionChanged: (s) => setState(() => _sex = s.first),
             ),
-          ),
+            const SizedBox(width: LockoutTheme.spaceSm),
+            Expanded(
+              child: NvTextField(
+                label: 'Target weight (kg)',
+                controller: _targetWeightCtrl,
+                hintText: '72',
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: LockoutTheme.spaceMd),
+        // Captioned like the fields it sits between — `NvTextField` draws
+        // its own label in `labelMedium` with an `spaceXs` gap, and this
+        // control is the only one in the card that had no subject at all.
+        Text('Sex', style: theme.textTheme.labelMedium),
+        const SizedBox(height: LockoutTheme.spaceXs),
+        NvSegmentedButton<Sex>(
+          segments: const [
+            NvSegment(value: Sex.male, label: 'Male'),
+            NvSegment(value: Sex.female, label: 'Female'),
+          ],
+          selected: _sex,
+          onChanged: (sex) => setState(() => _sex = sex),
+        ),
+        const SizedBox(height: LockoutTheme.spaceMd),
+        NvTextField(
+          label: 'Timeframe (weeks)',
+          controller: _weeksCtrl,
+          hintText: '12',
+          keyboardType: TextInputType.number,
+        ),
+        const SizedBox(height: LockoutTheme.spaceMd),
+        // The section's primary action — the one filled button section 8
+        // allows per section. "Save food settings" below is the second
+        // action this section needs, so it takes the tonal variant instead.
+        NvButton(
+          variant: NvButtonVariant.filled,
+          label: 'Calculate my target',
+          onPressed: _saveGoalAndRecalculate,
+        ),
+        if (plan != null) ...[
           const SizedBox(height: LockoutTheme.spaceMd),
-          LockoutField(
-            label: 'Timeframe (weeks)',
-            controller: _weeksCtrl,
-            hint: '12',
-            keyboardType: TextInputType.number,
-          ),
-          const SizedBox(height: LockoutTheme.spaceSm),
-          FilledButton(
-            onPressed: _saveGoalAndRecalculate,
-            child: const Text('Calculate my target'),
-          ),
-          if (plan != null) ...[
-            const SizedBox(height: LockoutTheme.spaceMd),
-            Container(
+          // A card, so it takes the card margin and stays flush with the
+          // grouped lists on the rest of the screen rather than with the
+          // paragraph above it.
+          _CardMargin(
+            child: Container(
               padding: const EdgeInsets.all(LockoutTheme.cardPadding),
               decoration: BoxDecoration(
                 color: theme.colorScheme.primaryContainer,
@@ -816,7 +1188,10 @@ class SettingsBodyState extends State<SettingsBody> {
                         style: theme.textTheme.labelMedium
                             ?.copyWith(color: theme.colorScheme.onPrimaryContainer),
                       ),
-                      Chip(label: Text(plan.directionLabel)),
+                      NvStatusBadge(
+                        label: plan.directionLabel,
+                        kind: NvBadgeKind.neutral,
+                      ),
                     ],
                   ),
                   const SizedBox(height: LockoutTheme.spaceXs),
@@ -843,13 +1218,19 @@ class SettingsBodyState extends State<SettingsBody> {
                 ],
               ),
             ),
-            if (plan.warning != null) ...[
-              const SizedBox(height: LockoutTheme.spaceSm),
-              Container(
+          ),
+          if (plan.warning != null) ...[
+            const SizedBox(height: LockoutTheme.spaceSm),
+            // Marked with the card above it rather than with the paragraph
+            // it reads like: it is a filled surface stacked directly under
+            // that card, and two filled surfaces on different margins read
+            // as a layout fault rather than as two kinds of thing.
+            _CardMargin(
+              child: Container(
                 padding: const EdgeInsets.all(LockoutTheme.spaceMd),
                 decoration: BoxDecoration(
                   color: theme.colorScheme.tertiaryContainer,
-                  borderRadius: BorderRadius.circular(LockoutTheme.radiusButton),
+                  borderRadius: BorderRadius.circular(LockoutTheme.radiusField),
                 ),
                 child: Text(
                   plan.warning!,
@@ -857,241 +1238,237 @@ class SettingsBodyState extends State<SettingsBody> {
                       ?.copyWith(color: theme.colorScheme.onTertiaryContainer),
                 ),
               ),
-            ],
-          ],
-          const Divider(height: LockoutTheme.sectionGap),
-          LockoutField(
-            label: 'Daily calorie target (kcal)',
-            controller: _calorieCtrl,
-            keyboardType: TextInputType.number,
-          ),
-          Padding(
-            padding: const EdgeInsets.only(bottom: LockoutTheme.spaceSm),
-            child: Text(
-              'Set automatically by "Calculate my target" above. Override it '
-              'here only if you already know what you are doing.',
-              style: theme.textTheme.bodySmall,
             ),
-          ),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Enable nutrition tab'),
-            value: _foodTabEnabled,
-            onChanged: (val) => setState(() => _foodTabEnabled = val),
-          ),
-          const SizedBox(height: LockoutTheme.spaceSm),
-          FilledButton(
-            onPressed: _saveFoodSettings,
-            child: const Text('Save food settings'),
-          ),
+          ],
         ],
-      ),
+        const Divider(height: LockoutTheme.sectionGap),
+        NvTextField(
+          label: 'Daily calorie target (kcal)',
+          controller: _calorieCtrl,
+          keyboardType: TextInputType.number,
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: LockoutTheme.spaceSm),
+          child: Text(
+            'Set automatically by "Calculate my target" above. Override it '
+            'here only if you already know what you are doing.',
+            style: theme.textTheme.bodySmall,
+          ),
+        ),
+        NvButton(
+          variant: NvButtonVariant.tonal,
+          label: 'Save food settings',
+          onPressed: _saveFoodSettings,
+        ),
+      ],
     );
   }
 
   Widget _buildNotificationsCard(BuildContext context) {
-    return LockoutCard(
-      padding: EdgeInsets.zero,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SwitchListTile(
-            title: const Text('Daily training nudge'),
-            subtitle: const Text('Scheduled on this device. Nothing is sent anywhere.'),
-            value: _remindersEnabled,
-            onChanged: _toggleReminders,
+    return _section(
+      context,
+      heading: 'Notifications',
+      rows: [
+        NvSwitchRow(
+          title: 'Daily training nudge',
+          supporting: 'Scheduled on this device. Nothing is sent anywhere.',
+          value: _remindersEnabled,
+          onChanged: _toggleReminders,
+        ),
+        if (_remindersEnabled) ...[
+          NvListItem(
+            title: 'Reminder time',
+            supporting: _reminderTime.format(context),
+            onTap: _pickReminderTime,
           ),
-          if (_remindersEnabled) ...[
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: LockoutTheme.cardPadding,
-              ),
-              child: CalmRow(
-                icon: Icons.schedule,
-                title: 'Reminder time',
-                value: _reminderTime.format(context),
-                onTap: _pickReminderTime,
-              ),
-            ),
-            SwitchListTile(
-              title: const Text('Streak warning at 21:00'),
-              value: _streakAlertsEnabled,
-              onChanged: _toggleStreakAlerts,
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                LockoutTheme.cardPadding,
-                0,
-                LockoutTheme.cardPadding,
-                LockoutTheme.cardPadding,
-              ),
-              child: OutlinedButton(
+          NvSwitchRow(
+            title: 'Streak warning at 21:00',
+            value: _streakAlertsEnabled,
+            onChanged: _toggleStreakAlerts,
+          ),
+        ],
+      ],
+      extras: _remindersEnabled
+          ? [
+              NvButton(
+                variant: NvButtonVariant.tonal,
+                label: 'Send test notification',
                 onPressed: () async {
                   await NotificationService.instance.showTestNotification();
                   _toast('Test notification sent.');
                 },
-                child: const Text('Send test notification'),
               ),
-            ),
-          ] else
-            const SizedBox(height: LockoutTheme.spaceXs),
-        ],
-      ),
+            ]
+          : const [],
     );
   }
 
   Widget _buildDataCard(BuildContext context) {
     final theme = Theme.of(context);
-    final semantics = LockoutSemantics.of(context);
 
-    return LockoutCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Export writes every routine, workout, set, meal, body entry and '
-            'setting to a single JSON file. Import replaces everything on this '
-            'device with the contents of a backup.',
-            style: theme.textTheme.bodySmall,
-          ),
-          const SizedBox(height: LockoutTheme.spaceMd),
-          FilledButton(
-            onPressed: _busy ? null : _export,
-            child: Text(_busy ? 'Working…' : 'Export backup JSON'),
-          ),
-          const SizedBox(height: LockoutTheme.spaceSm),
-          // Destructive: this replaces every row on the device. It sits at
-          // the bottom of the card, behind the confirmation dialog in
-          // `_import`, and carries `semantics.danger` — the same role as
-          // that dialog's confirm button. Colouring the trigger `error` and
-          // the confirmation `danger` split one action across two roles,
-          // which `ThemeController._harmonised` can resolve to two visibly
-          // different reds under a dynamic (Material You) scheme.
-          OutlinedButton(
-            key: const Key('importBackupButton'),
-            onPressed: _busy ? null : _import,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: semantics.danger,
-              side: BorderSide(color: semantics.danger),
-            ),
-            child: Text(_busy ? 'Working…' : 'Import backup JSON'),
-          ),
-        ],
-      ),
+    return _section(
+      context,
+      heading: 'Data',
+      rows: const [],
+      extras: [
+        Text(
+          'Export writes every routine, workout, set, meal, body entry and '
+          'setting to a single JSON file. Import replaces everything on this '
+          'device with the contents of a backup.',
+          style: theme.textTheme.bodySmall,
+        ),
+        const SizedBox(height: LockoutTheme.spaceMd),
+        NvButton(
+          variant: NvButtonVariant.filled,
+          label: _busy ? 'Working…' : 'Export backup JSON',
+          onPressed: _busy ? null : _export,
+        ),
+        const SizedBox(height: LockoutTheme.spaceSm),
+        // Neutral, not `danger`: this button only offers to replace every
+        // row on the device — it does not do it. The destructive ink lives
+        // on `showNvDestructiveDialog`'s confirm button inside `_import`,
+        // the one control that actually fires the replacement, per the
+        // design doc's button table ("Outlined: neutral alternatives" vs.
+        // "Danger: Remove, Delete"). Splitting it this way is also what
+        // gives `NvButtonVariant.outlined` its one real consumer in the
+        // house catalog.
+        NvButton(
+          key: const Key('importBackupButton'),
+          variant: NvButtonVariant.outlined,
+          label: _busy ? 'Working…' : 'Import backup JSON',
+          onPressed: _busy ? null : _import,
+        ),
+      ],
     );
   }
 
-  Widget _buildAboutCard(BuildContext context) {
-    final theme = Theme.of(context);
+  /// The licence, version and data-handling notes used to sit inline here.
+  /// Task 10 lifted that body onto its own route — [AboutScreen] — so this
+  /// section is now a single row that pushes it.
+  ///
+  /// It is the FIRST such row in the app: `Icons.chevron_right` appears
+  /// nowhere else under `lib/screens/`, and the house catalog has no
+  /// navigation-row component yet. Treat this as the thing a second one
+  /// should be factored out of, not as an established convention — the
+  /// shape it sets is a title, a chevron and a push, nothing more.
+  Widget _buildAboutSection(BuildContext context) {
+    return _section(
+      context,
+      heading: 'About',
+      rows: [
+        NvListItem(
+          title: 'About Lockout',
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const AboutScreen()),
+          ),
+        ),
+      ],
+    );
+  }
+}
 
-    return LockoutCard(
-      child: Text(
-        'LOCKOUT v1.1.0\nPublished by Jinatra Ltd. under GPL-3.0-or-later.\n'
-        'Offline-first: routines, workout logs, nutrition and body data are '
-        'stored only on this device in SQLite. No analytics, no ads, no '
-        'account.\nThe network is used for one thing — streaming exercise '
-        'form videos from YouTube when you tap WATCH.',
-        style: theme.textTheme.bodyMedium,
+/// One accent choice.
+///
+/// The swatch is the one place in the app where the shape language is itself
+/// the content, so it wears a lobed outline rather than a rounded rectangle,
+/// and the outline is what changes when it is chosen.
+///
+/// The `Semantics` wrapper is what makes the swatch addressable at all: it
+/// draws no text, so without a label a screen reader would announce five
+/// identical buttons. `selected` is set on both states rather than only the
+/// chosen one, so an unselected swatch reads as "not selected" instead of
+/// as something with no selection state to report.
+class _AccentSwatch extends StatelessWidget {
+  final LockoutAccent accent;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _AccentSwatch({
+    required this.accent,
+    required this.selected,
+    required this.onTap,
+  });
+
+  /// The swatch at rest and when chosen. Both sit inside
+  /// [LockoutTheme.minTouchTarget], so growing one never grows the target
+  /// it lives in — the tap area is the same 48dp either way.
+  static const double _restDiameter = 34;
+  static const double _selectedDiameter = 44;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final tier = LockoutMotion.springFast;
+
+    return Semantics(
+      label: accent.name,
+      button: true,
+      selected: selected,
+      child: InkWell(
+        onTap: onTap,
+        // The ripple takes the swatch's own outline. A `CircleBorder` at
+        // the 48dp target's radius splashed well outside the 34dp disc it
+        // belonged to, which read as the wrong swatch lighting up.
+        customBorder: const CookieBorder(
+          lobes: 6,
+          amplitude: 0.07,
+        ),
+        child: SizedBox(
+          width: LockoutTheme.minTouchTarget,
+          height: LockoutTheme.minTouchTarget,
+          child: Center(
+            child: AnimatedContainer(
+              duration: tier.durationFor(context),
+              curve: tier.curve,
+              width: selected ? _selectedDiameter : _restDiameter,
+              height: selected ? _selectedDiameter : _restDiameter,
+              decoration: ShapeDecoration(
+                color: accent.accent,
+                // The lobe count is held fixed across both states on
+                // purpose: `CookieBorder` refuses to interpolate between two
+                // counts, so only the amplitude and the outline may animate.
+                shape: CookieBorder(
+                  lobes: CookieBorder.training.lobes,
+                  // Both states carry a visible lobe. Halving the rest
+                  // amplitude put peak-to-trough at about 1.1px on a 34dp
+                  // disc, so the swatch read as a plain circle until it was
+                  // chosen — and the shape language is meant to be the
+                  // content here, not the reward for tapping.
+                  amplitude: selected
+                      ? CookieBorder.training.amplitude * 1.4
+                      : CookieBorder.training.amplitude,
+                  side: BorderSide(
+                    color: selected ? colors.onSurface : Colors.transparent,
+                    width: 2,
+                  ),
+                ),
+              ),
+              child: selected
+                  ? Icon(Icons.check, size: 18, color: accent.ink)
+                  : null,
+            ),
+          ),
+        ),
       ),
     );
   }
 }
 
-/// One selectable appearance in the theme picker: a 2-column miniature card
-/// preview, the scheme name, and a check mark when selected.
+/// Marks a `_section` extra as a card or a grouped list, so it takes the 16dp
+/// margin rather than the 20dp one text and controls take.
 ///
-/// [colors] is null only for the dynamic ("Match my phone") entry, which has
-/// no fixed swatch of its own — its preview is [icon] instead.
-class _ThemeSwatch extends StatelessWidget {
-  final String name;
-  final ColorScheme? colors;
-  final IconData? icon;
-  final bool selected;
-  final VoidCallback onTap;
+/// A pass-through marker rather than a wrapper that paints anything: the
+/// child decides how it looks, this decides only which margin `_section`
+/// gives it. It is the one thing a bare `Widget` cannot tell the frame about
+/// itself — `extra is NvGroupedList` would answer for one case and miss the
+/// two `Container` cards in the Food section, which are grouped-list-shaped
+/// surfaces without being that type.
+class _CardMargin extends StatelessWidget {
+  final Widget child;
 
-  const _ThemeSwatch({
-    required this.name,
-    required this.colors,
-    this.icon,
-    required this.selected,
-    required this.onTap,
-  });
+  const _CardMargin({required this.child});
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final swatchColors = colors;
-
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(LockoutTheme.radiusButton),
-      child: Container(
-        width: LockoutTheme.swatchWidth,
-        padding: const EdgeInsets.all(LockoutTheme.spaceSm),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(LockoutTheme.radiusButton),
-          border: Border.all(
-            color: selected
-                ? theme.colorScheme.primary
-                : theme.colorScheme.outlineVariant,
-            width: selected ? 2 : 1,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Container(
-                  height: LockoutTheme.swatchPreviewHeight,
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(LockoutTheme.spaceXs),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: swatchColors?.surface ??
-                        theme.colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(LockoutTheme.radiusButton),
-                  ),
-                  child: swatchColors == null
-                      ? Icon(icon, color: theme.colorScheme.onSurfaceVariant)
-                      : Row(
-                          children: [
-                            Expanded(child: _pill(swatchColors.primary)),
-                            const SizedBox(width: LockoutTheme.spaceXs),
-                            Expanded(child: _pill(swatchColors.secondary)),
-                          ],
-                        ),
-                ),
-                if (selected)
-                  Positioned(
-                    top: LockoutTheme.swatchCheckOffset,
-                    right: LockoutTheme.swatchCheckOffset,
-                    child: Icon(
-                      Icons.check_circle,
-                      size: LockoutTheme.swatchCheckSize,
-                      color: theme.colorScheme.primary,
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: LockoutTheme.spaceXs),
-            Text(
-              name,
-              style: theme.textTheme.labelMedium,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _pill(Color color) => Container(
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(LockoutTheme.radiusPill),
-        ),
-      );
+  Widget build(BuildContext context) => child;
 }

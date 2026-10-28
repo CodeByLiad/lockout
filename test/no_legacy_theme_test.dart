@@ -48,15 +48,20 @@ String _rel(File f) => f.path.replaceAll(r'\', '/');
 /// before the scan, so anything else in the same file still fails.
 ///
 /// Do not "clean up" either entry:
-///   * `schemes.dart` carries the migration map that moves an existing
-///     install's persisted `theme_key` off the retired palette keys.
-///     `jinatra_cream` maps to `paper`. Delete it and every user who chose
-///     that palette silently loses their setting on upgrade.
-///   * `settings_screen.dart` carries the legal publisher attribution shown
-///     in the About card. It names the company, not a theme.
+///   * `theme_controller.dart` carries the migration map that moves an
+///     existing install's persisted `theme_key` off the retired palette
+///     keys. `jinatra_cream` maps to `paper`, which the controller then
+///     resolves to a brightness and an accent. Delete it and every user who
+///     chose that palette silently loses their setting on upgrade. (It used
+///     to live in `schemes.dart`, which was deleted with the named-scheme
+///     model; the map moved here rather than going with it.)
+///   * `about_screen.dart` carries the legal publisher attribution. It used
+///     to sit inline in `settings_screen.dart`'s About card; Task 10 lifted
+///     that body onto its own screen, and the attribution moved with it. It
+///     names the company, not a theme.
 const _allowedJinatraText = <String, List<String>>{
-  'lib/theme/schemes.dart': ["'jinatra_cream': 'paper',"],
-  'lib/screens/settings_screen.dart': ['Published by Jinatra Ltd.'],
+  'lib/theme/theme_controller.dart': ["'jinatra_cream': 'paper',"],
+  'lib/screens/about_screen.dart': ['Published by Jinatra Ltd.'],
 };
 
 void main() {
@@ -214,6 +219,69 @@ void main() {
       isEmpty,
       reason: 'a file named for the deleted theme layer is back under lib/; '
           'renaming its symbols does not make it a new layer',
+    );
+  });
+
+  test('no source file imports the retired scheme module', () {
+    // Comments are blanked for the same reason as every other scan here:
+    // `theme_controller.dart`'s migration doc explains where the map came
+    // from, and naming the dead file is not importing it.
+    final offenders = _dartFiles('lib')
+        .where((f) => blankComments(f.readAsStringSync()).contains('schemes.dart'))
+        .map(_rel)
+        .toList();
+
+    expect(
+      offenders,
+      isEmpty,
+      reason: 'the named-scheme model is gone; an appearance is a brightness '
+          'and an accent, resolved through LockoutPalette',
+    );
+  });
+
+  test('no source file reaches for dynamic colour', () {
+    final offenders = _dartFiles('lib')
+        .map((f) => (f, blankComments(f.readAsStringSync())))
+        .where((pair) =>
+            pair.$2.contains('dynamic_color') ||
+            pair.$2.contains('DynamicColorBuilder'))
+        .map((pair) => _rel(pair.$1))
+        .toList();
+
+    expect(offenders, isEmpty,
+        reason: 'the house document forbids dynamic colour (section 2)');
+  });
+
+  test('the manifest no longer depends on dynamic_color', () {
+    // The source scan above would stay green with the dependency still
+    // declared and merely unused, which is how a removed feature creeps
+    // back: the package is there, so reaching for it costs nothing.
+    final pubspec = File('pubspec.yaml');
+    expect(pubspec.existsSync(), isTrue,
+        reason: 'pubspec.yaml was not found, so this check proves nothing');
+
+    // `#` comments are dropped first: the manifest carries a note saying
+    // why the package is absent, and a note is not a dependency.
+    final declared = pubspec
+        .readAsLinesSync()
+        .map((line) => line.split('#').first)
+        .where((line) => line.contains('dynamic_color'))
+        .toList();
+    expect(declared, isEmpty);
+  });
+
+  test('the retired scheme files are gone from disk', () {
+    expect(
+      File('lib/theme/palette.dart').existsSync(),
+      isTrue,
+      reason: 'lib/theme/palette.dart was not found, so the absence check '
+          'below proves nothing about where the theme layer lives',
+    );
+    expect(
+      File('lib/theme/schemes.dart').existsSync(),
+      isFalse,
+      reason: 'lib/theme/schemes.dart is dead; reaching for it is how the '
+          'redesign rots back',
     );
   });
 

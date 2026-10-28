@@ -1,12 +1,53 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lockout/main.dart';
 import 'package:lockout/services/database_service.dart';
-import 'package:lockout/theme/lockout_semantics.dart';
-import 'package:lockout/theme/schemes.dart';
+import 'package:lockout/theme/accents.dart';
 import 'package:lockout/theme/theme_controller.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'test_helpers.dart';
+
+Future<void> _loadWithSetting(String? value) async {
+  await wipeDatabaseAndReseed(DatabaseService.instance);
+  if (value != null) {
+    await DatabaseService.instance.saveSetting('theme_key', value);
+  }
+  ThemeController.instance.resetForTest();
+  await ThemeController.instance.load();
+}
+
+/// Makes every write to `theme_key` fail, and only that key.
+///
+/// The same aborting-trigger technique `theme_picker_test.dart` and
+/// `database_service_test.dart` use: it is the one way to produce what a
+/// locked, read-only or full database does without mocking
+/// `DatabaseService`, which is a singleton with no injection seam. Scoped to
+/// one key so the seeding each `setUp` does still works, and dropped in a
+/// teardown so it cannot follow the process into another suite.
+Future<void> _failEveryThemeWrite() async {
+  final database = await DatabaseService.instance.database;
+  Future<void> drop() =>
+      database.execute('DROP TRIGGER IF EXISTS test_fail_theme_key');
+  await drop();
+  addTearDown(drop);
+  await database.execute(
+    "CREATE TRIGGER test_fail_theme_key BEFORE INSERT ON user_settings "
+    "WHEN NEW.key = 'theme_key' "
+    "BEGIN SELECT RAISE(ABORT, 'rejected by test trigger'); END;",
+  );
+}
+
+/// Stops `getSetting` resolving, by moving the table it reads out from under
+/// it. A read failure has to stay loud, and no trigger fires on a SELECT, so
+/// the table itself is renamed aside and put back in a teardown.
+Future<void> _failEverySettingRead() async {
+  final database = await DatabaseService.instance.database;
+  await database
+      .execute('ALTER TABLE user_settings RENAME TO user_settings_hidden');
+  addTearDown(() => database
+      .execute('ALTER TABLE user_settings_hidden RENAME TO user_settings'));
+}
 
 void main() {
   // The no-isolate factory against an in-memory path, matching every other
@@ -22,291 +63,485 @@ void main() {
     ThemeController.instance.resetForTest();
   });
 
-  test('defaults to graphite when nothing is saved', () async {
-    await ThemeController.instance.load();
+  // The shared serial runner reuses one process, so a selection left applied
+  // here would follow every later suite into its own setUp.
+  tearDown(() => ThemeController.instance.resetForTest());
 
-    expect(ThemeController.instance.selectedKey, 'graphite');
-    expect(ThemeController.instance.themeMode, ThemeMode.light);
-    expect(ThemeController.instance.lightTheme.brightness, Brightness.dark);
-    expect(ThemeController.instance.darkTheme, isNull);
+  group('migration from the six retired schemes', () {
+    const cases = <String, (LockoutBrightnessChoice, LockoutAccent)>{
+      'graphite': (LockoutBrightnessChoice.dark, LockoutAccent.steel),
+      'paper': (LockoutBrightnessChoice.light, LockoutAccent.steel),
+      'ember': (LockoutBrightnessChoice.dark, LockoutAccent.coral),
+      'linen': (LockoutBrightnessChoice.light, LockoutAccent.coral),
+      'indigo': (LockoutBrightnessChoice.dark, LockoutAccent.violet),
+      'frost': (LockoutBrightnessChoice.light, LockoutAccent.teal),
+      'dynamic': (LockoutBrightnessChoice.system, LockoutAccent.lime),
+    };
+
+    cases.forEach((key, expected) {
+      test('$key migrates to ${expected.$1} + ${expected.$2.key}', () async {
+        await _loadWithSetting(key);
+        expect(ThemeController.instance.brightnessChoice, expected.$1);
+        expect(ThemeController.instance.accent, expected.$2);
+      });
+    });
+
+    /// The pre-Jinatra keys migrated in two hops: `schemes.dart` mapped them
+    /// onto one of the six, and the six are mapped here. Deleting
+    /// `schemes.dart` deleted the first hop, so these have to land in one.
+    /// Without them every install still carrying one silently loses its
+    /// choice on upgrade — the exact outcome `no_legacy_theme_test.dart`'s
+    /// allowlist comment was written to prevent.
+    const ancient = <String, (LockoutBrightnessChoice, LockoutAccent)>{
+      'carbon_lime': (LockoutBrightnessChoice.dark, LockoutAccent.steel),
+      'midnight_cyan': (LockoutBrightnessChoice.dark, LockoutAccent.violet),
+      'ash_amber': (LockoutBrightnessChoice.dark, LockoutAccent.coral),
+      'void_magenta': (LockoutBrightnessChoice.dark, LockoutAccent.steel),
+      'jinatra_cream': (LockoutBrightnessChoice.light, LockoutAccent.steel),
+      'paper_press': (LockoutBrightnessChoice.light, LockoutAccent.steel),
+      'mint_lab': (LockoutBrightnessChoice.light, LockoutAccent.teal),
+      'sunblock': (LockoutBrightnessChoice.light, LockoutAccent.coral),
+    };
+
+    ancient.forEach((key, expected) {
+      test('the pre-Jinatra key $key still migrates in one hop', () async {
+        await _loadWithSetting(key);
+        expect(ThemeController.instance.brightnessChoice, expected.$1,
+            reason: key);
+        expect(ThemeController.instance.accent, expected.$2, reason: key);
+      });
+    });
+
+    test('a junk value falls back without clearing the setting', () async {
+      await _loadWithSetting('not-a-theme');
+      expect(ThemeController.instance.brightnessChoice,
+          LockoutBrightnessChoice.system);
+      expect(ThemeController.instance.accent, LockoutAccent.lime);
+
+      final stored = await DatabaseService.instance
+          .getSetting('theme_key', defaultValue: '');
+      expect(stored, isNotEmpty,
+          reason: 'migration must rewrite the setting, never clear it');
+    });
+
+    test('an absent setting lands on the fresh-install default', () async {
+      await _loadWithSetting(null);
+      expect(ThemeController.instance.brightnessChoice,
+          LockoutBrightnessChoice.system);
+      expect(ThemeController.instance.accent, LockoutAccent.lime);
+    });
+
+    test('a migrated value is written back in the new format', () async {
+      await _loadWithSetting('indigo');
+      final stored = await DatabaseService.instance
+          .getSetting('theme_key', defaultValue: '');
+      expect(stored, 'dark|violet');
+    });
+
+    test('the new format round-trips', () async {
+      await _loadWithSetting('light|teal');
+      expect(ThemeController.instance.brightnessChoice,
+          LockoutBrightnessChoice.light);
+      expect(ThemeController.instance.accent, LockoutAccent.teal);
+    });
   });
 
-  test('an authored dark scheme is served through `theme`, not `darkTheme`',
-      () async {
-    await ThemeController.instance.load();
-    await ThemeController.instance.select('ember');
+  group('the two axes move independently', () {
+    test('changing the accent leaves the brightness alone', () async {
+      await _loadWithSetting('dark|lime');
+      await ThemeController.instance.selectAccent(LockoutAccent.coral);
+      expect(ThemeController.instance.accent, LockoutAccent.coral);
+      expect(ThemeController.instance.brightnessChoice,
+          LockoutBrightnessChoice.dark);
+    });
 
-    // themeMode.light means MaterialApp reads `theme`. The scheme carries its
-    // own brightness, so an explicit choice is never overridden by the
-    // system's light/dark setting.
-    expect(ThemeController.instance.themeMode, ThemeMode.light);
-    expect(ThemeController.instance.lightTheme.brightness, Brightness.dark);
-    expect(ThemeController.instance.darkTheme, isNull);
-  });
+    test('changing the brightness leaves the accent alone', () async {
+      await _loadWithSetting('dark|coral');
+      await ThemeController.instance
+          .selectBrightness(LockoutBrightnessChoice.light);
+      expect(ThemeController.instance.brightnessChoice,
+          LockoutBrightnessChoice.light);
+      expect(ThemeController.instance.accent, LockoutAccent.coral);
+    });
 
-  test('a saved legacy Jinatra key resolves to its nearest scheme', () async {
-    await DatabaseService.instance.saveSetting('theme_key', 'midnight_cyan');
-    await ThemeController.instance.load();
+    test('selecting the value already in force does not notify', () async {
+      await _loadWithSetting('dark|coral');
+      var notifications = 0;
+      void listener() => notifications++;
+      ThemeController.instance.addListener(listener);
+      await ThemeController.instance.selectAccent(LockoutAccent.coral);
+      ThemeController.instance.removeListener(listener);
+      expect(notifications, 0);
+    });
 
-    expect(ThemeController.instance.selectedKey, 'indigo');
-    expect(ThemeController.instance.lightTheme.brightness, Brightness.dark);
-  });
+    test('both axes persist in one setting', () async {
+      await _loadWithSetting('system|lime');
+      await ThemeController.instance
+          .selectBrightness(LockoutBrightnessChoice.dark);
+      await ThemeController.instance.selectAccent(LockoutAccent.violet);
 
-  test('select persists and notifies exactly once', () async {
-    await ThemeController.instance.load();
-    var notifications = 0;
-    void listener() => notifications++;
-    ThemeController.instance.addListener(listener);
-    addTearDown(() => ThemeController.instance.removeListener(listener));
-
-    await ThemeController.instance.select('paper');
-
-    expect(notifications, 1);
-    expect(ThemeController.instance.selectedKey, 'paper');
-    expect(ThemeController.instance.lightTheme.brightness, Brightness.light);
-    expect(
-      await DatabaseService.instance.getSetting('theme_key', defaultValue: ''),
-      'paper',
-    );
-  });
-
-  test('selecting the current scheme is a no-op', () async {
-    await ThemeController.instance.load();
-    var notifications = 0;
-    void listener() => notifications++;
-    ThemeController.instance.addListener(listener);
-    addTearDown(() => ThemeController.instance.removeListener(listener));
-
-    await ThemeController.instance.select('graphite');
-
-    expect(notifications, 0);
-  });
-
-  test('selecting junk falls back rather than throwing', () async {
-    await ThemeController.instance.load();
-    await ThemeController.instance.select('not_a_scheme');
-
-    expect(ThemeController.instance.selectedKey, LockoutScheme.fallback.key);
-  });
-
-  test('dynamic is absent from the picker until schemes arrive', () async {
-    await ThemeController.instance.load();
-
-    expect(ThemeController.instance.dynamicAvailable, isFalse);
-    expect(
-      ThemeController.instance.pickerKeys.contains(LockoutScheme.dynamicKey),
-      isFalse,
-    );
-    expect(ThemeController.instance.pickerKeys.length, 6);
-
-    ThemeController.instance.setDynamicSchemes(
-      light: const ColorScheme.light(),
-      dark: const ColorScheme.dark(),
-    );
-
-    expect(ThemeController.instance.dynamicAvailable, isTrue);
-    expect(ThemeController.instance.pickerKeys.last, LockoutScheme.dynamicKey);
-    expect(ThemeController.instance.pickerKeys.length, 7);
-  });
-
-  test('setDynamicSchemes does not notify when nothing changed', () async {
-    await ThemeController.instance.load();
-    ThemeController.instance.setDynamicSchemes(
-      light: const ColorScheme.light(),
-      dark: const ColorScheme.dark(),
-    );
-
-    var notifications = 0;
-    void listener() => notifications++;
-    ThemeController.instance.addListener(listener);
-    addTearDown(() => ThemeController.instance.removeListener(listener));
-
-    ThemeController.instance.setDynamicSchemes(
-      light: const ColorScheme.light(),
-      dark: const ColorScheme.dark(),
-    );
-
-    expect(
-      notifications,
-      0,
-      reason: 'DynamicColorBuilder rebuilds often; notifying every time would '
-          'loop the app root',
-    );
-  });
-
-  test('dynamic selection follows the system brightness', () async {
-    await ThemeController.instance.load();
-    ThemeController.instance.setDynamicSchemes(
-      light: const ColorScheme.light(),
-      dark: const ColorScheme.dark(),
-    );
-    await ThemeController.instance.select(LockoutScheme.dynamicKey);
-
-    expect(ThemeController.instance.themeMode, ThemeMode.system);
-    expect(ThemeController.instance.darkTheme, isNotNull);
-    expect(ThemeController.instance.lightTheme.brightness, Brightness.light);
-    expect(ThemeController.instance.darkTheme!.brightness, Brightness.dark);
-  });
-
-  test('a saved dynamic key falls back to graphite when unavailable', () async {
-    await DatabaseService.instance
-        .saveSetting('theme_key', LockoutScheme.dynamicKey);
-    await ThemeController.instance.load();
-
-    expect(ThemeController.instance.dynamicAvailable, isFalse);
-    expect(ThemeController.instance.lightTheme.brightness, Brightness.dark);
-    expect(ThemeController.instance.darkTheme, isNull);
-    expect(ThemeController.instance.themeMode, ThemeMode.light);
-  });
-
-  test('a saved dynamic key comes back once the platform supplies schemes',
-      () async {
-    await DatabaseService.instance
-        .saveSetting('theme_key', LockoutScheme.dynamicKey);
-    await ThemeController.instance.load();
-    expect(ThemeController.instance.themeMode, ThemeMode.light);
-
-    ThemeController.instance.setDynamicSchemes(
-      light: const ColorScheme.light(),
-      dark: const ColorScheme.dark(),
-    );
-
-    expect(
-      ThemeController.instance.themeMode,
-      ThemeMode.system,
-      reason: 'the choice was never discarded, only unservable',
-    );
-  });
-
-  test('dynamic keeps our authored warning, error and ramp', () async {
-    await ThemeController.instance.load();
-    ThemeController.instance.setDynamicSchemes(
-      light: const ColorScheme.light(),
-      dark: const ColorScheme.dark(),
-    );
-    await ThemeController.instance.select(LockoutScheme.dynamicKey);
-
-    for (final theme in [
-      ThemeController.instance.lightTheme,
-      ThemeController.instance.darkTheme!,
-    ]) {
-      expect(theme.colorScheme.error, LockoutScheme.graphite.colors.error);
-      expect(theme.colorScheme.tertiary, LockoutScheme.graphite.colors.tertiary);
       expect(
-        theme.extension<LockoutSemantics>()!.categoryRamp,
-        LockoutScheme.graphite.semantics.categoryRamp,
+        await DatabaseService.instance
+            .getSetting('theme_key', defaultValue: ''),
+        'dark|violet',
       );
-    }
+    });
   });
 
-  test('dynamic still takes its primary from the platform', () async {
-    await ThemeController.instance.load();
-    const platformLight = ColorScheme.light(primary: Color(0xFF7722AA));
-    ThemeController.instance.setDynamicSchemes(
-      light: platformLight,
-      dark: const ColorScheme.dark(),
-    );
-    await ThemeController.instance.select(LockoutScheme.dynamicKey);
+  group('two selections in flight', () {
+    test('the last tap wins when a user changes their mind mid-write',
+        () async {
+      await _loadWithSetting('light|lime');
 
-    expect(
-      ThemeController.instance.lightTheme.colorScheme.primary,
-      const Color(0xFF7722AA),
-      reason: 'wallpaper decides hue; we only pin what must carry meaning',
-    );
+      // No await on the first: it is still writing when the second lands,
+      // which is exactly the "tapped the wrong one, tap back" gesture.
+      final first = ThemeController.instance.selectAccent(LockoutAccent.teal);
+      final second = ThemeController.instance.selectAccent(LockoutAccent.coral);
+      await Future.wait([first, second]);
+
+      expect(ThemeController.instance.accent, LockoutAccent.coral);
+      final stored = await DatabaseService.instance
+          .getSetting('theme_key', defaultValue: '');
+      expect(stored, 'light|coral',
+          reason: 'the second selection must not be swallowed by the guard');
+    });
+
+    test('tapping back to the current value mid-write is not a no-op',
+        () async {
+      await _loadWithSetting('light|lime');
+
+      final away = ThemeController.instance.selectAccent(LockoutAccent.teal);
+      final back = ThemeController.instance.selectAccent(LockoutAccent.lime);
+      await Future.wait([away, back]);
+
+      expect(ThemeController.instance.accent, LockoutAccent.lime);
+      final stored = await DatabaseService.instance
+          .getSetting('theme_key', defaultValue: '');
+      expect(stored, 'light|lime');
+    });
+
+    // The `finally` block already computes "am I still the latest
+    // selection"; the commit below it did not use the answer, so a
+    // superseded write still moved the field and still notified. sqflite's
+    // FIFO ordering hides the end state — the newest write lands last either
+    // way — so the only visible symptom is the one asserted here: the app
+    // repaints once in a colour the user has already moved away from.
+    test('a superseded accent never reaches the listeners', () async {
+      await _loadWithSetting('light|lime');
+
+      final seen = <LockoutAccent>[];
+      void listener() => seen.add(ThemeController.instance.accent);
+      ThemeController.instance.addListener(listener);
+
+      final first = ThemeController.instance.selectAccent(LockoutAccent.teal);
+      final second = ThemeController.instance.selectAccent(LockoutAccent.coral);
+      await Future.wait([first, second]);
+      ThemeController.instance.removeListener(listener);
+
+      expect(seen, [LockoutAccent.coral],
+          reason: 'the app repainted in a choice the user had already moved '
+              'away from');
+    });
+
+    test('a superseded brightness never reaches the listeners', () async {
+      await _loadWithSetting('light|lime');
+
+      final seen = <LockoutBrightnessChoice>[];
+      void listener() => seen.add(ThemeController.instance.brightnessChoice);
+      ThemeController.instance.addListener(listener);
+
+      final first = ThemeController.instance
+          .selectBrightness(LockoutBrightnessChoice.dark);
+      final second = ThemeController.instance
+          .selectBrightness(LockoutBrightnessChoice.system);
+      await Future.wait([first, second]);
+      ThemeController.instance.removeListener(listener);
+
+      expect(seen, [LockoutBrightnessChoice.system],
+          reason: 'a whole-app light/dark flash is the loudest form this '
+              'bug takes');
+    });
+
+    test('the axes do not clobber each other when interleaved', () async {
+      await _loadWithSetting('light|lime');
+
+      final a = ThemeController.instance.selectAccent(LockoutAccent.violet);
+      final b = ThemeController.instance
+          .selectBrightness(LockoutBrightnessChoice.dark);
+      await Future.wait([a, b]);
+
+      expect(ThemeController.instance.accent, LockoutAccent.violet);
+      expect(ThemeController.instance.brightnessChoice,
+          LockoutBrightnessChoice.dark);
+      final stored = await DatabaseService.instance
+          .getSetting('theme_key', defaultValue: '');
+      expect(stored, 'dark|violet');
+    });
   });
 
-  test('every picker key resolves to something buildable', () async {
-    await ThemeController.instance.load();
-    ThemeController.instance.setDynamicSchemes(
-      light: const ColorScheme.light(),
-      dark: const ColorScheme.dark(),
-    );
+  group('themes', () {
+    test('both light and dark themes are always offered', () async {
+      await _loadWithSetting('system|lime');
+      expect(ThemeController.instance.lightTheme, isA<ThemeData>());
+      expect(ThemeController.instance.darkTheme, isA<ThemeData>());
+      expect(ThemeController.instance.themeMode, ThemeMode.system);
+    });
 
-    for (final key in ThemeController.instance.pickerKeys) {
-      await ThemeController.instance.select(key);
+    test('an explicit brightness pins themeMode', () async {
+      await _loadWithSetting('dark|lime');
+      expect(ThemeController.instance.themeMode, ThemeMode.dark);
+      await ThemeController.instance
+          .selectBrightness(LockoutBrightnessChoice.light);
+      expect(ThemeController.instance.themeMode, ThemeMode.light);
+    });
+
+    test('the accent reaches the built theme', () async {
+      await _loadWithSetting('dark|teal');
+      expect(ThemeController.instance.darkTheme.colorScheme.primary,
+          LockoutAccent.teal.accent);
+    });
+
+    test('each theme carries its own brightness', () async {
+      await _loadWithSetting('system|lime');
+      expect(ThemeController.instance.lightTheme.brightness, Brightness.light);
+      expect(ThemeController.instance.darkTheme.brightness, Brightness.dark);
+    });
+  });
+
+  // `main.dart` awaits `load()` before `runApp`. The write-back inside it is
+  // only an optimisation — the choice is already in the fields by the time it
+  // runs — so losing it costs one re-migration next launch, and `load()`
+  // swallows it.
+  //
+  // A failed *read* is the other half of the same question and is answered
+  // one level up. `load()` still lets it escape: a controller that swallowed
+  // it would have to invent a choice and would have no way to say it had.
+  // `loadSavedAppearance()` in `main.dart` is what catches it, boots on the
+  // defaults the controller already holds, and says so on screen — see the
+  // group below. The note that used to sit here recorded the opposite
+  // outcome, "a blank screen on every launch and no way back from inside the
+  // app", as the accepted cost of an unguarded await. It is not accepted any
+  // more, and these two groups together are what hold that.
+  group('load() survives a write it cannot make', () {
+    test('a migration whose write-back fails still applies the choice',
+        () async {
+      await wipeDatabaseAndReseed(DatabaseService.instance);
+      await DatabaseService.instance.saveSetting('theme_key', 'indigo');
+      await _failEveryThemeWrite();
+      ThemeController.instance.resetForTest();
+
+      await expectLater(ThemeController.instance.load(), completes);
+      expect(ThemeController.instance.brightnessChoice,
+          LockoutBrightnessChoice.dark);
+      expect(ThemeController.instance.accent, LockoutAccent.violet);
+    });
+
+    test('a fresh install whose first write fails still boots', () async {
+      await wipeDatabaseAndReseed(DatabaseService.instance);
+      await _failEveryThemeWrite();
+      ThemeController.instance.resetForTest();
+
+      await expectLater(ThemeController.instance.load(), completes);
+      expect(ThemeController.instance.brightnessChoice,
+          LockoutBrightnessChoice.system);
+      expect(ThemeController.instance.accent, LockoutAccent.lime);
+    });
+
+    test('the un-written migration simply runs again on the next launch',
+        () async {
+      await wipeDatabaseAndReseed(DatabaseService.instance);
+      await DatabaseService.instance.saveSetting('theme_key', 'indigo');
+      final database = await DatabaseService.instance.database;
+      await _failEveryThemeWrite();
+      ThemeController.instance.resetForTest();
+      await ThemeController.instance.load();
+
+      // The old value is left intact rather than cleared, so the next launch
+      // migrates it again — this time against a writable database.
+      expect(await DatabaseService.instance.getSetting('theme_key'), 'indigo');
+
+      await database.execute('DROP TRIGGER IF EXISTS test_fail_theme_key');
+      ThemeController.instance.resetForTest();
+      await ThemeController.instance.load();
       expect(
-        ThemeController.instance.lightTheme.extension<LockoutSemantics>(),
-        isNotNull,
-        reason: key,
+        await DatabaseService.instance.getSetting('theme_key'),
+        'dark|violet',
       );
-    }
+    });
+
+    test('a failed read escapes load(), so the caller can decide what it '
+        'costs', () async {
+      await wipeDatabaseAndReseed(DatabaseService.instance);
+      await _failEverySettingRead();
+      ThemeController.instance.resetForTest();
+
+      await expectLater(ThemeController.instance.load(), throwsA(anything));
+    });
   });
 
-  test('storing platform schemes does not notify while an authored theme is '
-      'selected', () async {
-    await ThemeController.instance.load();
-    expect(ThemeController.instance.selectedKey, 'graphite');
+  // The decision this group replaces was made with eyes open and still
+  // produced the worst outcome available: an unguarded `await` ahead of
+  // `runApp` turns an unreadable settings row into a blank screen on every
+  // launch, with no widget alive to offer a way back. The controller already
+  // holds safe defaults, so there is nothing the app cannot do on them.
+  group('a boot whose settings read fails still boots', () {
+    test('the failure is reported rather than propagated, and the defaults '
+        'stand', () async {
+      await wipeDatabaseAndReseed(DatabaseService.instance);
+      await _failEverySettingRead();
+      ThemeController.instance.resetForTest();
 
-    var notifications = 0;
-    void listener() => notifications++;
-    ThemeController.instance.addListener(listener);
-    addTearDown(() => ThemeController.instance.removeListener(listener));
+      expect(await loadSavedAppearance(), isFalse);
+      expect(ThemeController.instance.brightnessChoice,
+          LockoutBrightnessChoice.system);
+      expect(ThemeController.instance.accent, LockoutAccent.fallback);
+    });
 
-    ThemeController.instance.setDynamicSchemes(
-      light: const ColorScheme.light(),
-      dark: const ColorScheme.dark(),
-    );
+    test('a readable database still applies the stored choice', () async {
+      await wipeDatabaseAndReseed(DatabaseService.instance);
+      await DatabaseService.instance.saveSetting('theme_key', 'dark|teal');
+      ThemeController.instance.resetForTest();
 
-    // The app root publishes these from a post-frame callback inside the
-    // DynamicColorBuilder that also rebuilds on notify. Notifying for schemes
-    // that cannot change what is on screen rebuilds the whole tree for
-    // nothing, and on a device that supplies a palette it feeds straight back
-    // into the callback that published them.
-    expect(
-      notifications,
-      0,
-      reason: 'graphite is selected; platform schemes change nothing on screen',
-    );
-    expect(ThemeController.instance.dynamicAvailable, isTrue);
-  });
+      expect(await loadSavedAppearance(), isTrue);
+      expect(ThemeController.instance.brightnessChoice,
+          LockoutBrightnessChoice.dark);
+      expect(ThemeController.instance.accent, LockoutAccent.teal);
+    });
 
-  test('the picker still gains dynamic once schemes arrive, without a '
-      'notification storm', () async {
-    await ThemeController.instance.load();
-
-    var notifications = 0;
-    void listener() => notifications++;
-    ThemeController.instance.addListener(listener);
-    addTearDown(() => ThemeController.instance.removeListener(listener));
-
-    for (var i = 0; i < 5; i++) {
-      ThemeController.instance.setDynamicSchemes(
-        light: const ColorScheme.light(),
-        dark: const ColorScheme.dark(),
+    // Booting on defaults without saying so is its own failure: the user's
+    // chosen appearance is silently gone and nothing in the app accounts for
+    // it, so the next thing they do is set it again — over a database that
+    // may still be unreadable.
+    testWidgets('the app states the failure instead of swallowing it',
+        (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: StartupNotice(
+            appearanceUnreadable: true,
+            child: Scaffold(body: SizedBox.shrink()),
+          ),
+        ),
       );
-    }
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
 
-    expect(notifications, 0);
-    expect(
-      ThemeController.instance.pickerKeys.contains(LockoutScheme.dynamicKey),
-      isTrue,
-    );
+      expect(find.text(StartupNotice.appearanceMessage), findsOneWidget);
+    });
+
+    testWidgets('a boot that read its settings says nothing', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: StartupNotice(
+            appearanceUnreadable: false,
+            child: Scaffold(body: SizedBox.shrink()),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(find.byType(SnackBar), findsNothing);
+    });
   });
 
-  test('a dynamic selection does notify, because the screen changes',
-      () async {
-    await ThemeController.instance.load();
-    ThemeController.instance.setDynamicSchemes(
-      light: const ColorScheme.light(),
-      dark: const ColorScheme.dark(),
-    );
-    await ThemeController.instance.select(LockoutScheme.dynamicKey);
+  // Committing the field before the write leaves the controller claiming a
+  // choice the database refused, with no `notifyListeners` to repaint the app
+  // to match — and the equality guard then swallows the retry.
+  group('a selection that cannot be persisted changes nothing', () {
+    test('selectAccent leaves the accent as stored when the write fails',
+        () async {
+      await _loadWithSetting('dark|lime');
+      await _failEveryThemeWrite();
 
-    var notifications = 0;
-    void listener() => notifications++;
-    ThemeController.instance.addListener(listener);
-    addTearDown(() => ThemeController.instance.removeListener(listener));
+      await expectLater(
+        ThemeController.instance.selectAccent(LockoutAccent.teal),
+        throwsA(anything),
+      );
+      expect(ThemeController.instance.accent, LockoutAccent.lime);
+      expect(
+          await DatabaseService.instance.getSetting('theme_key'), 'dark|lime');
+    });
 
-    ThemeController.instance.setDynamicSchemes(
-      light: const ColorScheme.light(primary: Color(0xFF00FF00)),
-      dark: const ColorScheme.dark(),
-    );
+    test('selectBrightness leaves the brightness as stored when the write '
+        'fails', () async {
+      await _loadWithSetting('dark|lime');
+      await _failEveryThemeWrite();
 
-    expect(
-      notifications,
-      1,
-      reason: 'the wallpaper changed and dynamic is what is on screen',
-    );
+      await expectLater(
+        ThemeController.instance
+            .selectBrightness(LockoutBrightnessChoice.light),
+        throwsA(anything),
+      );
+      expect(ThemeController.instance.brightnessChoice,
+          LockoutBrightnessChoice.dark);
+      expect(
+          await DatabaseService.instance.getSetting('theme_key'), 'dark|lime');
+    });
+
+    test('a failed selection does not notify, so nothing repaints a choice '
+        'the database refused', () async {
+      await _loadWithSetting('dark|lime');
+      await _failEveryThemeWrite();
+
+      var notifications = 0;
+      void listener() => notifications++;
+      ThemeController.instance.addListener(listener);
+      await expectLater(
+        ThemeController.instance.selectAccent(LockoutAccent.teal),
+        throwsA(anything),
+      );
+      ThemeController.instance.removeListener(listener);
+      expect(notifications, 0);
+    });
+
+    test('tapping the same accent again retries rather than no-opping',
+        () async {
+      await _loadWithSetting('dark|lime');
+      final database = await DatabaseService.instance.database;
+      await _failEveryThemeWrite();
+
+      await expectLater(
+        ThemeController.instance.selectAccent(LockoutAccent.teal),
+        throwsA(anything),
+      );
+
+      // The second tap, against a writable database. Had the first tap
+      // committed the field, the equality guard would return early here and
+      // the user would be stuck with a theme that never applies and a toast
+      // that never comes back.
+      await database.execute('DROP TRIGGER IF EXISTS test_fail_theme_key');
+      var notifications = 0;
+      void listener() => notifications++;
+      ThemeController.instance.addListener(listener);
+      await ThemeController.instance.selectAccent(LockoutAccent.teal);
+      ThemeController.instance.removeListener(listener);
+
+      expect(notifications, 1);
+      expect(ThemeController.instance.accent, LockoutAccent.teal);
+      expect(
+          await DatabaseService.instance.getSetting('theme_key'), 'dark|teal');
+    });
+
+    test('tapping the same brightness again retries rather than no-opping',
+        () async {
+      await _loadWithSetting('dark|lime');
+      final database = await DatabaseService.instance.database;
+      await _failEveryThemeWrite();
+
+      await expectLater(
+        ThemeController.instance
+            .selectBrightness(LockoutBrightnessChoice.light),
+        throwsA(anything),
+      );
+
+      await database.execute('DROP TRIGGER IF EXISTS test_fail_theme_key');
+      await ThemeController.instance
+          .selectBrightness(LockoutBrightnessChoice.light);
+
+      expect(ThemeController.instance.brightnessChoice,
+          LockoutBrightnessChoice.light);
+      expect(
+          await DatabaseService.instance.getSetting('theme_key'), 'light|lime');
+    });
   });
-
 }

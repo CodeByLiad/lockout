@@ -181,7 +181,6 @@ class LogTabState extends State<LogTab> {
               title: _streakLabel,
               subtitle: '${_logs.length} workouts - '
                   '${kgWhole(_totalVolumeAllTime)} kg total',
-              accent: semantics.categoryAt(0),
             ),
             Row(
               children: [
@@ -249,7 +248,7 @@ class LogTabState extends State<LogTab> {
             // only ripple.
             InkWell(
               onTap: () => _toggleExpand(log),
-              borderRadius: BorderRadius.circular(LockoutTheme.radiusButton),
+              borderRadius: BorderRadius.circular(LockoutTheme.radiusField),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(
                   minHeight: LockoutTheme.minTouchTarget,

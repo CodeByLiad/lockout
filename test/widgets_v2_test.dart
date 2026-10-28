@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lockout/theme/lockout_theme.dart';
-import 'package:lockout/theme/schemes.dart';
 import 'package:lockout/widgets/action_grid.dart';
 import 'package:lockout/widgets/calm_row.dart';
 import 'package:lockout/widgets/day_block.dart';
@@ -19,7 +18,7 @@ Widget _host(Widget child) => MaterialApp(
 
 /// The ramp the rebuilt widgets identify with, replacing the palette accents
 /// the neubrutalist versions took.
-Color _ramp(int i) => LockoutScheme.graphite.semantics.categoryAt(i);
+Color _ramp(int i) => darkAppearance.semantics.categoryAt(i);
 
 /// Hosts a button that raises an undo banner into the root overlay, the way
 /// BODY and FOOD raise it after a delete.
@@ -77,7 +76,6 @@ void main() {
       eyebrow: 'TODAY - MON',
       title: 'LEGS',
       subtitle: '4 EX - 12 SETS',
-      accent: _ramp(0),
       actions: [
         ElevatedButton(onPressed: () {}, child: const Text('START')),
       ],
@@ -212,11 +210,11 @@ void main() {
     const titleTone = Color(0xFF00FF00);
     const amountTone = Color(0xFFFF00FF);
     final theme = LockoutTheme.build(
-      colors: LockoutScheme.graphite.colors.copyWith(
+      colors: darkAppearance.colors.copyWith(
         onSurface: titleTone,
         onSurfaceVariant: amountTone,
       ),
-      semantics: LockoutScheme.graphite.semantics,
+      semantics: darkAppearance.semantics,
     );
 
     await tester.pumpWidget(MaterialApp(
@@ -309,7 +307,10 @@ void main() {
   // The banner paints on `inverseSurface`, and its action used to take
   // `colors.primary` — 1.37:1 on graphite, unreadable, and the control is
   // the only one the banner has. `inversePrimary` is the readable tone for
-  // that background in every scheme (`schemes_test.dart` measures it);
+  // that background in every scheme — `palette_test.dart`'s "the snackbar
+  // pairing" group measures it, holding the pair at >= 4.5:1 across all ten
+  // brightness-and-accent combinations (it took that duty over from
+  // `schemes_test.dart`, deleted in Task 6);
   // this pins the widget to the role rather than to a value, so a scheme
   // that authors its own `inversePrimary` still gets a legible label.
   //
@@ -325,8 +326,8 @@ void main() {
     const sentinel = Color(0xFF00FF00);
     final theme = LockoutTheme.build(
       colors:
-          LockoutScheme.graphite.colors.copyWith(inversePrimary: sentinel),
-      semantics: LockoutScheme.graphite.semantics,
+          darkAppearance.colors.copyWith(inversePrimary: sentinel),
+      semantics: darkAppearance.semantics,
     );
     await tester.pumpWidget(_undoHost(theme: theme));
     await tester.tap(find.text('delete'));
