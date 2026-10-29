@@ -787,6 +787,49 @@ void main() {
           reason: 'it must look different from a clean import');
     });
 
+    testWidgets('a theme reload failure does not blame the backup file',
+        (tester) async {
+      // The file restored fine; it was the re-read that failed. Telling the
+      // user to check the file sends them after the wrong suspect.
+      final realRead = ThemeController.readStoredChoice;
+      addTearDown(() => ThemeController.readStoredChoice = realRead);
+      ThemeController.readStoredChoice =
+          () => throw StateError('the theme read failed');
+
+      await runImport(tester, backupJson(81.25));
+
+      expect(find.textContaining('could not be read back'), findsOneWidget);
+      expect(find.textContaining('Check the backup file'), findsNothing,
+          reason: 'nothing in the file was rewritten, so it is not the cause');
+    });
+
+    testWidgets('a failed re-read after a rewritten cell still names the file',
+        (tester) async {
+      // Characterisation: here the file really is a suspect, because the
+      // restore had to rewrite a value it could not read.
+      final realRead = ThemeController.readStoredChoice;
+      addTearDown(() => ThemeController.readStoredChoice = realRead);
+      ThemeController.readStoredChoice =
+          () => throw StateError('the theme read failed');
+
+      await runImport(tester, backupJson('heavy'));
+
+      expect(find.textContaining('Check the backup file'), findsOneWidget);
+    });
+
+    testWidgets('a warning toast stays 8 seconds', (tester) async {
+      // A worst-case import toast runs to ~180 characters; the 4-second
+      // default is unreadable at large text scales.
+      final realRead = ThemeController.readStoredChoice;
+      addTearDown(() => ThemeController.readStoredChoice = realRead);
+      ThemeController.readStoredChoice =
+          () => throw StateError('the theme read failed');
+
+      final imported = await runImport(tester, backupJson(81.25));
+
+      expect(imported.toast.duration, const Duration(seconds: 8));
+    });
+
     // The same lock, and the one way it can still be left up: a throw out
     // of `pickAndImport()`. It guards every path it authors except the bare
     // `await DatabaseService.instance.columnTypes(table)` in
@@ -940,6 +983,48 @@ void main() {
         reason: 'while the caption above it is text, exactly as the section '
             'heading above the first group is',
       );
+    });
+
+    testWidgets('a section with no rows keeps the 12dp heading gap',
+        (tester) async {
+      // Look and feel has no grouped list, so nothing sits between the
+      // heading and its first extra but the heading gap. The 16dp that
+      // separates a group from the extras below it is not owed here.
+      await pumpSettings(tester);
+
+      final heading = tester.getRect(find.text('Look and feel'));
+      final first = tester.getRect(find.text('Applies instantly.'));
+      expect(first.top - heading.bottom, closeTo(LockoutTheme.headingGap, 0.5));
+    });
+
+    testWidgets('every card marked in a section extra takes the 16dp margin',
+        (tester) async {
+      // The Activity level group is pinned above; the Food section's two
+      // filled cards are the other `_CardMargin` call sites. Characterisation
+      // of the marker working at each, so a refactor that wraps one of them
+      // fails here rather than silently dropping it to 20dp.
+      tester.view.physicalSize = const Size(800, 6000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      // 100 kg to 70 in four weeks: far past the safe rate, so the plan
+      // card and the warning card under it are both on screen.
+      await seedCalculablePlan();
+      await pumpSettings(tester);
+
+      Finder surface(Finder inside) => find
+          .ancestor(of: inside, matching: find.byType(Container))
+          .first;
+
+      expect(tester.getTopLeft(surface(find.text('Daily target'))).dx,
+          LockoutTheme.cardPadding,
+          reason: 'the calculated plan is a card');
+      expect(
+          tester
+              .getTopLeft(surface(find.textContaining('Target eased to a safe')))
+              .dx,
+          LockoutTheme.cardPadding,
+          reason: 'and the warning stacked under it sits on the same margin');
     });
 
     testWidgets('a tappable row clears the 48dp touch target', (tester) async {

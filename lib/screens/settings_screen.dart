@@ -451,6 +451,10 @@ class SettingsBodyState extends State<SettingsBody> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         backgroundColor: warn ? colors.errorContainer : colors.inverseSurface,
+        // A warning is the longest toast on this screen (the import tail runs
+        // to ~180 characters), so it outlasts the 4-second default.
+        duration:
+            warn ? const Duration(seconds: 8) : const Duration(seconds: 4),
         content: Text(
           message,
           style: TextStyle(
@@ -665,9 +669,9 @@ class SettingsBodyState extends State<SettingsBody> {
       widget.onSettingsUpdated();
 
       // Three different things can be worth warning about, and they are
-      // independent. `reloaded` is "the fields on screen are the imported
-      // ones" — false if `_loadSettings()` threw, and equally false if
-      // anything ahead of it did. `coercedValues` is the common one: the
+      // independent. `reloaded` is "the re-read completed" — false if
+      // `_loadSettings()` threw, and equally false if anything ahead of it
+      // did. `coercedValues` is the common one: the
       // restore succeeded by rewriting cells it could not read as `0`, and
       // saying only "Import complete" there reports a silent edit of the
       // user's own data as an unqualified success. `tailFailed` is the theme
@@ -691,7 +695,8 @@ class SettingsBodyState extends State<SettingsBody> {
           ? 'Import complete. ${result.rowsRestored} rows restored.'
               '${ImportResult.coercionNote(result.coercedValues)}'
           : 'Import complete. ${result.rowsRestored} rows restored, but some '
-              'of them could not be read back. Check the backup file.';
+              'of them could not be read back.'
+              '${rewritten ? ' Check the backup file.' : ''}';
       _toast(
         tailFailed
             ? '$restored Reminders could not be rescheduled. Open '
@@ -807,9 +812,9 @@ class SettingsBodyState extends State<SettingsBody> {
           child: Text(heading, style: Theme.of(context).textTheme.titleMedium),
         ),
         const SizedBox(height: LockoutTheme.headingGap),
-        // One stretch column for both slots, so a save button still fills
-        // the width it had when the padding was on the column instead of on
-        // each child.
+        // One stretch column for both slots, so a save button still stretches
+        // to the column width. That is 8dp narrower than when the padding was
+        // on the column instead of on each child (W-40, was W-32).
         Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -821,7 +826,9 @@ class SettingsBodyState extends State<SettingsBody> {
                 child: NvGroupedList(children: rows),
               ),
             if (extras.isNotEmpty) ...[
-              const SizedBox(height: LockoutTheme.spaceMd),
+              // Below a group, the extras get the card gap; with no group the
+              // heading gap above is the only one owed.
+              if (rows.isNotEmpty) const SizedBox(height: LockoutTheme.spaceMd),
               for (final extra in extras)
                 Padding(
                   padding: EdgeInsets.symmetric(horizontal: _marginFor(extra)),
@@ -1464,6 +1471,9 @@ class _AccentSwatch extends StatelessWidget {
 /// itself — `extra is NvGroupedList` would answer for one case and miss the
 /// two `Container` cards in the Food section, which are grouped-list-shaped
 /// surfaces without being that type.
+///
+/// Only works as a direct element of `extras`. Wrapped in anything else it is
+/// not seen, and the card silently takes the 20dp text margin.
 class _CardMargin extends StatelessWidget {
   final Widget child;
 

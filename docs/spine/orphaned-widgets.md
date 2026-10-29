@@ -126,12 +126,14 @@ because its list is short is not the same as code that is clean.
 
 ## Catalog debt — recorded, not fixed on this branch
 
-**`NvButton` and `NvIconButton` are not keyboard-reachable.** Both are a
-`Semantics` wrapping a `GestureDetector` (`lib/widgets/house/nv_button.dart:120-131`
-and `:234-245`) with no `Focus`, no `FocusableActionDetector` and no focus
-highlight, so unlike the `FilledButton`/`OutlinedButton`/`IconButton` trio they
-replaced they cannot be reached with Tab or activated with Enter — Today now has
-no focusable button at all. TalkBack is **unaffected**: the semantic tap action is
+**`NvButton`, `NvIconButton`, `NvSegmentedButton` and `NvListItem` are not
+keyboard-reachable.** `NvButton` and `NvIconButton` are a `Semantics` wrapping a
+`GestureDetector` (`lib/widgets/house/nv_button.dart:120-131` and `:234-245`)
+with no `Focus`, no `FocusableActionDetector` and no focus highlight.
+`NvSegmentedButton` and `NvListItem` are the same shape; only `NvIconTile`
+escapes, through its `InkWell`. So unlike the `FilledButton`/`OutlinedButton`/
+`IconButton` trio they replaced, none of them can be reached with Tab or
+activated with Enter — Today now has no focusable button at all. TalkBack is **unaffected**: the semantic tap action is
 declared explicitly on the annotation (`onTap: widget.onPressed`), which is the
 path a screen reader uses, and it is covered by a `semanticTap` test on each
 control. This is catalog-wide rather than anything a screen did, so it is owed to
