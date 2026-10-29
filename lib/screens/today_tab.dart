@@ -332,7 +332,7 @@ class TodayTabState extends State<TodayTab> {
   }
 
   Future<void> _startCustomSession() async {
-    await _beginSession('Custom Session', []);
+    await _beginSession('Custom session', []);
   }
 
   Future<void> _beginSession(String title, List<_LiveExercise> exercises) async {
@@ -660,6 +660,8 @@ class TodayTabState extends State<TodayTab> {
     final semantics = LockoutSemantics.of(context);
     final sched = _scheduled;
     final code = ScheduleService.weekdayCode(DateTime.now());
+    // The code is a storage key ("WED"); the screen shows it in sentence case.
+    final dayLabel = '${code[0]}${code.substring(1).toLowerCase()}';
     final isRest = sched == null;
     // A day can be scheduled with no exercises on it yet (routine still
     // being built). That is not a rest day, but it also has nothing to
@@ -694,7 +696,7 @@ class TodayTabState extends State<TodayTab> {
                 ),
                 const SizedBox(height: LockoutTheme.spaceXs),
                 Text(
-                  'Today · $code',
+                  'Today · $dayLabel',
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),

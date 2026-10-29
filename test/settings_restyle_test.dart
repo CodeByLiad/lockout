@@ -1094,6 +1094,20 @@ void main() {
       expect(find.text('Look and feel'), findsOneWidget);
       expect(find.text('LOOK AND FEEL'), findsNothing);
     });
+
+    testWidgets('no caption inside a section outranks the section heading',
+        (tester) async {
+      await pumpSettings(tester);
+      final theme = Theme.of(tester.element(find.text('Training')));
+      final heading = tester.widget<Text>(find.text('Training')).style!;
+      for (final caption in ['Accent', 'Activity level']) {
+        final style = tester.widget<Text>(find.text(caption)).style!;
+        expect(style.fontSize! <= heading.fontSize!, isTrue,
+            reason: '"$caption" is larger than its section heading');
+        expect(style, theme.textTheme.titleSmall);
+      }
+      expect(heading, theme.textTheme.titleMedium);
+    });
   });
 
   group('training card commits what it owns', () {
@@ -1134,7 +1148,7 @@ void main() {
       await settle(tester);
       expect(find.text('5'), findsOneWidget);
 
-      // Default activity is Moderately Active; choose a different one.
+      // Default activity is Moderately active; choose a different one.
       await tester.tap(find.text(ActivityLevel.high.label));
       await settle(tester);
 
@@ -1192,7 +1206,7 @@ void main() {
       expect(kcalFinder, findsOneWidget);
       final before = tester.widget<Text>(kcalFinder).data!;
 
-      // Default activity is Moderately Active; choose a different one.
+      // Default activity is Moderately active; choose a different one.
       await tester.tap(find.text(ActivityLevel.high.label));
       await settle(tester);
 

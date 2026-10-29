@@ -7,9 +7,9 @@ enum Sex { male, female }
 /// How much the user moves outside of deliberate training.
 enum ActivityLevel {
   sedentary('Sedentary', 'Desk job, little walking', 1.2),
-  light('Lightly Active', 'Light exercise 1-3 days/week', 1.375),
-  moderate('Moderately Active', 'Training 3-5 days/week', 1.55),
-  high('Very Active', 'Hard training 6-7 days/week', 1.725),
+  light('Lightly active', 'Light exercise 1-3 days/week', 1.375),
+  moderate('Moderately active', 'Training 3-5 days/week', 1.55),
+  high('Very active', 'Hard training 6-7 days/week', 1.725),
   athlete('Athlete', 'Physical job plus daily training', 1.9);
 
   final String label;

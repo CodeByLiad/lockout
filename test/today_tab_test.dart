@@ -1003,6 +1003,19 @@ void main() {
           reason: 'the house document forbids all-caps labels (section 4.2)');
     });
 
+    testWidgets('the day name is "Wed", not a storage code like "WED"',
+        (tester) async {
+      await tester.pumpWidget(hostedTodayTab());
+      await settle(tester);
+
+      final text = tester
+          .widget<Text>(find.textContaining('Today · '))
+          .data!;
+      final day = text.split(' · ').last;
+      expect(day, matches(RegExp(r'^[A-Z][a-z]{2}$')),
+          reason: 'expected e.g. "Wed", got "$day"');
+    });
+
     testWidgets('the session header leads with one big countdown number',
         (tester) async {
       await seedActiveWeekdayRoutineForToday();

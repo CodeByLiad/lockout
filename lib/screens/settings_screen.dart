@@ -915,7 +915,7 @@ class SettingsBodyState extends State<SettingsBody> {
           onChanged: _applyBrightness,
         ),
         const SizedBox(height: LockoutTheme.sectionGap),
-        Text('Accent', style: theme.textTheme.titleLarge),
+        Text('Accent', style: theme.textTheme.titleSmall),
         const SizedBox(height: LockoutTheme.headingGap),
         // A `Wrap`, not a `Row`: five 48dp targets plus their gaps clear
         // 360dp only just, and a device at a large display scale has less
@@ -1012,7 +1012,7 @@ class SettingsBodyState extends State<SettingsBody> {
       // "Accent" captions the swatches in the Look and feel section, and in
       // their own group so the caption has something to be above.
       extras: [
-        Text('Activity level', style: theme.textTheme.titleLarge),
+        Text('Activity level', style: theme.textTheme.titleSmall),
         const SizedBox(height: LockoutTheme.headingGap),
         _CardMargin(
           child: NvGroupedList(

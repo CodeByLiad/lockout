@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lockout/widgets/house/nv_button.dart';
+import 'package:lockout/widgets/morphing_surface.dart';
 
 import 'test_helpers.dart';
 
@@ -341,6 +342,27 @@ void main() {
       semanticTap(tester, find.byType(NvIconButton));
       await tester.pumpAndSettle();
       expect(presses, 1);
+    });
+
+    testWidgets('a disabled icon button drops its filled surface',
+        (tester) async {
+      await tester.pumpWidget(MaterialApp(
+        theme: lockoutTestTheme(),
+        home: Scaffold(
+          body: Row(children: [
+            NvIconButton(icon: Icons.add, tooltip: 'On', onPressed: () {}),
+            const NvIconButton(icon: Icons.add, tooltip: 'Off', onPressed: null),
+          ]),
+        ),
+      ));
+      await tester.pumpAndSettle();
+      Color? fill(String tip) => tester
+          .widget<MorphingSurface>(find.descendant(
+              of: find.byTooltip(tip), matching: find.byType(MorphingSurface)))
+          .color;
+      final colors = Theme.of(tester.element(find.byType(Scaffold))).colorScheme;
+      expect(fill('On'), colors.surfaceContainerHigh);
+      expect(fill('Off'), colors.onSurface.withValues(alpha: 0.12));
     });
 
     testWidgets('a disabled icon button offers no action', (tester) async {

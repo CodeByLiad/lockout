@@ -228,6 +228,12 @@ class _NvIconButtonState extends State<NvIconButton> {
       NvIconButtonTone.success => (semantics.success, semantics.onSuccess),
     };
 
+    // A disabled control must not keep the surface that says "press me".
+    // The M3 disabled container: onSurface at 12%, glyph at 38%.
+    final fill = _enabled ? background : colors.onSurface.withValues(alpha: 0.12);
+    final glyph =
+        _enabled ? foreground : colors.onSurface.withValues(alpha: 0.38);
+
     // Semantics outside Tooltip, not inside: a Tooltip introduces its own
     // semantics node, and with the label nested under it the button's own
     // node reaches a screen reader unlabelled.
@@ -250,14 +256,14 @@ class _NvIconButtonState extends State<NvIconButton> {
             restRadius: LockoutTheme.radiusButtonRest,
             activeRadius: 14,
             active: _pressed,
-            color: background,
+            color: fill,
             child: SizedBox(
               width: LockoutTheme.minTouchTarget,
               height: LockoutTheme.minTouchTarget,
               child: Icon(
                 widget.icon,
                 size: 24,
-                color: _enabled ? foreground : colors.onSurfaceVariant,
+                color: glyph,
               ),
             ),
           ),
