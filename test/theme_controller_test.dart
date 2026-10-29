@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lockout/main.dart';
 import 'package:lockout/services/database_service.dart';
 import 'package:lockout/theme/accents.dart';
+import 'package:lockout/theme/scheme_style.dart';
 import 'package:lockout/theme/theme_controller.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -135,7 +136,7 @@ void main() {
       await _loadWithSetting('indigo');
       final stored = await DatabaseService.instance
           .getSetting('theme_key', defaultValue: '');
-      expect(stored, 'dark|violet');
+      expect(stored, 'dark|violet|tonal');
     });
 
     test('the new format round-trips', () async {
@@ -143,6 +144,175 @@ void main() {
       expect(ThemeController.instance.brightnessChoice,
           LockoutBrightnessChoice.light);
       expect(ThemeController.instance.accent, LockoutAccent.teal);
+    });
+  });
+
+  // The contract for every value an installed copy can be carrying (D12):
+  // each one resolves, and the canonical three-part value is written back.
+  // `theme_key` is never cleared.
+  group('every stored value resolves to a three-part key', () {
+    const cases = <String, String>{
+      // three-part values survive
+      'dark|teal|vibrant': 'dark|teal|vibrant',
+      'light|lime|expressive': 'light|lime|expressive',
+      // branch-1 two-part values gain tonal
+      'dark|teal': 'dark|teal|tonal',
+      'system|lime': 'system|lime|tonal',
+      'light|coral': 'light|coral|tonal',
+      // the six retired single keys plus dynamic
+      'graphite': 'dark|steel|tonal',
+      'paper': 'light|steel|tonal',
+      'ember': 'dark|coral|tonal',
+      'linen': 'light|coral|tonal',
+      'indigo': 'dark|violet|tonal',
+      'frost': 'light|teal|tonal',
+      'dynamic': 'system|lime|tonal',
+      // pre-scheme keys, folded first hop
+      'carbon_lime': 'dark|steel|tonal',
+      'mint_lab': 'light|teal|tonal',
+      // junk and absent
+      '': 'system|lime|tonal',
+      'nonsense': 'system|lime|tonal',
+      'dark|teal|neon': 'dark|teal|tonal',
+    };
+
+    for (final MapEntry(key: stored, value: canonical) in cases.entries) {
+      test('"$stored" resolves and is written back as "$canonical"', () async {
+        // Stored in the real table rather than through the
+        // `readStoredChoice` seam, so the read-back below sees what `load()`
+        // left behind — including the no-write case, where it must still be
+        // the original value.
+        await _loadWithSetting(stored);
+        final parts = canonical.split('|');
+        expect(ThemeController.instance.brightnessChoice.key, parts[0]);
+        expect(ThemeController.instance.accent.key, parts[1]);
+        expect(ThemeController.instance.style.key, parts[2]);
+        expect(
+          await DatabaseService.instance
+              .getSetting('theme_key', defaultValue: ''),
+          canonical,
+        );
+      });
+    }
+
+    test('a canonical value is not rewritten on load', () async {
+      ThemeController.readStoredChoice = () async => 'dark|teal|vibrant';
+      addTearDown(() => ThemeController.readStoredChoice =
+          ThemeController.defaultReadStoredChoice);
+      await ThemeController.instance.load();
+      expect(ThemeController.instance.style, LockoutSchemeStyle.vibrant);
+      // Nothing was in the table and nothing should have been written: the
+      // write-back only fires when the stored value is not canonical.
+      expect(
+        await DatabaseService.instance
+            .getSetting('theme_key', defaultValue: ''),
+        '',
+      );
+    });
+  });
+
+  group('the style axis', () {
+    test('selectStyle keeps brightness and accent', () async {
+      await ThemeController.instance.selectAccent(LockoutAccent.teal);
+      await ThemeController.instance.selectStyle(LockoutSchemeStyle.expressive);
+      expect(ThemeController.instance.style, LockoutSchemeStyle.expressive);
+      expect(
+        await DatabaseService.instance
+            .getSetting('theme_key', defaultValue: ''),
+        'system|teal|expressive',
+      );
+    });
+
+    test('changing the accent or brightness keeps the style', () async {
+      await _loadWithSetting('light|lime|vibrant');
+      await ThemeController.instance.selectAccent(LockoutAccent.coral);
+      await ThemeController.instance
+          .selectBrightness(LockoutBrightnessChoice.dark);
+      expect(ThemeController.instance.style, LockoutSchemeStyle.vibrant);
+      expect(
+        await DatabaseService.instance
+            .getSetting('theme_key', defaultValue: ''),
+        'dark|coral|vibrant',
+      );
+    });
+
+    test('the style reaches the built theme', () async {
+      await _loadWithSetting('dark|teal|tonal');
+      final tonal = ThemeController.instance.darkTheme.colorScheme.primary;
+      await ThemeController.instance.selectStyle(LockoutSchemeStyle.vibrant);
+      expect(ThemeController.instance.darkTheme.colorScheme.primary,
+          isNot(tonal));
+    });
+
+    test('selectStyle persists then commits, and the last tap wins', () async {
+      await _loadWithSetting('light|lime|tonal');
+
+      final away =
+          ThemeController.instance.selectStyle(LockoutSchemeStyle.vibrant);
+      final back = ThemeController.instance.selectStyle(LockoutSchemeStyle.tonal);
+      await Future.wait([away, back]);
+
+      expect(ThemeController.instance.style, LockoutSchemeStyle.tonal);
+      expect(
+        await DatabaseService.instance
+            .getSetting('theme_key', defaultValue: ''),
+        'light|lime|tonal',
+      );
+    });
+
+    test('a superseded style never reaches the listeners', () async {
+      await _loadWithSetting('light|lime|tonal');
+
+      final seen = <LockoutSchemeStyle>[];
+      void listener() => seen.add(ThemeController.instance.style);
+      ThemeController.instance.addListener(listener);
+
+      final first =
+          ThemeController.instance.selectStyle(LockoutSchemeStyle.vibrant);
+      final second =
+          ThemeController.instance.selectStyle(LockoutSchemeStyle.expressive);
+      await Future.wait([first, second]);
+      ThemeController.instance.removeListener(listener);
+
+      expect(seen, [LockoutSchemeStyle.expressive]);
+    });
+
+    test('the style and accent do not clobber each other when interleaved',
+        () async {
+      await _loadWithSetting('light|lime|tonal');
+
+      final a = ThemeController.instance.selectAccent(LockoutAccent.violet);
+      final b =
+          ThemeController.instance.selectStyle(LockoutSchemeStyle.expressive);
+      await Future.wait([a, b]);
+
+      expect(ThemeController.instance.accent, LockoutAccent.violet);
+      expect(ThemeController.instance.style, LockoutSchemeStyle.expressive);
+      expect(
+        await DatabaseService.instance
+            .getSetting('theme_key', defaultValue: ''),
+        'light|violet|expressive',
+      );
+    });
+
+    test('selectStyle leaves the style as stored when the write fails',
+        () async {
+      await _loadWithSetting('dark|lime|tonal');
+      await _failEveryThemeWrite();
+
+      await expectLater(
+        ThemeController.instance.selectStyle(LockoutSchemeStyle.vibrant),
+        throwsA(anything),
+      );
+      expect(ThemeController.instance.style, LockoutSchemeStyle.tonal);
+      expect(await DatabaseService.instance.getSetting('theme_key'),
+          'dark|lime|tonal');
+    });
+
+    test('resetForTest returns the style to the fallback', () async {
+      await _loadWithSetting('dark|lime|expressive');
+      ThemeController.instance.resetForTest();
+      expect(ThemeController.instance.style, LockoutSchemeStyle.fallback);
     });
   });
 
@@ -183,7 +353,7 @@ void main() {
       expect(
         await DatabaseService.instance
             .getSetting('theme_key', defaultValue: ''),
-        'dark|violet',
+        'dark|violet|tonal',
       );
     });
   });
@@ -202,7 +372,7 @@ void main() {
       expect(ThemeController.instance.accent, LockoutAccent.coral);
       final stored = await DatabaseService.instance
           .getSetting('theme_key', defaultValue: '');
-      expect(stored, 'light|coral',
+      expect(stored, 'light|coral|tonal',
           reason: 'the second selection must not be swallowed by the guard');
     });
 
@@ -217,7 +387,7 @@ void main() {
       expect(ThemeController.instance.accent, LockoutAccent.lime);
       final stored = await DatabaseService.instance
           .getSetting('theme_key', defaultValue: '');
-      expect(stored, 'light|lime');
+      expect(stored, 'light|lime|tonal');
     });
 
     // The `finally` block already computes "am I still the latest
@@ -275,7 +445,7 @@ void main() {
           LockoutBrightnessChoice.dark);
       final stored = await DatabaseService.instance
           .getSetting('theme_key', defaultValue: '');
-      expect(stored, 'dark|violet');
+      expect(stored, 'dark|violet|tonal');
     });
   });
 
@@ -372,7 +542,7 @@ void main() {
       await ThemeController.instance.load();
       expect(
         await DatabaseService.instance.getSetting('theme_key'),
-        'dark|violet',
+        'dark|violet|tonal',
       );
     });
 
@@ -466,7 +636,7 @@ void main() {
       );
       expect(ThemeController.instance.accent, LockoutAccent.lime);
       expect(
-          await DatabaseService.instance.getSetting('theme_key'), 'dark|lime');
+          await DatabaseService.instance.getSetting('theme_key'), 'dark|lime|tonal');
     });
 
     test('selectBrightness leaves the brightness as stored when the write '
@@ -482,7 +652,7 @@ void main() {
       expect(ThemeController.instance.brightnessChoice,
           LockoutBrightnessChoice.dark);
       expect(
-          await DatabaseService.instance.getSetting('theme_key'), 'dark|lime');
+          await DatabaseService.instance.getSetting('theme_key'), 'dark|lime|tonal');
     });
 
     test('a failed selection does not notify, so nothing repaints a choice '
@@ -526,7 +696,7 @@ void main() {
       expect(notifications, 1);
       expect(ThemeController.instance.accent, LockoutAccent.teal);
       expect(
-          await DatabaseService.instance.getSetting('theme_key'), 'dark|teal');
+          await DatabaseService.instance.getSetting('theme_key'), 'dark|teal|tonal');
     });
 
     test('tapping the same brightness again retries rather than no-opping',
@@ -548,7 +718,7 @@ void main() {
       expect(ThemeController.instance.brightnessChoice,
           LockoutBrightnessChoice.light);
       expect(
-          await DatabaseService.instance.getSetting('theme_key'), 'light|lime');
+          await DatabaseService.instance.getSetting('theme_key'), 'light|lime|tonal');
     });
   });
 }

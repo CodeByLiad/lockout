@@ -10,6 +10,7 @@ import '../theme/accents.dart';
 import '../theme/cookie_border.dart';
 import '../theme/lockout_motion.dart';
 import '../theme/lockout_theme.dart';
+import '../theme/scheme_style.dart';
 import '../theme/theme_controller.dart';
 import '../widgets/house/nv_button.dart';
 import '../widgets/house/nv_dialog.dart';
@@ -467,8 +468,8 @@ class SettingsBodyState extends State<SettingsBody> {
 
   // --- THEME ---
 
-  // Two handlers rather than one, because the picker is two independent
-  // axes: a brightness tap must not disturb the accent, and vice versa.
+  // One handler per axis, because the picker is three independent axes: a
+  // brightness tap must not disturb the accent or the style, and so on.
   // Each persists through `ThemeController`; a throw there (storage
   // failure) must not vanish as a silent, unhandled async error — surface
   // it the same way every other write on this screen does.
@@ -493,6 +494,15 @@ class SettingsBodyState extends State<SettingsBody> {
       await ThemeController.instance.selectAccent(accent);
     } catch (_) {
       _toast('Could not apply the accent.', warn: true);
+    }
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _applyStyle(LockoutSchemeStyle style) async {
+    try {
+      await ThemeController.instance.selectStyle(style);
+    } catch (_) {
+      _toast('Could not apply the style.', warn: true);
     }
     if (mounted) setState(() {});
   }
@@ -885,13 +895,14 @@ class SettingsBodyState extends State<SettingsBody> {
     );
   }
 
-  /// The appearance picker: two independent axes, nothing else.
+  /// The appearance picker: three independent axes, nothing else.
   ///
   /// Brightness is a segmented button rather than a switch because "system"
   /// is a real third choice, not the absence of the other two. Accent is a
   /// row of swatches with no text beside them — the colour *is* the label,
   /// and each swatch carries its name in semantics so a screen reader is
-  /// not left reading five identical buttons.
+  /// not left reading five identical buttons. The style is a segmented
+  /// button because it is a short closed set.
   Widget _buildAppearanceCard(BuildContext context) {
     final theme = Theme.of(context);
     final controller = ThemeController.instance;
@@ -939,6 +950,17 @@ class SettingsBodyState extends State<SettingsBody> {
                 onTap: () => _applyAccent(accent),
               ),
           ],
+        ),
+        const SizedBox(height: LockoutTheme.sectionGap),
+        Text('Style', style: theme.textTheme.titleSmall),
+        const SizedBox(height: LockoutTheme.headingGap),
+        NvSegmentedButton<LockoutSchemeStyle>(
+          segments: [
+            for (final style in LockoutSchemeStyle.values)
+              NvSegment(value: style, label: style.label),
+          ],
+          selected: controller.style,
+          onChanged: _applyStyle,
         ),
       ],
     );

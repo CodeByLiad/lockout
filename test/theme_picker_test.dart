@@ -1,6 +1,8 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lockout/services/database_service.dart';
 import 'package:lockout/theme/accents.dart';
+import 'package:lockout/theme/scheme_style.dart';
 import 'package:lockout/theme/theme_controller.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -90,7 +92,7 @@ void main() {
         LockoutBrightnessChoice.dark);
     expect(
       await DatabaseService.instance.getSetting('theme_key', defaultValue: ''),
-      'dark|teal',
+      'dark|teal|tonal',
       reason: 'both axes land in the one setting the schema already has',
     );
 
@@ -165,6 +167,85 @@ void main() {
       expect(size.width, greaterThanOrEqualTo(48), reason: accent.key);
       expect(size.height, greaterThanOrEqualTo(48), reason: accent.key);
     }
+
+    semantics.dispose();
+  });
+
+  testWidgets('Look and feel offers Tonal, Vibrant, Expressive under Accent',
+      (tester) async {
+    final semantics = await pumpPicker(tester);
+
+    expect(find.text('Style'), findsOneWidget);
+    for (final style in LockoutSchemeStyle.values) {
+      expect(find.text(style.label), findsOneWidget, reason: style.key);
+    }
+    final accentY = tester.getTopLeft(find.text('Accent')).dy;
+    expect(tester.getTopLeft(find.text('Style')).dy, greaterThan(accentY));
+
+    semantics.dispose();
+  });
+
+  testWidgets('choosing Vibrant repaints the app at once', (tester) async {
+    final semantics = await pumpPicker(tester);
+
+    final before = Theme.of(tester.element(find.text('Style'))).colorScheme;
+    await tester.ensureVisible(find.text('Vibrant'));
+    await tester.tap(find.text('Vibrant'));
+    await settle(tester);
+    final after = Theme.of(tester.element(find.text('Style'))).colorScheme;
+
+    expect(ThemeController.instance.style, LockoutSchemeStyle.vibrant);
+    expect(after.primary, isNot(before.primary));
+    expect(
+      await DatabaseService.instance.getSetting('theme_key', defaultValue: ''),
+      'system|lime|vibrant',
+    );
+
+    semantics.dispose();
+  });
+
+  // Spec §5.2 "Swatches": a swatch shows the accent the user is choosing,
+  // not whatever the current style generates from it, so the fill stays the
+  // exact accent under every style.
+  testWidgets('a swatch fills with the exact accent under vibrant',
+      (tester) async {
+    await ThemeController.instance.selectStyle(LockoutSchemeStyle.vibrant);
+    final semantics = await pumpPicker(tester);
+
+    for (final accent in LockoutAccent.all) {
+      final container = tester.widget<AnimatedContainer>(find.descendant(
+        of: find.bySemanticsLabel(accent.name),
+        matching: find.byType(AnimatedContainer),
+      ));
+      final decoration = container.decoration! as ShapeDecoration;
+      expect(decoration.color, accent.accent, reason: accent.key);
+    }
+
+    semantics.dispose();
+  });
+
+  testWidgets('a style tap that fails to persist warns rather than throwing',
+      (tester) async {
+    final database = await DatabaseService.instance.database;
+    Future<void> dropTrigger() =>
+        database.execute('DROP TRIGGER IF EXISTS test_fail_theme_key');
+    await dropTrigger();
+    addTearDown(dropTrigger);
+    await database.execute(
+      "CREATE TRIGGER test_fail_theme_key BEFORE INSERT ON user_settings "
+      "WHEN NEW.key = 'theme_key' "
+      "BEGIN SELECT RAISE(ABORT, 'rejected by test trigger'); END;",
+    );
+
+    final semantics = await pumpPicker(tester);
+
+    await tester.ensureVisible(find.text('Expressive'));
+    await tester.tap(find.text('Expressive'));
+    await settle(tester);
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Could not apply the style.'), findsOneWidget);
+    expect(ThemeController.instance.style, LockoutSchemeStyle.tonal);
 
     semantics.dispose();
   });

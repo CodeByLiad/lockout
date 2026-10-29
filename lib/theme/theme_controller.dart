@@ -33,10 +33,13 @@ enum LockoutBrightnessChoice {
 /// root listens once and rebuilds `MaterialApp`, which is all the framework
 /// needs to repaint every `Theme.of(context)` reader beneath it.
 ///
-/// Two axes, not three. Material You was removed with the `dynamic_color`
-/// dependency because the house system forbids wallpaper-derived colour
-/// (section 2): an app whose surfaces come from the phone stops looking like
-/// the family it belongs to.
+/// Three axes: brightness, accent, and the scheme style (D12) the accent
+/// seed generates the colour scheme with.
+///
+/// There is still no wallpaper axis. Material You was removed with the
+/// `dynamic_color` dependency because the house system forbids
+/// wallpaper-derived colour (section 2): an app whose surfaces come from the
+/// phone stops looking like the family it belongs to.
 class ThemeController extends ChangeNotifier {
   ThemeController._();
 
@@ -44,16 +47,18 @@ class ThemeController extends ChangeNotifier {
 
   static const String _settingKey = 'theme_key';
 
-  /// The two axes are stored in one setting as `brightness|accent`, so the
-  /// schema does not change. A single separator rather than JSON: there are
-  /// exactly two fields and there always will be.
+  /// The three axes are stored in one setting as `brightness|accent|style`,
+  /// so the schema does not change. A single separator rather than JSON: the
+  /// fields are short closed sets with no separator in any key.
   static const String _separator = '|';
 
   LockoutBrightnessChoice _brightness = LockoutBrightnessChoice.system;
   LockoutAccent _accent = LockoutAccent.fallback;
+  LockoutSchemeStyle _style = LockoutSchemeStyle.fallback;
 
   LockoutBrightnessChoice get brightnessChoice => _brightness;
   LockoutAccent get accent => _accent;
+  LockoutSchemeStyle get style => _style;
 
   ThemeData get lightTheme => _themeFor(Brightness.light);
 
@@ -67,8 +72,7 @@ class ThemeController extends ChangeNotifier {
   ThemeData get darkTheme => _themeFor(Brightness.dark);
 
   ThemeData _themeFor(Brightness brightness) {
-    final colors =
-        LockoutPalette.schemeFor(brightness, _accent, LockoutSchemeStyle.tonal);
+    final colors = LockoutPalette.schemeFor(brightness, _accent, _style);
     return LockoutTheme.build(
       colors: colors,
       semantics: LockoutPalette.semanticsFor(brightness, _accent, colors),
@@ -88,11 +92,12 @@ class ThemeController extends ChangeNotifier {
   /// migration happens once rather than on every launch.
   Future<void> load() async {
     final saved = await readStoredChoice();
-    final (brightness, accent) = _resolve(saved);
+    final (brightness, accent, style) = _resolve(saved);
     _brightness = brightness;
     _accent = accent;
+    _style = style;
 
-    final canonical = _encode(brightness, accent);
+    final canonical = _encode(brightness, accent, style);
     if (saved != canonical) {
       try {
         await DatabaseService.instance.saveSetting(_settingKey, canonical);
@@ -148,12 +153,17 @@ class ThemeController extends ChangeNotifier {
   /// win.
   LockoutBrightnessChoice? _pendingBrightness;
   LockoutAccent? _pendingAccent;
+  LockoutSchemeStyle? _pendingStyle;
 
   Future<void> selectBrightness(LockoutBrightnessChoice choice) async {
     if (choice == (_pendingBrightness ?? _brightness)) return;
     _pendingBrightness = choice;
     try {
-      await _persist(choice, _pendingAccent ?? _accent);
+      await _persist(
+        choice,
+        _pendingAccent ?? _accent,
+        _pendingStyle ?? _style,
+      );
       // Commit only while this call is still the latest selection — the same
       // question the `finally` below asks, now actually acted on. A newer tap
       // owns the choice, and its own write is either already stored or about
@@ -174,7 +184,11 @@ class ThemeController extends ChangeNotifier {
     if (accent == (_pendingAccent ?? _accent)) return;
     _pendingAccent = accent;
     try {
-      await _persist(_pendingBrightness ?? _brightness, accent);
+      await _persist(
+        _pendingBrightness ?? _brightness,
+        accent,
+        _pendingStyle ?? _style,
+      );
       if (_pendingAccent != accent) return;
       _accent = accent;
       notifyListeners();
@@ -183,20 +197,39 @@ class ThemeController extends ChangeNotifier {
     }
   }
 
-  /// Takes the pair explicitly rather than reading the fields, so it cannot
-  /// be called in an order that writes a half-applied state.
+  Future<void> selectStyle(LockoutSchemeStyle style) async {
+    if (style == (_pendingStyle ?? _style)) return;
+    _pendingStyle = style;
+    try {
+      await _persist(
+        _pendingBrightness ?? _brightness,
+        _pendingAccent ?? _accent,
+        style,
+      );
+      if (_pendingStyle != style) return;
+      _style = style;
+      notifyListeners();
+    } finally {
+      if (_pendingStyle == style) _pendingStyle = null;
+    }
+  }
+
+  /// Takes all three axes explicitly rather than reading the fields, so it
+  /// cannot be called in an order that writes a half-applied state.
   Future<void> _persist(
     LockoutBrightnessChoice brightness,
     LockoutAccent accent,
+    LockoutSchemeStyle style,
   ) =>
       DatabaseService.instance
-          .saveSetting(_settingKey, _encode(brightness, accent));
+          .saveSetting(_settingKey, _encode(brightness, accent, style));
 
   static String _encode(
     LockoutBrightnessChoice brightness,
     LockoutAccent accent,
+    LockoutSchemeStyle style,
   ) =>
-      '${brightness.key}$_separator${accent.key}';
+      '${brightness.key}$_separator${accent.key}$_separator${style.key}';
 
   /// The keys of the palette system that preceded the six named schemes.
   ///
@@ -232,20 +265,26 @@ class ThemeController extends ChangeNotifier {
     'dynamic': LockoutBrightnessChoice.system,
   };
 
-  /// Reads either format.
+  /// Reads every format.
   ///
-  /// A stored value with no separator is one of the retired scheme keys (or
+  /// A two-part value predates the style axis and gains the fallback style;
+  /// an unknown third field does the same. A stored value with no separator is one of the retired scheme keys (or
   /// junk). Each maps to the brightness it was authored at and the accent
   /// closest to its hue; `dynamic` maps to the fresh-install default,
   /// because Material You no longer exists and there is no hue to preserve.
   /// Junk falls back rather than throwing, and the caller rewrites the
   /// setting — it is never cleared.
-  static (LockoutBrightnessChoice, LockoutAccent) _resolve(String saved) {
+  static (LockoutBrightnessChoice, LockoutAccent, LockoutSchemeStyle)
+      _resolve(String saved) {
     if (saved.contains(_separator)) {
       final parts = saved.split(_separator);
       return (
         LockoutBrightnessChoice.byKey(parts.first),
         LockoutAccent.byKey(parts.length > 1 ? parts[1] : ''),
+        // A two-part value was written by a branch-1 build, before the style
+        // axis existed; it was on the house palette, and tonal is the closest
+        // generated look.
+        LockoutSchemeStyle.byKey(parts.length > 2 ? parts[2] : ''),
       );
     }
 
@@ -253,6 +292,7 @@ class ThemeController extends ChangeNotifier {
     return (
       _legacyBrightness[key] ?? LockoutBrightnessChoice.system,
       LockoutAccent.byKey(key),
+      LockoutSchemeStyle.fallback,
     );
   }
 
@@ -264,7 +304,9 @@ class ThemeController extends ChangeNotifier {
   void resetForTest() {
     _brightness = LockoutBrightnessChoice.system;
     _accent = LockoutAccent.fallback;
+    _style = LockoutSchemeStyle.fallback;
     _pendingBrightness = null;
     _pendingAccent = null;
+    _pendingStyle = null;
   }
 }
