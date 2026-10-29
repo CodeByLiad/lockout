@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../theme/lockout_semantics.dart';
 import '../../theme/lockout_theme.dart';
 import 'nv_wavy_progress.dart';
 
@@ -42,10 +43,13 @@ class NvHeroCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
+    final semantics = LockoutSemantics.of(context);
 
     return Material(
       shape: LockoutTheme.heroCardShape,
-      color: colors.primaryContainer,
+      // The exact accent, not the generated `primaryContainer`: tonal
+      // generation mutes the seed, and this is the card that carries it.
+      color: semantics.heroFill,
       child: Padding(
         padding: const EdgeInsets.all(LockoutTheme.heroCardPadding),
         child: Column(
@@ -63,7 +67,7 @@ class NvHeroCard extends StatelessWidget {
                       Text(
                         title,
                         style: theme.textTheme.titleMedium?.copyWith(
-                          color: colors.onPrimaryContainer,
+                          color: semantics.onHeroFill,
                         ),
                       ),
                       if (value != null) ...[
@@ -78,7 +82,7 @@ class NvHeroCard extends StatelessWidget {
                                 maxLines: 1,
                                 style: LockoutTheme.countdown(
                                   colors,
-                                  color: colors.onPrimaryContainer,
+                                  color: semantics.onHeroFill,
                                 ),
                               ),
                             ),
@@ -87,7 +91,7 @@ class NvHeroCard extends StatelessWidget {
                               Text(
                                 unit!,
                                 style: theme.textTheme.titleSmall?.copyWith(
-                                  color: colors.onPrimaryContainer,
+                                  color: semantics.onHeroFill,
                                 ),
                               ),
                             ],

@@ -7,6 +7,7 @@ import 'package:lockout/theme/accents.dart';
 import 'package:lockout/theme/lockout_semantics.dart';
 import 'package:lockout/theme/lockout_theme.dart';
 import 'package:lockout/theme/palette.dart';
+import 'package:lockout/theme/scheme_style.dart';
 import 'package:lockout/theme/theme_controller.dart';
 import 'package:webview_flutter_platform_interface/webview_flutter_platform_interface.dart';
 
@@ -154,31 +155,34 @@ int _endOfStringLiteral(String source, int start) {
   return source.length;
 }
 
-/// One appearance the app can be in: a brightness crossed with an accent.
+/// One appearance the app can be in: a brightness crossed with an accent
+/// and a scheme style.
 ///
 /// The appearance used to be a single named `LockoutScheme`, and a test that
 /// wanted "the shipped dark look" could say `LockoutScheme.graphite`. Theme
-/// selection is two independent axes now, so this pairs them back up for the
+/// selection is three independent axes now, so this joins them back up for the
 /// tests that only ever needed *an* appearance to paint against — it is a
 /// test fixture, not a reintroduction of the retired class: it authors no
 /// colour of its own and reads everything from [LockoutPalette].
 @immutable
 class TestAppearance {
-  const TestAppearance(this.brightness, this.accent);
+  const TestAppearance(this.brightness, this.accent,
+      [this.style = LockoutSchemeStyle.tonal]);
 
   final Brightness brightness;
   final LockoutAccent accent;
+  final LockoutSchemeStyle style;
 
-  ColorScheme get colors => LockoutPalette.schemeFor(brightness, accent);
+  ColorScheme get colors => LockoutPalette.schemeFor(brightness, accent, style);
 
   LockoutSemantics get semantics =>
-      LockoutPalette.semanticsFor(brightness, accent);
+      LockoutPalette.semanticsFor(brightness, accent, colors);
 
   ThemeData get theme =>
       LockoutTheme.build(colors: colors, semantics: semantics);
 
   /// What a failure reason should name, matching the persisted format.
-  String get key => '${brightness.name}|${accent.key}';
+  String get key => '${brightness.name}|${accent.key}|${style.key}';
 }
 
 /// The default appearance for a test that just needs the app's dark look.
@@ -190,13 +194,15 @@ const lightAppearance =
     TestAppearance(Brightness.light, LockoutAccent.fallback);
 
 /// Every appearance the app can produce: both brightnesses crossed with
-/// every accent. The replacement for the retired `LockoutScheme.all` in the
-/// suites that swept every shipped appearance.
+/// every accent and every scheme style, 2 x 5 x 3. The replacement for the
+/// retired `LockoutScheme.all` in the suites that swept every shipped
+/// appearance.
 final allAppearances = <TestAppearance>[
-  for (final accent in LockoutAccent.all) ...[
-    TestAppearance(Brightness.light, accent),
-    TestAppearance(Brightness.dark, accent),
-  ],
+  for (final style in LockoutSchemeStyle.values)
+    for (final accent in LockoutAccent.all) ...[
+      TestAppearance(Brightness.light, accent, style),
+      TestAppearance(Brightness.dark, accent, style),
+    ],
 ];
 
 /// The app's real `ThemeData`, for any test that pumps a widget which reads

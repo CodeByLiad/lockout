@@ -35,6 +35,8 @@ const _semantics = LockoutSemantics(
   restDay: Color(0xFFFFE24A),
   chartLine: Color(0xFF2E7D32),
   chartFill: Color(0x1F2E7D32),
+  heroFill: Color(0xFFC2EE7B),
+  onHeroFill: Color(0xFF111111),
   categoryRamp: [
     Color(0xFFFF6B35),
     // Deliberately bit-identical to restDay, so a saturated ramp still

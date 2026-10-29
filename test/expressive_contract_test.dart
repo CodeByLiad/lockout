@@ -6,6 +6,7 @@ import 'package:lockout/theme/accents.dart';
 import 'package:lockout/theme/lockout_motion.dart';
 import 'package:lockout/theme/lockout_theme.dart';
 import 'package:lockout/theme/palette.dart';
+import 'package:lockout/theme/scheme_style.dart';
 
 /// The vendored house document.
 ///
@@ -167,6 +168,10 @@ String _withoutComments(String source) => source
     .join('\n');
 
 /// True when the house document mentions this colour's hex, in either case.
+/// The dark lime tonal scheme the shape tests build their theme from.
+final ColorScheme _darkLime = LockoutPalette.schemeFor(
+    Brightness.dark, LockoutAccent.lime, LockoutSchemeStyle.tonal);
+
 bool _houseDeclares(Color colour) {
   final hex = colour
       .toARGB32()
@@ -191,21 +196,21 @@ void main() {
   });
 
   group('colour', () {
-    test('every palette colour is one the house document declares', () {
+    test('every authored palette colour is one the house document declares',
+        () {
+      // The scheme itself is generated from the accent seed now (deviation
+      // D11), so its roles are no longer house hexes and cannot be checked
+      // here. What the palette still authors is the success pair, and that
+      // must still be the house's. The category ramp is authored too but was
+      // never a house colour: it is Lockout's own, so it is not listed.
       for (final brightness in Brightness.values) {
-        final scheme = LockoutPalette.schemeFor(brightness, LockoutAccent.lime);
+        final scheme = LockoutPalette.schemeFor(
+            brightness, LockoutAccent.lime, LockoutSchemeStyle.tonal);
+        final semantics =
+            LockoutPalette.semanticsFor(brightness, LockoutAccent.lime, scheme);
         final roles = <String, Color>{
-          'surface': scheme.surface,
-          'surfaceContainer': scheme.surfaceContainer,
-          'surfaceContainerHigh': scheme.surfaceContainerHigh,
-          'surfaceContainerHighest': scheme.surfaceContainerHighest,
-          'onSurface': scheme.onSurface,
-          'onSurfaceVariant': scheme.onSurfaceVariant,
-          'outline': scheme.outline,
-          'outlineVariant': scheme.outlineVariant,
-          'secondaryContainer': scheme.secondaryContainer,
-          'tertiary': scheme.tertiary,
-          'error': scheme.error,
+          'success': semantics.success,
+          'successContainer (chartFill)': semantics.chartFill,
         };
         roles.forEach((name, colour) {
           expect(_houseDeclares(colour), isTrue,
@@ -322,9 +327,9 @@ void main() {
       // component theme, and this assertion passed. It now checks the
       // resolver rather than the token.
       final theme = LockoutTheme.build(
-        colors: LockoutPalette.schemeFor(Brightness.dark, LockoutAccent.lime),
-        semantics:
-            LockoutPalette.semanticsFor(Brightness.dark, LockoutAccent.lime),
+        colors: _darkLime,
+        semantics: LockoutPalette.semanticsFor(
+            Brightness.dark, LockoutAccent.lime, _darkLime),
       );
 
       double radiusOf(OutlinedBorder? shape) =>
@@ -389,10 +394,9 @@ void main() {
     // way SegmentedButton discards the segment shape it is given.
     Widget host(Widget child) => MaterialApp(
           theme: LockoutTheme.build(
-            colors:
-                LockoutPalette.schemeFor(Brightness.dark, LockoutAccent.lime),
+            colors: _darkLime,
             semantics: LockoutPalette.semanticsFor(
-                Brightness.dark, LockoutAccent.lime),
+                Brightness.dark, LockoutAccent.lime, _darkLime),
           ),
           home: Scaffold(body: Center(child: child)),
         );

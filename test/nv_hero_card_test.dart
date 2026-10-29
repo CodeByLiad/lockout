@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lockout/theme/accents.dart';
 import 'package:lockout/theme/cookie_border.dart';
+import 'package:lockout/theme/lockout_semantics.dart';
 import 'package:lockout/theme/lockout_theme.dart';
 import 'package:lockout/widgets/house/nv_hero_card.dart';
 import 'package:lockout/widgets/house/nv_wavy_progress.dart';
@@ -51,10 +52,11 @@ void main() {
     await tester.pumpWidget(_host());
     await tester.pumpAndSettle();
 
-    final colors = Theme.of(tester.element(find.byType(NvHeroCard))).colorScheme;
+    final semantics =
+        LockoutSemantics.of(tester.element(find.byType(NvHeroCard)));
     expect(
       _cardMaterial(tester).color,
-      colors.primaryContainer,
+      semantics.heroFill,
       reason: 'house section 8 gives the hero card an accent fill; a neutral '
           'fill with an accent rail is the previous design, and only a device '
           'screenshot caught it last time',
@@ -62,9 +64,9 @@ void main() {
   });
 
   testWidgets('the fill follows the chosen accent', (tester) async {
-    // Not the brightness: `primaryContainer` is the accent itself in both
-    // light and dark, which is the whole point of the two-axis theme. What
-    // must move the fill is a different accent.
+    // Not the brightness: `heroFill` is the accent itself in both light and
+    // dark, whatever the generated scheme does. What must move the fill is a
+    // different accent.
     await tester.pumpWidget(_host());
     await tester.pumpAndSettle();
     final lime = _cardMaterial(tester).color;
@@ -84,7 +86,7 @@ void main() {
     for (final appearance in [darkAppearance, lightAppearance]) {
       await tester.pumpWidget(_host(appearance: appearance));
       await tester.pumpAndSettle();
-      expect(_cardMaterial(tester).color, appearance.colors.primaryContainer,
+      expect(_cardMaterial(tester).color, appearance.semantics.heroFill,
           reason: '${appearance.key} lost the accent fill');
     }
   });
@@ -97,7 +99,8 @@ void main() {
     final value = tester.widget<Text>(find.text('18'));
     expect(value.style?.fontSize, LockoutTheme.countdown(colors).fontSize);
     expect(value.style?.fontWeight, LockoutTheme.countdown(colors).fontWeight);
-    expect(value.style?.color, colors.onPrimaryContainer);
+    expect(value.style?.color,
+        LockoutSemantics.of(tester.element(find.byType(NvHeroCard))).onHeroFill);
   });
 
   testWidgets('it states the unit beside the number', (tester) async {

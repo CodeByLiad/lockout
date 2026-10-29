@@ -5,11 +5,11 @@ import 'package:flutter/material.dart';
 /// The colours Material 3 has no role for.
 ///
 /// A `ThemeExtension` rather than a static list, because these must follow a
-/// theme switch and a dynamic (Material You) scheme exactly the way the
+/// theme switch and the scheme generated from the accent exactly the way the
 /// framework roles do. Reading them through `context` is what makes that
 /// automatic instead of something every call site has to remember — the
-/// previous system exposed the equivalents statically, and that is precisely
-/// what made wallpaper-derived colour impossible to support.
+/// previous system exposed the equivalents statically, so a scheme that
+/// changed at runtime would have left them behind.
 @immutable
 class LockoutSemantics extends ThemeExtension<LockoutSemantics> {
   /// A completed set, a hit target, a finished session.
@@ -48,6 +48,17 @@ class LockoutSemantics extends ThemeExtension<LockoutSemantics> {
   /// `primary`.
   final List<Color> categoryRamp;
 
+  /// The hero card's fill: the exact accent, whatever the generated scheme
+  /// is.
+  ///
+  /// Not `primaryContainer`: a generated container is a toned-down relative
+  /// of the seed, and the hero is the one surface where the identity accent
+  /// has to read as itself.
+  final Color heroFill;
+
+  /// The foreground on [heroFill]: the accent's own authored ink.
+  final Color onHeroFill;
+
   const LockoutSemantics({
     required this.success,
     required this.onSuccess,
@@ -57,6 +68,8 @@ class LockoutSemantics extends ThemeExtension<LockoutSemantics> {
     required this.chartLine,
     required this.chartFill,
     required this.categoryRamp,
+    required this.heroFill,
+    required this.onHeroFill,
   });
 
   /// The ramp colour at [index], wrapping, so a caller with more than eight
@@ -122,6 +135,8 @@ class LockoutSemantics extends ThemeExtension<LockoutSemantics> {
     Color? chartLine,
     Color? chartFill,
     List<Color>? categoryRamp,
+    Color? heroFill,
+    Color? onHeroFill,
   }) {
     return LockoutSemantics(
       success: success ?? this.success,
@@ -132,6 +147,8 @@ class LockoutSemantics extends ThemeExtension<LockoutSemantics> {
       chartLine: chartLine ?? this.chartLine,
       chartFill: chartFill ?? this.chartFill,
       categoryRamp: categoryRamp ?? this.categoryRamp,
+      heroFill: heroFill ?? this.heroFill,
+      onHeroFill: onHeroFill ?? this.onHeroFill,
     );
   }
 
@@ -154,6 +171,8 @@ class LockoutSemantics extends ThemeExtension<LockoutSemantics> {
         for (var i = 0; i < categoryRamp.length; i++)
           Color.lerp(categoryRamp[i], other.categoryRamp[i], t)!,
       ],
+      heroFill: Color.lerp(heroFill, other.heroFill, t)!,
+      onHeroFill: Color.lerp(onHeroFill, other.onHeroFill, t)!,
     );
   }
 }

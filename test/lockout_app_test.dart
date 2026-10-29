@@ -4,6 +4,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:lockout/main.dart';
 import 'package:lockout/screens/main_screen.dart';
 import 'package:lockout/services/database_service.dart';
+import 'package:lockout/theme/accents.dart';
 import 'package:lockout/theme/lockout_semantics.dart';
 import 'package:lockout/theme/theme_controller.dart';
 import 'package:lockout/widgets/bottom_nav.dart';
@@ -164,7 +165,13 @@ void main() {
     await tester.pumpWidget(const LockoutApp());
     await settle(tester);
 
-    expect(scaffoldFill(tester), darkAppearance.colors.surface);
+    // `carbon_lime` migrates to dark steel. Steel, not lime: the surface is
+    // generated from the accent now (D11), so the old shared dark neutral no
+    // longer stands in for every accent.
+    expect(scaffoldFill(tester),
+        const TestAppearance(Brightness.dark, LockoutAccent.steel)
+            .colors
+            .surface);
   });
 
   // The second pre-`runApp` await. `loadSavedAppearance` is guarded because

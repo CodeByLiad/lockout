@@ -4,6 +4,7 @@ import '../services/database_service.dart';
 import 'accents.dart';
 import 'lockout_theme.dart';
 import 'palette.dart';
+import 'scheme_style.dart';
 
 /// The brightness axis: what the user asked for, not what is on screen.
 ///
@@ -54,10 +55,7 @@ class ThemeController extends ChangeNotifier {
   LockoutBrightnessChoice get brightnessChoice => _brightness;
   LockoutAccent get accent => _accent;
 
-  ThemeData get lightTheme => LockoutTheme.build(
-        colors: LockoutPalette.schemeFor(Brightness.light, _accent),
-        semantics: LockoutPalette.semanticsFor(Brightness.light, _accent),
-      );
+  ThemeData get lightTheme => _themeFor(Brightness.light);
 
   /// Always non-null now.
   ///
@@ -66,10 +64,16 @@ class ThemeController extends ChangeNotifier {
   /// second one would let the system override an explicit choice. With
   /// brightness as its own axis that problem is gone: `themeMode` says which
   /// of the two to use, so both can always be supplied.
-  ThemeData get darkTheme => LockoutTheme.build(
-        colors: LockoutPalette.schemeFor(Brightness.dark, _accent),
-        semantics: LockoutPalette.semanticsFor(Brightness.dark, _accent),
-      );
+  ThemeData get darkTheme => _themeFor(Brightness.dark);
+
+  ThemeData _themeFor(Brightness brightness) {
+    final colors =
+        LockoutPalette.schemeFor(brightness, _accent, LockoutSchemeStyle.tonal);
+    return LockoutTheme.build(
+      colors: colors,
+      semantics: LockoutPalette.semanticsFor(brightness, _accent, colors),
+    );
+  }
 
   ThemeMode get themeMode => switch (_brightness) {
         LockoutBrightnessChoice.system => ThemeMode.system,

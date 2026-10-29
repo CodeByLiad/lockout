@@ -297,8 +297,15 @@ void main() {
 
     test('the accent reaches the built theme', () async {
       await _loadWithSetting('dark|teal');
+      // The seed, not the accent hex itself: `primary` is generated from the
+      // accent now (D11), so it is teal's generated primary that must arrive.
       expect(ThemeController.instance.darkTheme.colorScheme.primary,
-          LockoutAccent.teal.accent);
+          const TestAppearance(Brightness.dark, LockoutAccent.teal)
+              .colors
+              .primary);
+      expect(ThemeController.instance.darkTheme.colorScheme.primary,
+          isNot(darkAppearance.colors.primary),
+          reason: 'teal must not paint the default lime primary');
     });
 
     test('each theme carries its own brightness', () async {
