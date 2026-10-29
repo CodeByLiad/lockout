@@ -307,10 +307,8 @@ void main() {
   // The banner paints on `inverseSurface`, and its action used to take
   // `colors.primary` — 1.37:1 on graphite, unreadable, and the control is
   // the only one the banner has. `inversePrimary` is the readable tone for
-  // that background in every scheme — `palette_test.dart`'s "the snackbar
-  // pairing" group measures it, holding the pair at >= 4.5:1 across all ten
-  // brightness-and-accent combinations (it took that duty over from
-  // `schemes_test.dart`, deleted in Task 6);
+  // that background in every scheme — `contrast_matrix_test.dart`
+  // measures it, holding the pair at >= 4.5:1 across all thirty appearances;
   // this pins the widget to the role rather than to a value, so a scheme
   // that authors its own `inversePrimary` still gets a legible label.
   //

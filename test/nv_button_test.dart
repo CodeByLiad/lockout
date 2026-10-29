@@ -1,3 +1,4 @@
+import 'dart:math' show max, min;
 import 'dart:ui' show Tristate;
 
 import 'package:flutter/material.dart';
@@ -14,11 +15,12 @@ Widget _host({
   bool enabled = true,
   bool reduceMotion = false,
   VoidCallback? onPressed,
+  TestAppearance appearance = darkAppearance,
 }) {
   return MediaQuery(
     data: MediaQueryData(disableAnimations: reduceMotion),
     child: MaterialApp(
-      theme: lockoutTestTheme(),
+      theme: lockoutTestTheme(appearance),
       home: Scaffold(
         body: Center(
           child: NvButton(
@@ -229,6 +231,28 @@ void main() {
     expect(fill, isNot(colors.primaryContainer),
         reason: 'the accent button is the action ON an accent card; sharing '
             'its fill makes it invisible');
+  });
+
+  testWidgets(
+      'an accent button fill clears 3:1 against the hero card fill in every '
+      'appearance', (tester) async {
+    // Device QA B1 regression: the card fills with `heroFill` (the exact
+    // accent), so the button must contrast with that, not primaryContainer.
+    double ratio(Color a, Color b) {
+      final la = a.computeLuminance(), lb = b.computeLuminance();
+      return (max(la, lb) + 0.05) / (min(la, lb) + 0.05);
+    }
+
+    for (final a in allAppearances) {
+      await tester.pumpWidget(
+          _host(variant: NvButtonVariant.accent, appearance: a));
+      await tester.pumpAndSettle();
+      final container = tester
+          .widget<AnimatedContainer>(find.byType(AnimatedContainer).first);
+      final fill = (container.decoration! as BoxDecoration).color!;
+      expect(ratio(fill, a.semantics.heroFill), greaterThanOrEqualTo(3.0),
+          reason: 'accent button vs heroFill in ${a.key}');
+    }
   });
 
   testWidgets('every filled variant paints a colour the theme resolved',

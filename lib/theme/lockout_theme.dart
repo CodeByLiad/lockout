@@ -533,9 +533,8 @@ class LockoutTheme {
         // `inversePrimary`, the primary tone meant for an inverse-surface
         // background. Nothing in this app builds a `SnackBarAction` today,
         // so this line has never painted; it is stated correctly so that the
-        // first one that does is readable. `palette_test.dart` holds the
-        // pairing at >= 4.5:1 across all ten brightness-and-accent
-        // combinations, and `undo_banner.dart` (which borrows these colours)
+        // first one that does is readable. `contrast_matrix_test.dart` holds
+        // the pairing at >= 4.5:1 across all thirty appearances, and `undo_banner.dart` (which borrows these colours)
         // is the live consumer.
         actionTextColor: colors.inversePrimary,
         behavior: SnackBarBehavior.floating,

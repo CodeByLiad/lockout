@@ -31,12 +31,35 @@ void main() {
         'warning/surface': (s.warning, c.surface),
         'danger/surface': (s.danger, c.surface),
         'restDay/surface': (s.restDay, c.surface),
+        'inversePrimary/inverseSurface': (c.inversePrimary, c.inverseSurface),
+        'onInverseSurface/inverseSurface':
+            (c.onInverseSurface, c.inverseSurface),
+        'onSurface/surfaceContainerHigh':
+            (c.onSurface, c.surfaceContainerHigh),
+        'onSurface/surfaceContainerHighest':
+            (c.onSurface, c.surfaceContainerHighest),
+        'onSurfaceVariant/surfaceContainerHigh':
+            (c.onSurfaceVariant, c.surfaceContainerHigh),
+        'onSurfaceVariant/surfaceContainerLow':
+            (c.onSurfaceVariant, c.surfaceContainerLow),
         'onHeroFill/heroFill': (s.onHeroFill, s.heroFill),
       };
       for (final MapEntry(:key, value: (fg, bg)) in pairs.entries) {
         expect(_ratio(fg, bg), greaterThanOrEqualTo(4.5),
             reason: '$key in ${a.key}');
       }
+    });
+  }
+
+  for (final a in allAppearances) {
+    test('${a.key}: category ramp clears 3:1 on surface, danger != success',
+        () {
+      final c = a.colors, s = a.semantics;
+      for (final (i, colour) in s.categoryRamp.indexed) {
+        expect(_ratio(colour, c.surface), greaterThanOrEqualTo(3.0),
+            reason: 'categoryRamp[$i] in ${a.key}');
+      }
+      expect(s.danger, isNot(s.success), reason: 'danger == success');
     });
   }
 }

@@ -159,6 +159,10 @@ String _withoutSnackBars(String source) {
   }
 }
 
+/// The dark lime tonal scheme the shape tests build their theme from.
+final ColorScheme _darkLime = LockoutPalette.schemeFor(
+    Brightness.dark, LockoutAccent.lime, LockoutSchemeStyle.tonal);
+
 /// Blanks `//` comments so a guard does not trip over prose that names the
 /// very thing it forbids.
 String _withoutComments(String source) => source
@@ -168,10 +172,6 @@ String _withoutComments(String source) => source
     .join('\n');
 
 /// True when the house document mentions this colour's hex, in either case.
-/// The dark lime tonal scheme the shape tests build their theme from.
-final ColorScheme _darkLime = LockoutPalette.schemeFor(
-    Brightness.dark, LockoutAccent.lime, LockoutSchemeStyle.tonal);
-
 bool _houseDeclares(Color colour) {
   final hex = colour
       .toARGB32()

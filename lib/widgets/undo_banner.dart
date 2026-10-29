@@ -244,9 +244,9 @@ class _UndoBannerState extends State<_UndoBanner> {
                               // 2026-10-26 — the old "no better than
                               // ~2.1:1" was taken against the six deleted
                               // schemes and no longer describes anything.
-                              // `palette_test.dart`'s "the snackbar
-                              // pairing" group holds `inversePrimary` at
-                              // >= 4.5:1 on `inverseSurface` for all ten.
+                              // `contrast_matrix_test.dart` holds
+                              // `inversePrimary` at >= 4.5:1 on
+                              // `inverseSurface` for all thirty.
                               //
                               // The second bar that old file carried —
                               // >= 1.5:1 between this label and the

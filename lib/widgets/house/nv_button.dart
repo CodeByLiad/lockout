@@ -64,14 +64,14 @@ class _NvButtonState extends State<NvButton> {
     const Color? noFill = null;
 
     return switch (widget.variant) {
-      // `onPrimaryContainer` on `primaryContainer`, inverted: the accent
-      // button is the hero action, and the hero card it sits on is itself
-      // filled with `primaryContainer`. Sharing that fill made the primary
-      // action invisible on a device while every unit assertion passed
-      // (device QA B1).
+      // `onHeroFill` on `heroFill`, inverted: the accent button is the hero
+      // action, and the hero card it sits on is filled with `heroFill`
+      // (the exact accent). Sharing that fill made the primary action
+      // invisible on a device while every unit assertion passed (device QA
+      // B1); the ink is the one colour guaranteed to contrast with it.
       NvButtonVariant.accent => (
-          background: colors.onPrimaryContainer,
-          foreground: colors.primaryContainer,
+          background: semantics.onHeroFill,
+          foreground: semantics.heroFill,
           side: BorderSide.none,
         ),
       NvButtonVariant.filled => (
