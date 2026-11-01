@@ -43,7 +43,9 @@ void main() {
             );
             final actual = LockoutPalette.schemeFor(b, accent, style);
             expect(actual.brightness, b);
-            expect(actual.primary, expected.primary);
+            if (style != LockoutSchemeStyle.expressive) {
+              expect(actual.primary, expected.primary);
+            }
             expect(actual.surface, expected.surface);
             expect(actual.surfaceContainer, expected.surfaceContainer);
             expect(actual.secondaryContainer, expected.secondaryContainer);
@@ -52,6 +54,50 @@ void main() {
         }
       }
     }
+
+    test('expressive pins the primary roles to the tonal scheme', () {
+      for (final accent in LockoutAccent.all) {
+        for (final b in Brightness.values) {
+          final tonal = ColorScheme.fromSeed(
+              seedColor: accent.accent,
+              brightness: b,
+              dynamicSchemeVariant: DynamicSchemeVariant.tonalSpot);
+          final e = LockoutPalette.schemeFor(
+              b, accent, LockoutSchemeStyle.expressive);
+          final why = '${b.name}|${accent.key}';
+          expect(e.primary, tonal.primary, reason: why);
+          expect(e.onPrimary, tonal.onPrimary, reason: why);
+          expect(e.primaryContainer, tonal.primaryContainer, reason: why);
+          expect(e.onPrimaryContainer, tonal.onPrimaryContainer, reason: why);
+          expect(e.inversePrimary, tonal.inversePrimary, reason: why);
+          expect(e.surfaceTint, Colors.transparent);
+        }
+      }
+    });
+
+    test('expressive still differs from tonal outside the primary roles', () {
+      final differs = LockoutAccent.all.any((accent) {
+        final tonal = LockoutPalette.schemeFor(
+            Brightness.light, accent, LockoutSchemeStyle.tonal);
+        final e = LockoutPalette.schemeFor(
+            Brightness.light, accent, LockoutSchemeStyle.expressive);
+        return e.secondary != tonal.secondary || e.tertiary != tonal.tertiary;
+      });
+      expect(differs, isTrue);
+    });
+
+    test('vibrant is unchanged: fromSeed vibrant, surfaceTint cleared', () {
+      for (final accent in LockoutAccent.all) {
+        final expected = ColorScheme.fromSeed(
+          seedColor: accent.accent,
+          dynamicSchemeVariant: DynamicSchemeVariant.vibrant,
+        ).copyWith(surfaceTint: Colors.transparent);
+        expect(
+            LockoutPalette.schemeFor(
+                Brightness.light, accent, LockoutSchemeStyle.vibrant),
+            expected);
+      }
+    });
 
     test('in light, the accent now changes primary (complaint 1)', () {
       final lime = LockoutPalette.schemeFor(

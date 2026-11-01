@@ -58,16 +58,36 @@ class LockoutPalette {
   /// tonal algorithm, so surfaces, containers and controls all follow it.
   /// `surfaceTint` is cleared because elevation reads through the container
   /// roles, not through a tint overlay.
+  ///
+  /// The expressive style pins its primary roles (`primary`, `onPrimary`,
+  /// `primaryContainer`, `onPrimaryContainer`, `inversePrimary`) to the
+  /// tonal-spot scheme for the same seed. `DynamicSchemeVariant.expressive`
+  /// rotates the primary hue away from the seed (teal became brown, coral
+  /// blue), so the filled primary action no longer matched the chosen accent
+  /// (pass-1 finding 5). Every other expressive role is left as generated.
   static ColorScheme schemeFor(
     Brightness brightness,
     LockoutAccent accent,
     LockoutSchemeStyle style,
   ) {
-    return ColorScheme.fromSeed(
+    final scheme = ColorScheme.fromSeed(
       seedColor: accent.accent,
       brightness: brightness,
       dynamicSchemeVariant: style.variant,
     ).copyWith(surfaceTint: Colors.transparent);
+    if (style != LockoutSchemeStyle.expressive) return scheme;
+    final tonal = ColorScheme.fromSeed(
+      seedColor: accent.accent,
+      brightness: brightness,
+      dynamicSchemeVariant: DynamicSchemeVariant.tonalSpot,
+    );
+    return scheme.copyWith(
+      primary: tonal.primary,
+      onPrimary: tonal.onPrimary,
+      primaryContainer: tonal.primaryContainer,
+      onPrimaryContainer: tonal.onPrimaryContainer,
+      inversePrimary: tonal.inversePrimary,
+    );
   }
 
   /// The roles Material 3 has none for.
