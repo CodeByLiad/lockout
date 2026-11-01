@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lockout/services/database_service.dart';
 import 'package:lockout/theme/accents.dart';
+import 'package:lockout/theme/lockout_shapes.dart';
 import 'package:lockout/theme/scheme_style.dart';
 import 'package:lockout/theme/theme_controller.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -220,6 +221,22 @@ void main() {
       final decoration = container.decoration! as ShapeDecoration;
       expect(decoration.color, accent.accent, reason: accent.key);
     }
+
+    semantics.dispose();
+  });
+
+  testWidgets('a swatch is a six-cookie in its own accent, ringed when chosen',
+      (tester) async {
+    final semantics = await pumpPicker(tester);
+    final container = tester.widget<AnimatedContainer>(find.descendant(
+      of: find.bySemanticsLabel(LockoutAccent.lime.name),
+      matching: find.byType(AnimatedContainer),
+    ));
+    final d = container.decoration! as ShapeDecoration;
+    final border = d.shape as LockoutShapeBorder;
+    expect(border.shape, LockoutShape.training);
+    expect(d.color, LockoutAccent.lime.accent);
+    expect(border.side.width, 2);
 
     semantics.dispose();
   });

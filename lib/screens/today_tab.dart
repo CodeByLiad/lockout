@@ -2,10 +2,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'progress_tab.dart' show ProgressSegment;
-import '../theme/cookie_border.dart';
+import '../theme/lockout_shapes.dart';
 import '../theme/lockout_motion.dart';
 import '../theme/lockout_semantics.dart';
-import '../theme/lockout_shapes.dart';
 import '../theme/lockout_theme.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
@@ -740,11 +739,12 @@ class TodayTabState extends State<TodayTab> {
               value: isRest ? null : '$setCount',
               unit: isRest ? null : (setCount == 1 ? 'set' : 'sets'),
               // The one subject-scale element on this screen, and the only
-              // place a lobed shape belongs: the lobe count is the register,
-              // 4 for rest and 6 for training.
+              // place a cookie shape belongs: the D5 register, rest for a
+              // rest day and training otherwise.
               marker: DecoratedBox(
                 decoration: ShapeDecoration(
-                  shape: isRest ? CookieBorder.rest : CookieBorder.training,
+                  shape: LockoutShapeBorder(
+                      isRest ? LockoutShape.rest : LockoutShape.training),
                   color: semantics.categoryAt(isRest ? 7 : 0),
                 ),
                 child: const SizedBox(width: 56, height: 56),
@@ -1099,7 +1099,7 @@ class TodayTabState extends State<TodayTab> {
   }
 
   /// The header leads with one big number — the sets still to go — beside a
-  /// lobed register marker, then a Duration / Volume row, a Finish action,
+  /// cookie-shaped register marker, then a Duration / Volume row, a Finish action,
   /// and the set-completion bar. The sets figure is deliberately not
   /// repeated in the stat row: one big number per screen, stated once —
   /// which is also why the bar counts sets rather than exercises and is left
@@ -1125,18 +1125,18 @@ class TodayTabState extends State<TodayTab> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              // The lobed marker reads as register: 6 lobes while a session
+              // The cookie marker reads as register: the training cookie while a session
               // is running, 4 when the day is rest. It is a subject-scale
-              // element, which is the only place a lobed shape is allowed.
+              // element, which is the only place a cookie shape is allowed (D5 register).
               Container(
                 width: 44,
                 height: 44,
                 alignment: Alignment.center,
                 decoration: ShapeDecoration(
                   color: theme.colorScheme.primaryContainer,
-                  shape: _sessionTotalSets > 0
-                      ? CookieBorder.training
-                      : CookieBorder.rest,
+                  shape: LockoutShapeBorder(_sessionTotalSets > 0
+                      ? LockoutShape.training
+                      : LockoutShape.rest),
                 ),
                 child: Icon(
                   _sessionTotalSets > 0

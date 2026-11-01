@@ -7,9 +7,8 @@ import 'package:lockout/models/models.dart';
 import 'package:lockout/screens/today_tab.dart';
 import 'package:lockout/services/database_service.dart';
 import 'package:lockout/services/schedule_service.dart';
-import 'package:lockout/theme/cookie_border.dart';
-import 'package:lockout/theme/lockout_motion.dart';
 import 'package:lockout/theme/lockout_shapes.dart';
+import 'package:lockout/theme/lockout_motion.dart';
 import 'package:lockout/theme/lockout_theme.dart';
 import 'package:lockout/widgets/house/nv_button.dart';
 import 'package:lockout/widgets/house/nv_cards.dart';
@@ -1050,13 +1049,15 @@ void main() {
           .map((c) => c.decoration)
           .whereType<ShapeDecoration>()
           .map((d) => d.shape)
-          .whereType<CookieBorder>()
+          .whereType<LockoutShapeBorder>()
           .toList();
 
       expect(lobed, isNotEmpty,
-          reason: 'the session marker must carry a CookieBorder');
-      expect(lobed.map((b) => b.lobes), everyElement(anyOf(4, 6)),
-          reason: '4 lobes is rest, 6 is training; the marker is one of them');
+          reason: 'the session marker must carry a LockoutShapeBorder');
+      expect(lobed.map((b) => b.shape.isCookie), everyElement(isTrue));
+      expect(lobed.map((b) => b.shape),
+          everyElement(anyOf(LockoutShape.rest, LockoutShape.training)),
+          reason: 'the marker is the rest or the training register');
     });
 
     test('every quick action has its own shape, none a cookie or the circle',

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lockout/theme/accents.dart';
-import 'package:lockout/theme/cookie_border.dart';
+import 'package:lockout/theme/lockout_shapes.dart';
 import 'package:lockout/theme/lockout_semantics.dart';
 import 'package:lockout/theme/lockout_theme.dart';
 import 'package:lockout/widgets/house/nv_hero_card.dart';
@@ -126,7 +126,7 @@ void main() {
       _host(
         marker: const DecoratedBox(
           decoration: ShapeDecoration(
-            shape: CookieBorder.training,
+            shape: LockoutShapeBorder(LockoutShape.training),
             color: Color(0xFF123456),
           ),
           child: SizedBox(width: 56, height: 56),
@@ -144,7 +144,7 @@ void main() {
           .first,
     );
     expect((decorated.decoration as ShapeDecoration).shape,
-        CookieBorder.training);
+        const LockoutShapeBorder(LockoutShape.training));
   });
 
   testWidgets('actions render below the number', (tester) async {

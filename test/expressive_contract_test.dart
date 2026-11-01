@@ -24,7 +24,6 @@ final String _house =
 const List<String> _branchOneFiles = [
   'lib/main.dart',
   'lib/theme/accents.dart',
-  'lib/theme/cookie_border.dart',
   'lib/theme/lockout_motion.dart',
   'lib/theme/lockout_semantics.dart',
   'lib/theme/lockout_theme.dart',
@@ -306,6 +305,25 @@ void main() {
   });
 
   group('shape', () {
+    test('CookieBorder is gone, and no rebuilt screen names it', () {
+      expect(File('lib/theme/cookie_border.dart').existsSync(), isFalse);
+      for (final path in _rebuiltScreens) {
+        final source = _withoutComments(File(path).readAsStringSync());
+        expect(source.contains('CookieBorder'), isFalse,
+            reason: '$path still draws a CookieBorder; use '
+                'LockoutShapeBorder with a D5 register');
+      }
+    });
+
+    test('a cookie shape appears only as a register', () {
+      for (final path in _rebuiltScreens) {
+        final source = _withoutComments(File(path).readAsStringSync());
+        expect(RegExp(r'LockoutShape\.cookie\d+').hasMatch(source), isFalse,
+            reason: '$path names a raw cookie; use LockoutShape.rest, '
+                '.training, .streak or .achievement');
+      }
+    });
+
     test('the hero card is 36 on three corners and 12 bottom-left', () {
       final radius = LockoutTheme.heroCardShape.borderRadius as BorderRadius;
       expect(radius.topLeft.x, 36);

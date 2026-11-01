@@ -7,7 +7,7 @@ import '../services/numeric_guard.dart';
 import '../services/nutrition_planner.dart';
 import '../services/units.dart';
 import '../theme/accents.dart';
-import '../theme/cookie_border.dart';
+import '../theme/lockout_shapes.dart';
 import '../theme/lockout_motion.dart';
 import '../theme/lockout_theme.dart';
 import '../theme/scheme_style.dart';
@@ -881,7 +881,7 @@ class SettingsBodyState extends State<SettingsBody> {
           alignment: Alignment.center,
           decoration: ShapeDecoration(
             color: colors.secondaryContainer,
-            shape: const CookieBorder(lobes: 12, amplitude: 0.04),
+            shape: const LockoutShapeBorder(LockoutShape.achievement),
           ),
           child: Icon(
             Icons.fitness_center,
@@ -1400,7 +1400,7 @@ class SettingsBodyState extends State<SettingsBody> {
 /// One accent choice.
 ///
 /// The swatch is the one place in the app where the shape language is itself
-/// the content, so it wears a lobed outline rather than a rounded rectangle,
+/// the content, so it wears a cookie outline rather than a rounded rectangle,
 /// and the outline is what changes when it is chosen.
 ///
 /// The `Semantics` wrapper is what makes the swatch addressable at all: it
@@ -1439,10 +1439,7 @@ class _AccentSwatch extends StatelessWidget {
         // The ripple takes the swatch's own outline. A `CircleBorder` at
         // the 48dp target's radius splashed well outside the 34dp disc it
         // belonged to, which read as the wrong swatch lighting up.
-        customBorder: const CookieBorder(
-          lobes: 6,
-          amplitude: 0.07,
-        ),
+        customBorder: const LockoutShapeBorder(LockoutShape.training),
         child: SizedBox(
           width: LockoutTheme.minTouchTarget,
           height: LockoutTheme.minTouchTarget,
@@ -1454,19 +1451,11 @@ class _AccentSwatch extends StatelessWidget {
               height: selected ? _selectedDiameter : _restDiameter,
               decoration: ShapeDecoration(
                 color: accent.accent,
-                // The lobe count is held fixed across both states on
-                // purpose: `CookieBorder` refuses to interpolate between two
-                // counts, so only the amplitude and the outline may animate.
-                shape: CookieBorder(
-                  lobes: CookieBorder.training.lobes,
-                  // Both states carry a visible lobe. Halving the rest
-                  // amplitude put peak-to-trough at about 1.1px on a 34dp
-                  // disc, so the swatch read as a plain circle until it was
-                  // chosen — and the shape language is meant to be the
-                  // content here, not the reward for tapping.
-                  amplitude: selected
-                      ? CookieBorder.training.amplitude * 1.4
-                      : CookieBorder.training.amplitude,
+                // The package cookie has a fixed outline, so the rest and
+                // chosen states differ by diameter (34 to 44) and the ring,
+                // not by lobe amplitude. Both states are the same six-cookie.
+                shape: LockoutShapeBorder(
+                  LockoutShape.training,
                   side: BorderSide(
                     color: selected ? colors.onSurface : Colors.transparent,
                     width: 2,

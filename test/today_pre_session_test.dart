@@ -5,7 +5,7 @@ import 'package:lockout/models/models.dart';
 import 'package:lockout/screens/today_tab.dart';
 import 'package:lockout/services/database_service.dart';
 import 'package:lockout/services/schedule_service.dart';
-import 'package:lockout/theme/cookie_border.dart';
+import 'package:lockout/theme/lockout_shapes.dart';
 import 'package:lockout/theme/lockout_semantics.dart';
 import 'package:lockout/widgets/house/nv_cards.dart';
 import 'package:lockout/widgets/house/nv_empty_state.dart';
@@ -111,7 +111,7 @@ void main() {
             .first,
       );
       expect((decorated.decoration as ShapeDecoration).shape,
-          CookieBorder.training);
+          const LockoutShapeBorder(LockoutShape.training));
     });
 
     testWidgets("the day's exercises are one grouped list", (tester) async {
@@ -159,7 +159,8 @@ void main() {
             .first,
       );
       expect(
-          (decorated.decoration as ShapeDecoration).shape, CookieBorder.rest);
+          (decorated.decoration as ShapeDecoration).shape,
+          const LockoutShapeBorder(LockoutShape.rest));
     });
   });
 
