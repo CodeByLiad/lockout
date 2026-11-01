@@ -75,11 +75,11 @@ class _NvNavigationBarState extends State<NvNavigationBar> {
               final slot = constraints.maxWidth / count;
               return Stack(
                 children: [
-                  AnimatedPositioned(
+                  AnimatedPositionedDirectional(
                     duration: slide.durationFor(context),
                     curve: slide.curve,
                     top: NvNavigationBar._top,
-                    left: widget.selectedIndex * slot + (slot - full) / 2,
+                    start: widget.selectedIndex * slot + (slot - full) / 2,
                     width: full,
                     height: NvNavigationBar.indicatorSize.height,
                     child: Center(
@@ -156,16 +156,19 @@ class _NvNavigationBarState extends State<NvNavigationBar> {
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  d.label,
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: selected
-                        ? colors.onSurface
-                        : colors.onSurfaceVariant,
-                    fontWeight: selected ? FontWeight.w700 : null,
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    d.label,
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: selected
+                          ? colors.onSurface
+                          : colors.onSurfaceVariant,
+                      fontWeight: selected ? FontWeight.w700 : null,
+                    ),
+                    maxLines: 1,
+                    softWrap: false,
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),

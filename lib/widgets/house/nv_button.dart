@@ -9,6 +9,9 @@ import '../morphing_surface.dart';
 /// One filled or accent button per screen; the rest carry secondary and
 /// low-emphasis actions. Variants arrive as a screen consumes them — a
 /// variant nothing presses is not built.
+///
+/// [accent] is only for use on `heroFill`: it paints `onHeroFill` as its
+/// background, which contrasts with the hero fill and with nothing else.
 enum NvButtonVariant { accent, tonal, filled, outlined, text, danger }
 
 /// A button whose corner radius is a function of its press state.

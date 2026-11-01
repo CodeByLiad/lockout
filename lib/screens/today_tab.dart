@@ -744,7 +744,8 @@ class TodayTabState extends State<TodayTab> {
               // register; the colour is the hero's own "on" role, because the
               // marker is drawn on the hero fill (pass-1 finding 7: a fixed
               // ramp colour was muddy and unrelated to the accent). It tracks
-              // accent and brightness and always contrasts with the fill.
+              // the accent, and always contrasts with heroFill because it is
+              // the hero's own on-colour.
               marker: DecoratedBox(
                 decoration: ShapeDecoration(
                   shape: LockoutShapeBorder(
@@ -995,7 +996,7 @@ class TodayTabState extends State<TodayTab> {
         _quickActionTile(
           label: 'Log food',
           icon: Icons.restaurant,
-            onTap: () => go?.call('food'),
+          onTap: () => go?.call('food'),
         ),
       _quickActionTile(
         label: 'Weigh in',
@@ -1103,8 +1104,8 @@ class TodayTabState extends State<TodayTab> {
   }
 
   /// The header leads with one big number — the sets still to go — beside a
-  /// cookie-shaped register marker, then a Duration / Volume row, a Finish action,
-  /// and the set-completion bar. The sets figure is deliberately not
+  /// cookie-shaped register marker, then a Duration / Volume row, a Finish
+  /// action, and the set-completion bar. The sets figure is deliberately not
   /// repeated in the stat row: one big number per screen, stated once —
   /// which is also why the bar counts sets rather than exercises and is left
   /// unlabelled, instead of making a second, differently-denominated
@@ -1129,9 +1130,10 @@ class TodayTabState extends State<TodayTab> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              // The cookie marker reads as register: the training cookie while a session
-              // is running, 4 when the day is rest. It is a subject-scale
-              // element, which is the only place a cookie shape is allowed (D5 register).
+              // The cookie marker reads as register: the training cookie while
+              // a session is running, 4 when the day is rest. It is a
+              // subject-scale element, which is the only place a cookie shape
+              // is allowed (D5 register).
               Container(
                 width: 44,
                 height: 44,

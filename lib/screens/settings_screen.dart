@@ -868,7 +868,7 @@ class SettingsBodyState extends State<SettingsBody> {
   /// The house spec also asks for a name, an email and a Pro badge, but this
   /// app has no account and no Pro tier (deviation D2) — there is nothing
   /// for either to say, so inventing one would be fiction rather than data.
-  /// The 12-lobe register is section 5.3's "Profile avatar (large)".
+  /// The achievement register is section 5.3's "Profile avatar (large)".
   Widget _buildHeader(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;

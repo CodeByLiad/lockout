@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../../theme/lockout_motion.dart';
@@ -39,6 +40,8 @@ class _NvIconTileState extends State<NvIconTile>
     super.dispose();
   }
 
+  Offset? _downAt;
+
   void _animateTo(double target) {
     if (!mounted) return;
     final tier = LockoutMotion.springFast;
@@ -68,49 +71,71 @@ class _NvIconTileState extends State<NvIconTile>
       // a springFast morph and make the response feel late.
       child: Listener(
         behavior: HitTestBehavior.opaque,
-        onPointerDown: (_) => _animateTo(1),
-        onPointerUp: (_) => _animateTo(0),
-        onPointerCancel: (_) => _animateTo(0),
+        onPointerDown: (e) {
+          _downAt = e.position;
+          _animateTo(1);
+        },
+        onPointerMove: (e) {
+          // A drag inside a scroll view is won by the scroll recognizer, and
+          // the Listener sees no cancel until the finger lifts.
+          final down = _downAt;
+          if (down != null && (e.position - down).distance > kTouchSlop) {
+            _downAt = null;
+            _animateTo(0);
+          }
+        },
+        onPointerUp: (_) {
+          _downAt = null;
+          _animateTo(0);
+        },
+        onPointerCancel: (_) {
+          _downAt = null;
+          _animateTo(0);
+        },
         child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: LockoutTheme.spaceSm),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              AnimatedBuilder(
-                animation: _press,
-                builder: (context, child) => DecoratedBox(
-                  decoration: ShapeDecoration(
-                    color: colors.secondaryContainer,
-                    shape: LockoutShapeBorder(
-                      widget.shape,
-                      morphTo: LockoutShape.circle,
-                      progress: _press.value,
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onTap,
+          onTapCancel: () => _animateTo(0),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: LockoutTheme.spaceSm),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AnimatedBuilder(
+                  animation: _press,
+                  builder: (context, child) => DecoratedBox(
+                    decoration: ShapeDecoration(
+                      color: colors.secondaryContainer,
+                      shape: LockoutShapeBorder(
+                        widget.shape,
+                        morphTo: LockoutShape.circle,
+                        progress: _press.value,
+                      ),
+                    ),
+                    child: child,
+                  ),
+                  child: SizedBox(
+                    width: 48,
+                    height: 48,
+                    child: Icon(
+                      widget.icon,
+                      size: 22,
+                      color: colors.onSecondaryContainer,
                     ),
                   ),
-                  child: child,
                 ),
-                child: SizedBox(
-                  width: 48,
-                  height: 48,
-                  child: Icon(widget.icon,
-                      size: 22, color: colors.onSecondaryContainer),
+                const SizedBox(height: LockoutTheme.spaceSm),
+                Text(
+                  widget.label,
+                  style: theme.textTheme.labelSmall,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-              const SizedBox(height: LockoutTheme.spaceSm),
-              Text(
-                widget.label,
-                style: theme.textTheme.labelSmall,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-      ),
       ),
     );
   }

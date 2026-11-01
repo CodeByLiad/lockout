@@ -78,12 +78,17 @@ class NvSegmentedButton<T> extends StatelessWidget {
                         : colors.surfaceContainer,
                     borderRadius: _radiusFor(i),
                   ),
-                  child: Text(
-                    segments[i].label,
-                    style: theme.textTheme.labelLarge?.copyWith(
-                      color: segments[i].value == selected
-                          ? colors.onSecondaryContainer
-                          : colors.onSurfaceVariant,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      segments[i].label,
+                      maxLines: 1,
+                      softWrap: false,
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: segments[i].value == selected
+                            ? colors.onSecondaryContainer
+                            : colors.onSurfaceVariant,
+                      ),
                     ),
                   ),
                 ),

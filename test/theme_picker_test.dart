@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lockout/services/database_service.dart';
 import 'package:lockout/theme/accents.dart';
@@ -341,6 +342,29 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.text('Could not apply the theme.'), findsOneWidget);
 
+    semantics.dispose();
+  });
+
+  testWidgets('at 360dp and 1.5x text the Expressive label stays on one line',
+      (tester) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final semantics = await pumpPicker(tester);
+    final label = find.text('Expressive');
+    await tester.scrollUntilVisible(label, 200,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    final para = tester.renderObject<RenderParagraph>(label);
+    expect(para.didExceedMaxLines, isFalse);
+    final fitted = find.ancestor(of: label, matching: find.byType(FittedBox));
+    expect(fitted, findsOneWidget);
+    // One line: the unscaled layout height is a single labelLarge line.
+    expect(para.size.height, lessThan(para.text.style!.fontSize! * 1.5 * 1.8));
+    expect(tester.getSize(fitted).width, greaterThan(0));
     semantics.dispose();
   });
 }

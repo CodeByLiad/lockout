@@ -268,8 +268,8 @@ class ThemeController extends ChangeNotifier {
   /// Reads every format.
   ///
   /// A two-part value predates the style axis and gains the fallback style;
-  /// an unknown third field does the same. A stored value with no separator is one of the retired scheme keys (or
-  /// junk). Each maps to the brightness it was authored at and the accent
+  /// an unknown third field does the same. A stored value with no separator
+  /// is one of the retired scheme keys (or junk). Each maps to the brightness it was authored at and the accent
   /// closest to its hue; `dynamic` maps to the fresh-install default,
   /// because Material You no longer exists and there is no hue to preserve.
   /// Junk falls back rather than throwing, and the caller rewrites the

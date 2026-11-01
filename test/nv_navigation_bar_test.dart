@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lockout/widgets/house/nv_navigation_bar.dart';
 
@@ -147,5 +148,53 @@ void main() {
     await tester.pumpWidget(_host(0, (i) => tapped = i));
     await tester.tap(find.text('Profile'));
     expect(tapped, 1);
+  });
+
+  testWidgets('at 360dp and 1.5x text every label scales down to fit', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    const labels = ['Today', 'Workout', 'Progress', 'Food', 'Profile'];
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: lockoutTestTheme(lightAppearance),
+        home: Scaffold(
+          bottomNavigationBar: NvNavigationBar(
+            selectedIndex: 0,
+            onDestinationSelected: (_) {},
+            destinations: [
+              for (final l in labels)
+                NvNavigationDestination(
+                  icon: Icons.circle_outlined,
+                  selectedIcon: Icons.circle,
+                  label: l,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    for (final l in labels) {
+      final text = find.descendant(
+        of: find.byType(NvNavigationBar),
+        matching: find.text(l),
+      );
+      expect(text, findsOneWidget);
+      final para = tester.renderObject<RenderParagraph>(text);
+      expect(para.didExceedMaxLines, isFalse, reason: l);
+      final fitted = find.ancestor(of: text, matching: find.byType(FittedBox));
+      expect(fitted, findsOneWidget, reason: '$l scales instead of ellipsing');
+      expect(
+        tester.getSize(fitted).width,
+        lessThanOrEqualTo(360 / 5),
+        reason: l,
+      );
+    }
   });
 }

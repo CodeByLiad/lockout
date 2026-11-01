@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lockout/theme/lockout_shapes.dart';
@@ -7,32 +8,37 @@ import 'package:lockout/widgets/house/nv_icon_tile.dart';
 import 'test_helpers.dart';
 
 ShapeDecoration _decoration(WidgetTester tester) => tester
-    .widgetList<DecoratedBox>(find.descendant(
-        of: find.byType(NvIconTile), matching: find.byType(DecoratedBox)))
+    .widgetList<DecoratedBox>(
+      find.descendant(
+        of: find.byType(NvIconTile),
+        matching: find.byType(DecoratedBox),
+      ),
+    )
     .map((d) => d.decoration)
     .whereType<ShapeDecoration>()
     .single;
 
 Widget _host({bool reduce = false, VoidCallback? onTap}) => MaterialApp(
-      theme: lockoutTestTheme(lightAppearance),
-      home: MediaQuery(
-        data: MediaQueryData(disableAnimations: reduce),
-        child: Scaffold(
-          body: Center(
-            child: NvIconTile(
-              icon: Icons.add,
-              shape: LockoutShape.gem,
-              label: 'Custom',
-              onTap: onTap ?? () {},
-            ),
-          ),
+  theme: lockoutTestTheme(lightAppearance),
+  home: MediaQuery(
+    data: MediaQueryData(disableAnimations: reduce),
+    child: Scaffold(
+      body: Center(
+        child: NvIconTile(
+          icon: Icons.add,
+          shape: LockoutShape.gem,
+          label: 'Custom',
+          onTap: onTap ?? () {},
         ),
       ),
-    );
+    ),
+  ),
+);
 
 void main() {
-  testWidgets('at rest the tile wears its own shape on secondaryContainer',
-      (tester) async {
+  testWidgets('at rest the tile wears its own shape on secondaryContainer', (
+    tester,
+  ) async {
     await tester.pumpWidget(_host());
     final d = _decoration(tester);
     final border = d.shape as LockoutShapeBorder;
@@ -40,21 +46,26 @@ void main() {
     expect(border.morphTo, LockoutShape.circle);
     expect(border.progress, 0);
     expect(d.color, lightAppearance.colors.secondaryContainer);
-    expect(tester.widget<Icon>(find.byIcon(Icons.add)).color,
-        lightAppearance.colors.onSecondaryContainer);
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.add)).color,
+      lightAppearance.colors.onSecondaryContainer,
+    );
   });
 
   testWidgets('pressed, it morphs to a circle on springFast', (tester) async {
     await tester.pumpWidget(_host());
-    final gesture =
-        await tester.startGesture(tester.getCenter(find.byType(NvIconTile)));
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byType(NvIconTile)),
+    );
     await tester.pump(); // the ticker's first frame is elapsed zero
     await tester.pump(const Duration(milliseconds: 125));
     final mid = (_decoration(tester).shape as LockoutShapeBorder).progress;
     expect(mid, greaterThan(0));
     await tester.pump(const Duration(milliseconds: 200));
-    expect((_decoration(tester).shape as LockoutShapeBorder).progress,
-        closeTo(1, 0.05));
+    expect(
+      (_decoration(tester).shape as LockoutShapeBorder).progress,
+      closeTo(1, 0.05),
+    );
     await gesture.up();
     await tester.pumpAndSettle();
     expect((_decoration(tester).shape as LockoutShapeBorder).progress, 0);
@@ -62,18 +73,62 @@ void main() {
 
   testWidgets('under reduced motion the morph is instant', (tester) async {
     await tester.pumpWidget(_host(reduce: true));
-    final gesture =
-        await tester.startGesture(tester.getCenter(find.byType(NvIconTile)));
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byType(NvIconTile)),
+    );
     await tester.pump();
     expect((_decoration(tester).shape as LockoutShapeBorder).progress, 1);
+    await gesture.up();
+    await tester.pump();
+    expect(
+      (_decoration(tester).shape as LockoutShapeBorder).progress,
+      0,
+      reason: 'reduced motion: release is instant, no animation frames',
+    );
+  });
+
+  testWidgets('the label sits under the tile in sentence case', (tester) async {
+    await tester.pumpWidget(_host());
+    await tester.pumpAndSettle();
+    expect(find.text('Custom'), findsOneWidget);
+    expect(find.text('Custom').evaluate().isNotEmpty, isTrue);
+    expect(
+      tester.getTopLeft(find.text('Custom')).dy,
+      greaterThan(tester.getTopLeft(find.byIcon(Icons.add)).dy),
+    );
+  });
+
+  testWidgets('a drag past touch slop releases the press morph before lift', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_host());
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byType(NvIconTile)),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(
+      (_decoration(tester).shape as LockoutShapeBorder).progress,
+      closeTo(1, 0.05),
+    );
+    await gesture.moveBy(const Offset(0, -(kTouchSlop + 10)));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(
+      (_decoration(tester).shape as LockoutShapeBorder).progress,
+      closeTo(0, 0.05),
+      reason: 'the scroll recognizer wins; the tile must not stay circular',
+    );
     await gesture.up();
   });
 
   testWidgets('the whole tile clears the 48dp touch target', (tester) async {
     await tester.pumpWidget(_host());
     await tester.pumpAndSettle();
-    expect(tester.getSize(find.byType(NvIconTile)).height,
-        greaterThanOrEqualTo(48));
+    expect(
+      tester.getSize(find.byType(NvIconTile)).height,
+      greaterThanOrEqualTo(48),
+    );
   });
 
   testWidgets('it reports the tap', (tester) async {

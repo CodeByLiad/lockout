@@ -130,6 +130,10 @@ void main() {
       expect(ThemeController.instance.brightnessChoice,
           LockoutBrightnessChoice.system);
       expect(ThemeController.instance.accent, LockoutAccent.lime);
+      expect(ThemeController.instance.style, LockoutSchemeStyle.tonal);
+      final stored = await DatabaseService.instance
+          .getSetting('theme_key', defaultValue: '');
+      expect(stored, 'system|lime|tonal');
     });
 
     test('a migrated value is written back in the new format', () async {
