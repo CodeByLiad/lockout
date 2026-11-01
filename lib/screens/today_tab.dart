@@ -5,6 +5,7 @@ import 'progress_tab.dart' show ProgressSegment;
 import '../theme/cookie_border.dart';
 import '../theme/lockout_motion.dart';
 import '../theme/lockout_semantics.dart';
+import '../theme/lockout_shapes.dart';
 import '../theme/lockout_theme.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
@@ -112,6 +113,23 @@ class _TodaySummary {
     this.weightSeries = const [],
   });
 }
+
+/// Each quick action's fixed shape (deviation D13), assigned once here so
+/// the same action wears the same shape on every screen.
+///
+/// No cookie (those are D5's registers, for subject-scale elements only) and
+/// no circle (every tile morphs to it when pressed).
+@visibleForTesting
+const Map<String, LockoutShape> quickActionShapes = {
+  'Log food': LockoutShape.bun,
+  'Weigh in': LockoutShape.pentagon,
+  'Workout': LockoutShape.gem,
+  'History': LockoutShape.arch,
+  'Custom': LockoutShape.clover4Leaf,
+  'Streak': LockoutShape.sunny,
+  'Plan': LockoutShape.diamond,
+  'Exercises': LockoutShape.slanted,
+};
 
 class TodayTab extends StatefulWidget {
   /// Switches tabs by id — 'routines', 'food', 'body', 'log'. Supplied by
@@ -649,10 +667,14 @@ class TodayTabState extends State<TodayTab> {
   Widget _quickActionTile({
     required String label,
     required IconData icon,
-    required Color color,
     required VoidCallback onTap,
   }) {
-    return NvIconTile(icon: icon, color: color, label: label, onTap: onTap);
+    return NvIconTile(
+      icon: icon,
+      shape: quickActionShapes[label]!,
+      label: label,
+      onTap: onTap,
+    );
   }
 
   Widget _buildPreSession(BuildContext context) {
@@ -770,11 +792,20 @@ class TodayTabState extends State<TodayTab> {
             padding: const EdgeInsets.symmetric(
               horizontal: LockoutTheme.cardPadding,
             ),
-            child: GridView.count(
-              crossAxisCount: 4,
+            child: GridView(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              childAspectRatio: 0.85,
+              // A fixed extent that grows with the text scale: the 48dp tile,
+              // its padding and gap, and a two-line label. An aspect ratio
+              // left the label short of room once the tile grew to 48.
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 4,
+                mainAxisExtent: 16 +
+                    48 +
+                    LockoutTheme.spaceSm +
+                    MediaQuery.textScalerOf(context).scale(16) * 2 +
+                    4,
+              ),
               children: _quickActions(context),
             ),
           ),
@@ -948,27 +979,9 @@ class TodayTabState extends State<TodayTab> {
 
   List<Widget> _quickActions(BuildContext context) {
     final go = widget.onNavigate;
-    // One fill for all eight, not `semantics.categoryAt(0..7)`.
-    //
-    // `categoryRamp` exists to keep *categories* apart, and there are no
-    // categories here: index 0 was "Log food" only because it was first.
-    // The ramp is also double-booked — the same eight values mean "routine
-    // day category" on the Workout tab, so "Log food" and some Tuesday
-    // shared a colour asserting a relationship neither has, in eight fully
-    // saturated tones under a restrained system (QA ruling 2). The icon and
-    // the label already identify the action.
-    //
-    // `inverseSurface` rather than a container tone: it is the one neutral
-    // that stands clear of the surface it sits on in both brightnesses, so
-    // the tile reads as a tile — a `surfaceContainerHigh` fill all but
-    // disappears into the card behind it. Measured ~17.2:1 light and
-    // ~15.6:1 dark against the glyph, both roles accent-independent, so
-    // those two numbers cover all ten combinations. `NvIconTile` derives
-    // that glyph from whatever fill it is handed, so this choice is about
-    // the fill against the *background*, not about the glyph. It also
-    // leaves the accent for the two or three elements per screen
-    // `accents.dart` reserves it for.
-    final tileColor = Theme.of(context).colorScheme.inverseSurface;
+    // Tiles fill with `secondaryContainer` inside `NvIconTile` so they read as
+    // tinted by the generated scheme (spec 5.5); the shape now carries the
+    // identity the colour no longer has to.
 
     return [
       // Hidden entirely when the Food tab is off, rather than left as a tile
@@ -978,49 +991,41 @@ class TodayTabState extends State<TodayTab> {
         _quickActionTile(
           label: 'Log food',
           icon: Icons.restaurant,
-          color: tileColor,
-          onTap: () => go?.call('food'),
+            onTap: () => go?.call('food'),
         ),
       _quickActionTile(
         label: 'Weigh in',
         icon: Icons.monitor_weight,
-        color: tileColor,
         onTap: () => go?.call('progress', segment: ProgressSegment.weight),
       ),
       _quickActionTile(
         label: 'Workout',
         icon: Icons.fitness_center,
-        color: tileColor,
         onTap: () => go?.call('workout'),
       ),
       _quickActionTile(
         label: 'History',
         icon: Icons.calendar_month,
-        color: tileColor,
         onTap: () => go?.call('progress', segment: ProgressSegment.history),
       ),
       _quickActionTile(
         label: 'Custom',
         icon: Icons.add,
-        color: tileColor,
         onTap: _startCustomSession,
       ),
       _quickActionTile(
         label: 'Streak',
         icon: Icons.local_fire_department,
-        color: tileColor,
         onTap: () => go?.call('progress', segment: ProgressSegment.history),
       ),
       _quickActionTile(
         label: 'Plan',
         icon: Icons.insights,
-        color: tileColor,
         onTap: () => go?.call('progress', segment: ProgressSegment.weight),
       ),
       _quickActionTile(
         label: 'Exercises',
         icon: Icons.list,
-        color: tileColor,
         onTap: () => go?.call('workout'),
       ),
     ];

@@ -9,6 +9,7 @@ import 'package:lockout/services/database_service.dart';
 import 'package:lockout/services/schedule_service.dart';
 import 'package:lockout/theme/cookie_border.dart';
 import 'package:lockout/theme/lockout_motion.dart';
+import 'package:lockout/theme/lockout_shapes.dart';
 import 'package:lockout/theme/lockout_theme.dart';
 import 'package:lockout/widgets/house/nv_button.dart';
 import 'package:lockout/widgets/house/nv_cards.dart';
@@ -1058,37 +1059,25 @@ void main() {
           reason: '4 lobes is rest, 6 is training; the marker is one of them');
     });
 
-    testWidgets('the action-grid icon containers do not rotate lobe count',
+    test('every quick action has its own shape, none a cookie or the circle',
+        () {
+      final shapes = quickActionShapes.values.toList();
+      expect(shapes.toSet().length, shapes.length);
+      expect(
+          shapes.any((s) => s.isCookie || s == LockoutShape.circle), isFalse);
+    });
+
+    testWidgets('each tile wears the shape its table row assigns',
         (tester) async {
       await tester.pumpWidget(hostedTodayTab());
       await settle(tester);
-
-      final tileShapes = tester
-          .widgetList<Container>(find.descendant(
-            of: find.byType(NvIconTile),
-            matching: find.byType(Container),
-          ))
-          .map((c) => c.decoration)
-          .whereType<ShapeDecoration>()
-          .map((d) => d.shape)
-          .whereType<CookieBorder>();
-
-      expect(tileShapes, isEmpty,
-          reason: 'repeated small icon containers take one consistent '
-              'squircle; colour already carries category');
-
-      // And it really is one squircle, not eight that happen to agree: every
-      // tile resolves the same corner radius.
-      final radii = tester
-          .widgetList<Container>(find.descendant(
-            of: find.byType(NvIconTile),
-            matching: find.byType(Container),
-          ))
-          .map((c) => c.decoration)
-          .whereType<BoxDecoration>()
-          .map((d) => (d.borderRadius! as BorderRadius).topLeft.x)
-          .toSet();
-      expect(radii, hasLength(1));
+      for (final MapEntry(key: label, value: shape)
+          in quickActionShapes.entries) {
+        final tile = tester.widget<NvIconTile>(find.ancestor(
+            of: find.text(label), matching: find.byType(NvIconTile)));
+        expect(tile.shape, shape, reason: label);
+      }
+      expect(find.byType(NvIconTile), findsNWidgets(8));
     });
   });
 }

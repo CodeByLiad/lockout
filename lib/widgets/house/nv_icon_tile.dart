@@ -1,27 +1,18 @@
 import 'package:flutter/material.dart';
 
-import '../../theme/lockout_semantics.dart';
+import '../../theme/lockout_motion.dart';
+import '../../theme/lockout_shapes.dart';
 import '../../theme/lockout_theme.dart';
 
-/// The 40dp icon tile from section 8's list spec, used for Today's action
-/// grid.
+/// The 48dp icon tile used for Today's action grid.
 ///
-/// One consistent squircle across every tile, 14dp. Lobe count deliberately
-/// does not rotate here: a tile is given one fill, and two signals on one
-/// axis read as noise.
-class NvIconTile extends StatelessWidget {
+/// Each tile carries its own fixed shape (deviation D13, superseding "one
+/// consistent squircle"), and morphs to a circle while pressed.
+class NvIconTile extends StatefulWidget {
   final IconData icon;
 
-  /// The tile's fill. Any colour: the glyph is derived from it, so the tile
-  /// stays legible on whatever it is handed.
-  ///
-  /// It was documented as a `LockoutSemantics.categoryRamp` entry, and the
-  /// glyph was pinned to `colorScheme.surface` on the strength of that —
-  /// legible only on a fill the scheme happens to pair with `surface`. The
-  /// one caller abandoned the ramp (Today's quick actions take a single
-  /// neutral), so the contract is now the weaker and true one: the fill is
-  /// the caller's, the foreground is this widget's problem.
-  final Color color;
+  /// The tile's resting shape.
+  final LockoutShape shape;
 
   final String label;
   final VoidCallback onTap;
@@ -29,49 +20,88 @@ class NvIconTile extends StatelessWidget {
   const NvIconTile({
     super.key,
     required this.icon,
-    required this.color,
+    required this.shape,
     required this.label,
     required this.onTap,
   });
 
   @override
+  State<NvIconTile> createState() => _NvIconTileState();
+}
+
+class _NvIconTileState extends State<NvIconTile>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _press = AnimationController(vsync: this);
+
+  @override
+  void dispose() {
+    _press.dispose();
+    super.dispose();
+  }
+
+  void _animateTo(double target) {
+    if (!mounted) return;
+    final tier = LockoutMotion.springFast;
+    final duration = tier.durationFor(context);
+    if (duration == Duration.zero) {
+      _press.value = target;
+      return;
+    }
+    _press.animateTo(target, duration: duration, curve: tier.curve);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colors = theme.colorScheme;
 
-    // `onTap` here as well as on the `InkWell`: `excludeSemantics` drops the
-    // InkWell's semantics node and its tap action with it, leaving a tile a
+    // `onTap` here as well as on the detector: `excludeSemantics` drops the
+    // detector's semantics node and its tap action with it, leaving a tile a
     // screen reader can read and cannot press.
     return Semantics(
       button: true,
-      label: label,
-      onTap: onTap,
+      label: widget.label,
+      onTap: widget.onTap,
       excludeSemantics: true,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(LockoutTheme.radiusField),
+      // The press morph rides a `Listener`, not `onTapDown`: a tap recognizer
+      // delays `onTapDown` by `kPressTimeout` (100ms), which would eat most of
+      // a springFast morph and make the response feel late.
+      child: Listener(
+        behavior: HitTestBehavior.opaque,
+        onPointerDown: (_) => _animateTo(1),
+        onPointerUp: (_) => _animateTo(0),
+        onPointerCancel: (_) => _animateTo(0),
+        child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: LockoutTheme.spaceSm),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 40,
-                height: 40,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: BorderRadius.circular(14),
+              AnimatedBuilder(
+                animation: _press,
+                builder: (context, child) => DecoratedBox(
+                  decoration: ShapeDecoration(
+                    color: colors.secondaryContainer,
+                    shape: LockoutShapeBorder(
+                      widget.shape,
+                      morphTo: LockoutShape.circle,
+                      progress: _press.value,
+                    ),
+                  ),
+                  child: child,
                 ),
-                // Derived from the fill, not read off the theme:
-                // `onCategoryColor` picks whichever of near-black and white
-                // has the higher contrast against it, which is >= 3:1 for
-                // any fill a caller can reasonably pass.
-                child: Icon(icon,
-                    size: 20, color: LockoutSemantics.onCategoryColor(color)),
+                child: SizedBox(
+                  width: 48,
+                  height: 48,
+                  child: Icon(widget.icon,
+                      size: 22, color: colors.onSecondaryContainer),
+                ),
               ),
               const SizedBox(height: LockoutTheme.spaceSm),
               Text(
-                label,
+                widget.label,
                 style: theme.textTheme.labelSmall,
                 textAlign: TextAlign.center,
                 maxLines: 2,
@@ -80,6 +110,7 @@ class NvIconTile extends StatelessWidget {
             ],
           ),
         ),
+      ),
       ),
     );
   }

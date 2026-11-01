@@ -228,43 +228,36 @@ void main() {
           reason: 'a tile that taps to a hidden tab would do nothing');
     });
 
-    // QA ruling 2. The tiles were painted `semantics.categoryAt(0)` through
-    // `categoryAt(7)` - grid position fed straight into an index. The ramp
-    // exists to keep *categories* apart, and there are no categories here:
-    // index 0 is "Log food" only because it is first. Worse, the same eight
-    // values mean "routine day category" on the Workout tab, so "Log food"
-    // and some Tuesday shared a colour asserting a relationship neither
-    // has. The icon and the label already identify the action.
+    // QA ruling 2, revised by D13: every tile takes one neutral fill from the
+    // scheme (secondaryContainer), never a ramp colour; shape carries identity.
+    Iterable<Color?> fills(WidgetTester tester) => tester
+        .widgetList<DecoratedBox>(find.descendant(
+            of: find.byType(NvIconTile), matching: find.byType(DecoratedBox)))
+        .map((d) => d.decoration)
+        .whereType<ShapeDecoration>()
+        .map((d) => d.color);
+
     testWidgets('every tile takes one neutral fill, never a ramp colour',
         (tester) async {
       await tester.pumpWidget(_hostedTodayTab());
       await settle(tester);
 
-      final tiles =
-          tester.widgetList<NvIconTile>(find.byType(NvIconTile)).toList();
-      expect(tiles, hasLength(8));
-
+      expect(find.byType(NvIconTile), findsNWidgets(8));
       final context = tester.element(find.byType(NvIconTile).first);
       final colors = Theme.of(context).colorScheme;
       final ramp = LockoutSemantics.of(context).categoryRamp;
+      final all = fills(tester).toList();
 
-      expect(tiles.map((t) => t.color).toSet(), {colors.inverseSurface},
-          reason: 'one fill for all eight, and the one neutral that stands '
-              'clear of the surface behind it in both brightnesses');
-      expect(tiles.where((t) => ramp.contains(t.color)), isEmpty,
-          reason: 'a quick action is not a day category; re-keying the ramp '
-              'on grid position is the defect this guards');
+      expect(all.toSet(), {colors.secondaryContainer});
+      expect(all.where(ramp.contains), isEmpty,
+          reason: 'a quick action is not a day category');
     });
 
     testWidgets('the tile fill is resolved from the scheme, not a literal',
         (tester) async {
-      Color fill() => tester.widget<NvIconTile>(
-            find.byType(NvIconTile).first,
-          ).color;
-
       await tester.pumpWidget(_hostedTodayTab());
       await settle(tester);
-      final dark = fill();
+      final dark = fills(tester).first;
 
       await tester.pumpWidget(MaterialApp(
         theme: lockoutTestTheme(lightAppearance),
@@ -272,13 +265,13 @@ void main() {
       ));
       await settle(tester);
 
-      expect(fill(), isNot(dark),
+      expect(fills(tester).first, isNot(dark),
           reason: 'a hardcoded colour would survive the brightness switch');
       expect(
-        fill(),
+        fills(tester).first,
         Theme.of(tester.element(find.byType(NvIconTile).first))
             .colorScheme
-            .inverseSurface,
+            .secondaryContainer,
       );
     });
   });
