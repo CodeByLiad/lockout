@@ -696,7 +696,24 @@ void main() {
   });
 
   group('dependencies', () {
-    test('no new package arrived, and dynamic_color left', () {
+    test('material_new_shapes is the one new package, behind one file', () {
+      final declarations = File('pubspec.yaml')
+          .readAsLinesSync()
+          .where((line) => !line.trimLeft().startsWith('#'))
+          .join('\n');
+      expect(declarations.contains('material_new_shapes:'), isTrue);
+      for (final file in _dartFilesIn('lib')) {
+        if (_posixPath(file.path).endsWith('lib/theme/lockout_shapes.dart')) {
+          continue;
+        }
+        final source = _withoutComments(file.readAsStringSync());
+        expect(source.contains('package:material_new_shapes'), isFalse,
+            reason: '${file.path} imports material_new_shapes directly; '
+                'go through lib/theme/lockout_shapes.dart (D14)');
+      }
+    });
+
+    test('dynamic_color and google_fonts stay gone', () {
       // Comment lines are stripped: both package names are named in the
       // comments that explain why they are absent.
       final declarations = File('pubspec.yaml')
