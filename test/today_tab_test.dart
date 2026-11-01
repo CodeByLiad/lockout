@@ -7,6 +7,8 @@ import 'package:lockout/models/models.dart';
 import 'package:lockout/screens/today_tab.dart';
 import 'package:lockout/services/database_service.dart';
 import 'package:lockout/services/schedule_service.dart';
+import 'package:lockout/theme/accents.dart';
+import 'package:lockout/theme/lockout_semantics.dart';
 import 'package:lockout/theme/lockout_shapes.dart';
 import 'package:lockout/theme/lockout_motion.dart';
 import 'package:lockout/theme/lockout_theme.dart';
@@ -1059,6 +1061,40 @@ void main() {
           everyElement(anyOf(LockoutShape.rest, LockoutShape.training)),
           reason: 'the marker is the rest or the training register');
     });
+
+    // Pass-1 finding 7: the marker sits on the hero fill, so it is drawn in
+    // the hero's own on-colour and follows accent and brightness.
+    for (final appearance in [
+      TestAppearance(Brightness.dark, LockoutAccent.lime),
+      TestAppearance(Brightness.light, LockoutAccent.violet),
+    ]) {
+      for (final training in [false, true]) {
+        testWidgets(
+            'the hero marker on a ${training ? 'training' : 'rest'} day is '
+            'onHeroFill (${appearance.accent.key}, ${appearance.brightness.name})',
+            (tester) async {
+          if (training) await seedActiveWeekdayRoutineForToday();
+          await tester.pumpWidget(MaterialApp(
+            theme: lockoutTestTheme(appearance),
+            home: TodayTab(),
+          ));
+          await settle(tester);
+
+          final marker = tester
+              .widgetList<DecoratedBox>(find.descendant(
+                of: find.byType(NvHeroCard),
+                matching: find.byType(DecoratedBox),
+              ))
+              .map((d) => d.decoration)
+              .whereType<ShapeDecoration>()
+              .singleWhere((d) => d.shape is LockoutShapeBorder);
+          final semantics = LockoutSemantics.of(
+              tester.element(find.byType(NvHeroCard)));
+
+          expect(marker.color, semantics.onHeroFill);
+        });
+      }
+    }
 
     test('every quick action has its own shape, none a cookie or the circle',
         () {

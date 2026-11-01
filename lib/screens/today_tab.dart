@@ -740,12 +740,16 @@ class TodayTabState extends State<TodayTab> {
               unit: isRest ? null : (setCount == 1 ? 'set' : 'sets'),
               // The one subject-scale element on this screen, and the only
               // place a cookie shape belongs: the D5 register, rest for a
-              // rest day and training otherwise.
+              // rest day and training otherwise. The lobe count carries the
+              // register; the colour is the hero's own "on" role, because the
+              // marker is drawn on the hero fill (pass-1 finding 7: a fixed
+              // ramp colour was muddy and unrelated to the accent). It tracks
+              // accent and brightness and always contrasts with the fill.
               marker: DecoratedBox(
                 decoration: ShapeDecoration(
                   shape: LockoutShapeBorder(
                       isRest ? LockoutShape.rest : LockoutShape.training),
-                  color: semantics.categoryAt(isRest ? 7 : 0),
+                  color: semantics.onHeroFill,
                 ),
                 child: const SizedBox(width: 56, height: 56),
               ),
