@@ -62,10 +62,10 @@ void showNvSnackbar({
       content: Text(
         message,
         style: theme.textTheme.bodyMedium?.copyWith(
-          color: theme.colorScheme.surface,
+          color: theme.colorScheme.onInverseSurface,
         ),
       ),
-      backgroundColor: theme.colorScheme.onSurface,
+      backgroundColor: theme.colorScheme.inverseSurface,
       behavior: SnackBarBehavior.floating,
       duration: const Duration(seconds: 3),
       shape: RoundedRectangleBorder(

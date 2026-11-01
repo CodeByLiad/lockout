@@ -763,4 +763,24 @@ void main() {
       }
     });
   });
+
+  group('generated-scheme readiness', () {
+    test('no rebuilt screen or catalog widget holds a colour literal', () {
+      final files = [
+        ..._rebuiltScreens.map(File.new),
+        ..._dartFilesIn('lib/widgets/house'),
+      ];
+      for (final file in files) {
+        final source = _withoutComments(file.readAsStringSync());
+        expect(RegExp(r'Color\(0x[0-9A-Fa-f]{8}\)').hasMatch(source), isFalse,
+            reason: '${file.path} holds a colour literal that cannot follow '
+                'the generated scheme');
+        expect(
+            source.contains('Colors.') &&
+                RegExp(r'Colors\.(?!transparent[^A-Za-z0-9_])\w+').hasMatch(source),
+            isFalse,
+            reason: '${file.path} reaches for a Colors.* constant');
+      }
+    });
+  });
 }

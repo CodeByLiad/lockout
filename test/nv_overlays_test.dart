@@ -102,7 +102,7 @@ void main() {
           reason: 'section 8 auto-dismisses a snackbar after three seconds');
     });
 
-    testWidgets('it paints onSurface with surface text', (tester) async {
+    testWidgets('it paints inverseSurface with onInverseSurface text', (tester) async {
       await tester.pumpWidget(
         _host(
           (context) => TextButton(
@@ -119,10 +119,10 @@ void main() {
       final colors =
           Theme.of(tester.element(find.text('Session saved'))).colorScheme;
       final bar = tester.widget<SnackBar>(find.byType(SnackBar));
-      expect(bar.backgroundColor, colors.onSurface);
+      expect(bar.backgroundColor, colors.inverseSurface);
       expect(
         tester.widget<Text>(find.text('Session saved')).style?.color,
-        colors.surface,
+        colors.onInverseSurface,
       );
     });
   });
