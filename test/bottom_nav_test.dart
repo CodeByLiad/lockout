@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lockout/theme/lockout_theme.dart';
 import 'package:lockout/widgets/bottom_nav.dart';
+import 'package:lockout/widgets/house/nv_navigation_bar.dart';
 
 import 'test_helpers.dart';
 
@@ -64,13 +65,12 @@ void main() {
     }
   });
 
-  testWidgets('renders a Material NavigationBar, not a hand-rolled row',
+  testWidgets('renders the Expressive NvNavigationBar',
       (tester) async {
     await tester.pumpWidget(_host());
     await tester.pump();
 
-    expect(find.byType(NavigationBar), findsOneWidget);
-    expect(find.byType(NavigationDestination), findsNWidgets(5));
+    expect(find.byType(NvNavigationBar), findsOneWidget);
     for (final label in const [
       'Home',
       'Workout',
@@ -86,21 +86,24 @@ void main() {
     await tester.pumpWidget(_host(foodTabEnabled: false));
     await tester.pump();
 
-    expect(find.byType(NavigationDestination), findsNWidgets(4));
+    expect(find.byType(NvNavigationBar), findsOneWidget);
+    for (final label in const ['Home', 'Workout', 'Progress', 'Profile']) {
+      expect(find.text(label), findsOneWidget);
+    }
     expect(find.text('Food'), findsNothing);
   });
 
-  testWidgets('the bar is at least 80dp and reports its measured height',
+  testWidgets('the bar is at least 64dp and reports its measured height',
       (tester) async {
     await tester.pumpWidget(_host());
     await tester.pump();
     await tester.pump();
 
-    final size = tester.getSize(find.byType(NavigationBar));
-    expect(size.height, greaterThanOrEqualTo(LockoutTheme.navBarHeight));
+    final size = tester.getSize(find.byType(NvNavigationBar));
+    expect(size.height, greaterThanOrEqualTo(NvNavigationBar.height));
     expect(
       BottomNav.lastRenderedHeight.value,
-      greaterThanOrEqualTo(LockoutTheme.navBarHeight),
+      greaterThanOrEqualTo(NvNavigationBar.height),
       reason: 'showUndoBanner positions itself against this',
     );
   });

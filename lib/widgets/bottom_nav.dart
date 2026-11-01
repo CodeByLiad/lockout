@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'house/nv_navigation_bar.dart';
+
 /// One nav destination, enum-keyed.
 ///
 /// `MainScreen._screenFor` switches on this with a Dart switch *expression*,
@@ -148,17 +150,16 @@ class _BottomNavState extends State<BottomNav> {
     // RangeError there would take down the whole app over a transient.
     final index = widget.currentIndex.clamp(0, tabs.length - 1);
 
-    return NavigationBar(
+    return NvNavigationBar(
       key: _barKey,
       selectedIndex: index,
       onDestinationSelected: widget.onTap,
       destinations: [
         for (final tab in tabs)
-          NavigationDestination(
-            icon: Icon(tab.icon),
-            selectedIcon: Icon(tab.selectedIcon),
+          NvNavigationDestination(
+            icon: tab.icon,
+            selectedIcon: tab.selectedIcon,
             label: tab.label,
-            tooltip: tab.label,
           ),
       ],
     );

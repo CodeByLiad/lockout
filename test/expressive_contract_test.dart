@@ -484,6 +484,19 @@ void main() {
   });
 
   group('the house catalog', () {
+    test('no framework NavigationBar outside NvNavigationBar', () {
+      for (final file in _dartFilesIn('lib')) {
+        if (_posixPath(file.path)
+            .endsWith('widgets/house/nv_navigation_bar.dart')) {
+          continue;
+        }
+        final source = _withoutComments(file.readAsStringSync());
+        expect(RegExp(r'\bNavigationBar\s*\(').hasMatch(source), isFalse,
+            reason: '${file.path} builds a stock NavigationBar; use '
+                'NvNavigationBar');
+      }
+    });
+
     test('every catalog component resolves colour through the theme', () {
       for (final file in _dartFilesIn('lib/widgets/house')) {
         final source = _withoutComments(file.readAsStringSync());

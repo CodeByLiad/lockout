@@ -8,6 +8,7 @@ import 'package:lockout/theme/accents.dart';
 import 'package:lockout/theme/lockout_semantics.dart';
 import 'package:lockout/theme/theme_controller.dart';
 import 'package:lockout/widgets/bottom_nav.dart';
+import 'package:lockout/widgets/house/nv_navigation_bar.dart';
 
 import 'test_helpers.dart';
 
@@ -55,10 +56,13 @@ void main() {
   /// The nav bar's resolved background — the other half of the chrome that
   /// `main.dart`'s comment says a skipped rebuild strands.
   Color navFill(WidgetTester tester) {
-    final bar = tester.widget<NavigationBar>(find.byType(NavigationBar));
-    final context = tester.element(find.byType(NavigationBar));
-    return bar.backgroundColor ??
-        Theme.of(context).navigationBarTheme.backgroundColor!;
+    final material = tester.widget<Material>(
+      find
+          .descendant(
+              of: find.byType(NvNavigationBar), matching: find.byType(Material))
+          .first,
+    );
+    return material.color!;
   }
 
   testWidgets('the app boots on the saved theme', (tester) async {
