@@ -838,7 +838,7 @@ void main() {
 
       expect(find.byKey(const ValueKey('set-row-0-1')), findsOneWidget);
 
-      await tester.tap(find.byIcon(Icons.close).first);
+      await tester.tap(find.byTooltip('Remove set').first);
       await settle(tester);
 
       expect(find.byKey(const ValueKey('set-row-0-1')), findsNothing);
@@ -849,7 +849,7 @@ void main() {
       final lastDelete = tester.widget<NvIconButton>(
         find
             .ancestor(
-              of: find.byIcon(Icons.close),
+              of: find.byTooltip('Remove set'),
               matching: find.byType(NvIconButton),
             )
             .first,
@@ -880,8 +880,12 @@ void main() {
       await settle(tester, maxPumps: 6);
 
       // Deletes the now-completed set 0, leaving the never-logged set 1 as
-      // the sole, surviving row (renumbered to position 0).
-      await tester.tap(find.byIcon(Icons.close).first);
+      // the sole, surviving row (renumbered to position 0). The session
+      // header's Leave button pushes the rows down, and the rest bar now
+      // covers the first one on an 800x600 test window, so scroll it in.
+      await tester.ensureVisible(find.byTooltip('Remove set').first);
+      await tester.pump();
+      await tester.tap(find.byTooltip('Remove set').first);
       // A single, zero-duration frame — not `settle`/`pumpAndSettle` — so a
       // 250ms false-"completed" flash on the surviving row is caught rather
       // than left to finish and hide.
@@ -1115,6 +1119,97 @@ void main() {
         expect(tile.shape, shape, reason: label);
       }
       expect(find.byType(NvIconTile), findsNWidgets(8));
+    });
+  });
+
+  // Device report 2026-11-01: a session started from Today replaces the Home
+  // tab's whole body, and the only way out was Finish, then Discard. Neither
+  // reads as "leave", and system back was not handled at all.
+  group('leaving a session', () {
+    Future<void> seedDayWithOneSet() async {
+      final db = DatabaseService.instance;
+      await db.insertRoutine(Routine(
+        id: 'r1',
+        name: 'Split',
+        schedulingMode: SchedulingMode.weekday,
+        createdAt: '2026-01-01T00:00:00.000',
+      ).toMap());
+      await db.insertDay(TrainingDay(
+        id: 'd1',
+        routineId: 'r1',
+        name: 'Legs',
+        tag: ScheduleService.weekdayCode(DateTime.now()),
+        orderIndex: 0,
+      ).toMap());
+      await db.insertExercise(ExerciseDef(
+        id: 'e1',
+        dayId: 'd1',
+        name: 'Back Squat',
+        targetSets: 1,
+        targetRepsMin: 5,
+        targetRepsMax: 5,
+      ).toMap());
+      await db.setActiveRoutine('r1');
+    }
+
+    Future<void> startCustomSession(WidgetTester tester) async {
+      await tester.pumpWidget(hostedTodayTab());
+      await settle(tester);
+      await tester.ensureVisible(find.text('Custom'));
+      await tester.tap(find.text('Custom'));
+      await settle(tester);
+      expect(find.text('Finish'), findsOneWidget);
+    }
+
+    testWidgets('the close button ends an empty session without asking',
+        (tester) async {
+      await startCustomSession(tester);
+
+      await tester.tap(find.byTooltip('Leave session'));
+      await settle(tester);
+
+      expect(find.text('Discard session?'), findsNothing);
+      expect(find.text('Finish'), findsNothing);
+    });
+
+    testWidgets('system back ends an empty session', (tester) async {
+      await startCustomSession(tester);
+
+      await tester.binding.handlePopRoute();
+      await settle(tester);
+
+      expect(find.text('Finish'), findsNothing);
+    });
+
+    testWidgets(
+        'leaving with logged sets asks first, and Keep going keeps the '
+        'session', (tester) async {
+      await seedDayWithOneSet();
+      await tester.pumpWidget(hostedTodayTab());
+      await settle(tester);
+      await tester.tap(find.text('Start session'));
+      await settle(tester);
+      await tester.tap(find.byKey(const ValueKey('set-complete-0-0')));
+      await settle(tester, maxPumps: 4);
+
+      await tester.tap(find.byTooltip('Leave session'));
+      await settle(tester);
+      expect(find.text('Discard session?'), findsOneWidget);
+      await tester.tap(find.text('Keep going'));
+      await settle(tester);
+      expect(find.text('Finish'), findsOneWidget);
+
+      await tester.binding.handlePopRoute();
+      await settle(tester);
+      expect(find.text('Discard session?'), findsOneWidget);
+      await tester.tap(find.text('Discard'));
+      await settle(tester);
+      expect(find.text('Finish'), findsNothing);
+      expect(
+        await DatabaseService.instance
+            .getSessionLogsForDate(ScheduleService.dateKey(DateTime.now())),
+        isEmpty,
+      );
     });
   });
 }

@@ -594,6 +594,16 @@ class TodayTabState extends State<TodayTab> {
     );
   }
 
+  /// The close button and system back. An empty session just ends; one with
+  /// logged sets goes through the same "Discard session?" gate as Finish.
+  Future<void> _leaveSession() async {
+    if (_sessionCompletedSets > 0) {
+      final confirmed = await _confirmDiscard();
+      if (confirmed != true || !mounted) return;
+    }
+    _endSessionState();
+  }
+
   void _endSessionState() {
     _ticker?.cancel();
     setState(() {
@@ -635,14 +645,24 @@ class TodayTabState extends State<TodayTab> {
       // this the header paints under the status bar on an edge-to-edge
       // window and swallows taps. Bottom is left alone — BottomNav carries
       // its own inset, and this tab's content should scroll under it.
-      body: SafeArea(
-        bottom: false,
-        child: _sessionActive
-            ? Padding(
-                padding: const EdgeInsets.all(LockoutTheme.screenPadding),
-                child: _buildActiveSession(),
-              )
-            : _buildPreSession(context),
+      // A live session replaces this tab's body, so system back means
+      // "leave the session", not "leave the app". `TickerMode` is off while
+      // another tab is on screen (MainScreen's IndexedStack), and back there
+      // must not ask about a session the user cannot see.
+      body: PopScope(
+        canPop: !(_sessionActive && TickerMode.valuesOf(context).enabled),
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) _leaveSession();
+        },
+        child: SafeArea(
+          bottom: false,
+          child: _sessionActive
+              ? Padding(
+                  padding: const EdgeInsets.all(LockoutTheme.screenPadding),
+                  child: _buildActiveSession(),
+                )
+              : _buildPreSession(context),
+        ),
       ),
       // Kept visible while the exercise list scrolls, rather than inline in
       // the body. This is TodayTab's own Scaffold (nested inside MainScreen's
@@ -1120,11 +1140,22 @@ class TodayTabState extends State<TodayTab> {
           // v1's `HeroCard` stated "IN SESSION - $_sessionTitle" so a live
           // session always named which day was running; the rebuilt header
           // otherwise never paints `_sessionTitle` anywhere on screen.
-          Text(
-            _sessionTitle,
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _sessionTitle,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              NvIconButton(
+                icon: Icons.close,
+                tooltip: 'Leave session',
+                onPressed: _leaveSession,
+              ),
+            ],
           ),
           const SizedBox(height: LockoutTheme.spaceXs),
           Row(
