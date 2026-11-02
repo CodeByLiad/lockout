@@ -37,7 +37,7 @@ class AboutScreen extends StatelessWidget {
         ),
         child: NvInfoCard(
           child: Text(
-            'LOCKOUT v1.1.0\nPublished by Jinatra Ltd. under '
+            'LOCKOUT v1.2.1\nPublished by Jinatra Ltd. under '
             'GPL-3.0-or-later.\nOffline-first: routines, workout logs, '
             'nutrition and body data are stored only on this device in '
             'SQLite. No analytics, no ads, no account.\nThe network is used '
