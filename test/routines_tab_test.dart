@@ -9,6 +9,7 @@ import 'package:lockout/services/database_service.dart';
 import 'package:lockout/services/schedule_service.dart';
 import 'package:lockout/theme/lockout_theme.dart';
 import 'package:lockout/widgets/day_block.dart';
+import 'package:lockout/widgets/lockout_card.dart';
 import 'package:lockout/widgets/lockout_field.dart';
 import 'package:lockout/widgets/sheet_scaffold.dart';
 
@@ -1046,4 +1047,53 @@ void main() {
     });
   });
 
+  // Device report 2026-11-01: "Add day" lived only inside the week expander,
+  // and the expander was built only for a routine that already had days. A
+  // new custom routine was a dead end: no day, so no exercises either.
+  group('a routine with no days', () {
+    Future<void> seedEmptyRoutine(String id, String name) =>
+        DatabaseService.instance.insertRoutine(Routine(
+          id: id,
+          name: name,
+          schedulingMode: SchedulingMode.weekday,
+          createdAt: '2026-01-01T00:00:00.000',
+        ).toMap());
+
+    testWidgets('offers Add day, and the day it creates appears',
+        (tester) async {
+      await seedEmptyRoutine('r1', 'My Split');
+      await tester.pumpWidget(
+          MaterialApp(theme: lockoutTestTheme(), home: RoutinesTab()));
+      await settle(tester);
+
+      await tester.tap(find.text('Add day'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+          find.widgetWithText(TextField, 'e.g. Push'), 'Upper');
+      await tester.pump();
+      await tester.tap(find.text('Create day'));
+      await settle(tester);
+
+      final days = await DatabaseService.instance.getDaysForRoutine('r1');
+      expect(days.map((d) => d['name']), ['Upper']);
+      expect(find.textContaining('Full week (1)'), findsOneWidget);
+    });
+
+    testWidgets('routine cards do not touch', (tester) async {
+      await seedEmptyRoutine('r1', 'First');
+      await seedEmptyRoutine('r2', 'Second');
+      await tester.pumpWidget(
+          MaterialApp(theme: lockoutTestTheme(), home: RoutinesTab()));
+      await settle(tester);
+
+      Rect cardOf(String name) => tester.getRect(find
+          .ancestor(of: find.text(name), matching: find.byType(LockoutCard))
+          .first);
+      final a = cardOf('First');
+      final b = cardOf('Second');
+      final (upper, lower) = a.top < b.top ? (a, b) : (b, a);
+      expect(lower.top - upper.bottom,
+          greaterThanOrEqualTo(LockoutTheme.spaceMd));
+    });
+  });
 }

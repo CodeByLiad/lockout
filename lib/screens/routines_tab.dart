@@ -621,9 +621,11 @@ class RoutinesTabState extends State<RoutinesTab> {
             Expanded(
               child: _routines.isEmpty
                   ? _buildEmptyState()
-                  : ListView.builder(
+                  : ListView.separated(
                       itemCount: _routines.length,
                       itemBuilder: (ctx, i) => _buildRoutineCard(_routines[i]),
+                      separatorBuilder: (ctx, i) =>
+                          const SizedBox(height: LockoutTheme.spaceMd),
                     ),
               ),
             ],
@@ -722,13 +724,16 @@ class RoutinesTabState extends State<RoutinesTab> {
             ],
           ),
           const Divider(),
-          if (days.isEmpty)
+          // No week to open yet, so Add day sits on the card itself. It used
+          // to live only inside the week expander, which an empty routine
+          // never builds: a new custom routine could not get its first day.
+          if (days.isEmpty) ...[
             Text(
-              'No training days yet. Open the week and tap "Add day" to pin a '
-              'workout to a weekday.',
+              'No training days yet. Add one to pin a workout to a weekday.',
               style: Theme.of(context).textTheme.bodySmall,
-            )
-          else
+            ),
+            _buildAddDayButton(routine),
+          ] else
             // One colour assignment per routine: the uniqueness rule is only
             // meaningful across the whole week, so it is computed once here
             // and shared by the featured card and the collapsed rows.
@@ -849,18 +854,22 @@ class RoutinesTabState extends State<RoutinesTab> {
                 d.tag.trim().toUpperCase() == todayCode,
             onTap: () => _openDaySheet(routine, d),
           ),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton.icon(
-            onPressed: () async {
-              final saved = await _openDayFormSheet(routine.id);
-              if (saved == true && mounted) await reload();
-            },
-            icon: const Icon(Icons.add),
-            label: const Text('Add day'),
-          ),
-        ),
+        _buildAddDayButton(routine),
       ],
+    );
+  }
+
+  Widget _buildAddDayButton(Routine routine) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: TextButton.icon(
+        onPressed: () async {
+          final saved = await _openDayFormSheet(routine.id);
+          if (saved == true && mounted) await reload();
+        },
+        icon: const Icon(Icons.add),
+        label: const Text('Add day'),
+      ),
     );
   }
 
