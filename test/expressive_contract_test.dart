@@ -13,8 +13,9 @@ import 'package:lockout/theme/scheme_style.dart';
 /// Every value asserted below is read from it rather than restated here: a
 /// second copy of the palette inside a test file is a second thing to keep
 /// in step, and the one that drifts is always the copy.
-final String _house =
-    File('docs/design/nuvetrix-app-design-system.md').readAsStringSync();
+final String _house = File(
+  'docs/design/nuvetrix-app-design-system.md',
+).readAsStringSync();
 
 /// The files branch 1 restyles.
 ///
@@ -58,6 +59,14 @@ const List<String> _rebuiltFiles = [
   ..._branchOneFiles,
   'lib/screens/about_screen.dart',
   'lib/screens/profile_tab.dart',
+  'lib/screens/main_screen.dart',
+  'lib/screens/routines_tab.dart',
+  'lib/screens/progress_tab.dart',
+  'lib/screens/body_tab.dart',
+  'lib/screens/log_tab.dart',
+  'lib/screens/food_tab.dart',
+  'lib/screens/exercise_video_screen.dart',
+  'lib/screens/settings_hub.dart',
 ];
 
 /// The screens rebuilt so far. Appended to as screens land.
@@ -106,6 +115,13 @@ const List<String> _preRebuildWidgets = [
   'stat_tile.dart',
   'today_day_card.dart',
   'sheet_scaffold.dart',
+  'exercise_picker.dart',
+  'food_picker.dart',
+  'lockout_field.dart',
+  'meal_section.dart',
+  'weight_card.dart',
+  'progress_hero.dart',
+  'undo_banner.dart',
 ];
 
 /// True when [path] names a file inside the house component catalog.
@@ -160,14 +176,20 @@ String _withoutSnackBars(String source) {
 
 /// The dark lime tonal scheme the shape tests build their theme from.
 final ColorScheme _darkLime = LockoutPalette.schemeFor(
-    Brightness.dark, LockoutAccent.lime, LockoutSchemeStyle.tonal);
+  Brightness.dark,
+  LockoutAccent.lime,
+  LockoutSchemeStyle.tonal,
+);
 
 /// Blanks `//` comments so a guard does not trip over prose that names the
 /// very thing it forbids.
 String _withoutComments(String source) => source
     .split('\n')
-    .where((line) => !line.trimLeft().startsWith('//') &&
-        !line.trimLeft().startsWith('///'))
+    .where(
+      (line) =>
+          !line.trimLeft().startsWith('//') &&
+          !line.trimLeft().startsWith('///'),
+    )
     .join('\n');
 
 /// True when the house document mentions this colour's hex, in either case.
@@ -189,43 +211,63 @@ void main() {
     });
 
     test('Lockout is registered in the accents table', () {
-      expect(_house.contains('#C2EE7B'), isTrue,
-          reason: "Lockout's accent must be registered upstream before use");
+      expect(
+        _house.contains('#C2EE7B'),
+        isTrue,
+        reason: "Lockout's accent must be registered upstream before use",
+      );
     });
   });
 
   group('colour', () {
-    test('every authored palette colour is one the house document declares',
-        () {
-      // The scheme itself is generated from the accent seed now (deviation
-      // D11), so its roles are no longer house hexes and cannot be checked
-      // here. What the palette still authors is the success pair, and that
-      // must still be the house's. The category ramp is authored too but was
-      // never a house colour: it is Lockout's own, so it is not listed.
-      for (final brightness in Brightness.values) {
-        final scheme = LockoutPalette.schemeFor(
-            brightness, LockoutAccent.lime, LockoutSchemeStyle.tonal);
-        final semantics =
-            LockoutPalette.semanticsFor(brightness, LockoutAccent.lime, scheme);
-        final roles = <String, Color>{
-          'success': semantics.success,
-          'successContainer (chartFill)': semantics.chartFill,
-        };
-        roles.forEach((name, colour) {
-          expect(_houseDeclares(colour), isTrue,
-              reason: '$brightness $name ($colour) is not a house colour');
-        });
-      }
-    });
+    test(
+      'every authored palette colour is one the house document declares',
+      () {
+        // The scheme itself is generated from the accent seed now (deviation
+        // D11), so its roles are no longer house hexes and cannot be checked
+        // here. What the palette still authors is the success pair, and that
+        // must still be the house's. The category ramp is authored too but was
+        // never a house colour: it is Lockout's own, so it is not listed.
+        for (final brightness in Brightness.values) {
+          final scheme = LockoutPalette.schemeFor(
+            brightness,
+            LockoutAccent.lime,
+            LockoutSchemeStyle.tonal,
+          );
+          final semantics = LockoutPalette.semanticsFor(
+            brightness,
+            LockoutAccent.lime,
+            scheme,
+          );
+          final roles = <String, Color>{
+            'success': semantics.success,
+            'successContainer (chartFill)': semantics.chartFill,
+          };
+          roles.forEach((name, colour) {
+            expect(
+              _houseDeclares(colour),
+              isTrue,
+              reason: '$brightness $name ($colour) is not a house colour',
+            );
+          });
+        }
+      },
+    );
 
     test('every accent and its ink appear in the house document', () {
       for (final accent in LockoutAccent.all) {
         // `steel` is Lockout's own, deviation register D6.
         if (accent == LockoutAccent.steel) continue;
-        expect(_houseDeclares(accent.accent), isTrue,
-            reason: '${accent.key} is not a house accent');
-        expect(_houseDeclares(accent.ink), isTrue,
-            reason: "${accent.key}'s ink is not a house value");
+        expect(
+          _houseDeclares(accent.accent),
+          isTrue,
+          reason: '${accent.key} is not a house accent',
+        );
+        expect(
+          _houseDeclares(accent.ink),
+          isTrue,
+          reason: "${accent.key}'s ink is not a house value",
+        );
       }
     });
 
@@ -233,8 +275,11 @@ void main() {
       final offenders = _dartFilesIn('lib')
           .where((f) => f.readAsStringSync().toUpperCase().contains('FFB938'))
           .map((f) => f.path);
-      expect(offenders, isEmpty,
-          reason: 'gold is WishPlay\'s identity accent (house section 3.3)');
+      expect(
+        offenders,
+        isEmpty,
+        reason: 'gold is WishPlay\'s identity accent (house section 3.3)',
+      );
     });
   });
 
@@ -243,8 +288,11 @@ void main() {
       for (final file in _dartFilesIn('lib')) {
         final source = _withoutComments(file.readAsStringSync());
         for (final banned in const ['Inter', 'SpaceGrotesk', 'Roboto']) {
-          expect(source.contains("'$banned'"), isFalse,
-              reason: '${file.path} names the unbundled family $banned');
+          expect(
+            source.contains("'$banned'"),
+            isFalse,
+            reason: '${file.path} names the unbundled family $banned',
+          );
         }
       }
     });
@@ -261,8 +309,11 @@ void main() {
         text.bodyMedium!.fontSize!,
         text.labelSmall!.fontSize!,
       ]) {
-        expect(_house.contains('| ${size.toInt()} /'), isTrue,
-            reason: '${size.toInt()}sp is not a house size');
+        expect(
+          _house.contains('| ${size.toInt()} /'),
+          isTrue,
+          reason: '${size.toInt()}sp is not a house size',
+        );
       }
     });
 
@@ -282,14 +333,19 @@ void main() {
       const allowed = {
         'LOCKOUT', // the app's own name
         'GPL', 'OFL', // licence identifiers
+        'EEE', 'MMM', // DateFormat pattern tokens, never rendered as labels
         'BMI', 'BMR', 'TDEE', 'KCAL', 'SQL', 'JSON', 'CSV', 'URL', 'API',
       };
 
       for (final path in _rebuiltFiles) {
         final source = File(path).readAsStringSync();
-        expect(source.contains('toUpperCase'), isFalse,
-            reason: '$path uppercases copy; the house document forbids '
-                'all-caps labels (section 4.2)');
+        expect(
+          source.contains('toUpperCase'),
+          isFalse,
+          reason:
+              '$path uppercases copy; the house document forbids '
+              'all-caps labels (section 4.2)',
+        );
 
         for (final match in shouty.allMatches(_withoutComments(source))) {
           final literal = match.group(0)!;
@@ -309,18 +365,26 @@ void main() {
       expect(File('lib/theme/cookie_border.dart').existsSync(), isFalse);
       for (final path in _rebuiltScreens) {
         final source = _withoutComments(File(path).readAsStringSync());
-        expect(source.contains('CookieBorder'), isFalse,
-            reason: '$path still draws a CookieBorder; use '
-                'LockoutShapeBorder with a D5 register');
+        expect(
+          source.contains('CookieBorder'),
+          isFalse,
+          reason:
+              '$path still draws a CookieBorder; use '
+              'LockoutShapeBorder with a D5 register',
+        );
       }
     });
 
     test('a cookie shape appears only as a register', () {
       for (final path in _rebuiltScreens) {
         final source = _withoutComments(File(path).readAsStringSync());
-        expect(RegExp(r'LockoutShape\.cookie\d+').hasMatch(source), isFalse,
-            reason: '$path names a raw cookie; use LockoutShape.rest, '
-                '.training, .streak or .achievement');
+        expect(
+          RegExp(r'LockoutShape\.cookie\d+').hasMatch(source),
+          isFalse,
+          reason:
+              '$path names a raw cookie; use LockoutShape.rest, '
+              '.training, .streak or .achievement',
+        );
       }
     });
 
@@ -333,8 +397,10 @@ void main() {
     });
 
     test('every interactive radius is a pair, not a constant', () {
-      expect(LockoutTheme.radiusButtonRest,
-          isNot(LockoutTheme.radiusButtonActive));
+      expect(
+        LockoutTheme.radiusButtonRest,
+        isNot(LockoutTheme.radiusButtonActive),
+      );
       expect(LockoutTheme.radiusRowRest, isNot(LockoutTheme.radiusRowActive));
       expect(LockoutTheme.radiusChipRest, isNot(LockoutTheme.radiusChipActive));
     });
@@ -347,7 +413,10 @@ void main() {
       final theme = LockoutTheme.build(
         colors: _darkLime,
         semantics: LockoutPalette.semanticsFor(
-            Brightness.dark, LockoutAccent.lime, _darkLime),
+          Brightness.dark,
+          LockoutAccent.lime,
+          _darkLime,
+        ),
       );
 
       double radiusOf(OutlinedBorder? shape) =>
@@ -368,11 +437,16 @@ void main() {
       // inert is the exact mistake this test exists to stop.
       resolvers.forEach((name, resolver) {
         final rest = radiusOf(resolver.resolve(<WidgetState>{}));
-        final pressed =
-            radiusOf(resolver.resolve(<WidgetState>{WidgetState.pressed}));
-        expect(pressed, isNot(rest),
-            reason: '$name keeps one radius through a press, which the '
-                'contract calls a violation');
+        final pressed = radiusOf(
+          resolver.resolve(<WidgetState>{WidgetState.pressed}),
+        );
+        expect(
+          pressed,
+          isNot(rest),
+          reason:
+              '$name keeps one radius through a press, which the '
+              'contract calls a violation',
+        );
       });
     });
 
@@ -383,24 +457,35 @@ void main() {
       // design system, it is dead code with a doc comment.
       for (final widget in const ['MorphingSurface', 'ConnectedGroup']) {
         final consumers = _dartFilesIn('lib')
-            .where((f) => !f.path.endsWith(
-                '${widget == 'MorphingSurface' ? 'morphing_surface' : 'connected_group'}.dart'))
+            .where(
+              (f) => !f.path.endsWith(
+                '${widget == 'MorphingSurface' ? 'morphing_surface' : 'connected_group'}.dart',
+              ),
+            )
             // Comments stripped: every other guard in this file does, and
             // without it a doc comment naming the widget keeps this green
             // forever while nothing actually builds one.
-            .where((f) =>
-                _withoutComments(f.readAsStringSync()).contains('$widget('))
+            .where(
+              (f) =>
+                  _withoutComments(f.readAsStringSync()).contains('$widget('),
+            )
             .map((f) => f.path)
             .toList();
-        expect(consumers, isNotEmpty,
-            reason: '$widget is built but wired to nothing in lib/');
+        expect(
+          consumers,
+          isNotEmpty,
+          reason: '$widget is built but wired to nothing in lib/',
+        );
       }
     });
 
     test('the house declares each corner value the app uses', () {
       for (final value in const [8, 12, 16, 22, 26, 28, 32, 36]) {
-        expect(_house.contains('$value dp'), isTrue,
-            reason: '${value}dp is not a house corner value');
+        expect(
+          _house.contains('$value dp'),
+          isTrue,
+          reason: '${value}dp is not a house corner value',
+        );
       }
     });
   });
@@ -411,71 +496,93 @@ void main() {
     // the only way to catch a framework default overriding the theme — the
     // way SegmentedButton discards the segment shape it is given.
     Widget host(Widget child) => MaterialApp(
-          theme: LockoutTheme.build(
-            colors: _darkLime,
-            semantics: LockoutPalette.semanticsFor(
-                Brightness.dark, LockoutAccent.lime, _darkLime),
-          ),
-          home: Scaffold(body: Center(child: child)),
-        );
+      theme: LockoutTheme.build(
+        colors: _darkLime,
+        semantics: LockoutPalette.semanticsFor(
+          Brightness.dark,
+          LockoutAccent.lime,
+          _darkLime,
+        ),
+      ),
+      home: Scaffold(body: Center(child: child)),
+    );
 
     double radiusOf(ShapeBorder? shape) =>
         ((shape! as RoundedRectangleBorder).borderRadius as BorderRadius)
             .topLeft
             .x;
 
-    testWidgets('a chip is 12dp unselected and a pill once chosen',
-        (tester) async {
+    testWidgets('a chip is 12dp unselected and a pill once chosen', (
+      tester,
+    ) async {
       for (final selected in const [false, true]) {
-        await tester.pumpWidget(host(ChoiceChip(
-          label: const Text('Push'),
-          selected: selected,
-          onSelected: (_) {},
-        )));
+        await tester.pumpWidget(
+          host(
+            ChoiceChip(
+              label: const Text('Push'),
+              selected: selected,
+              onSelected: (_) {},
+            ),
+          ),
+        );
         await tester.pumpAndSettle();
 
         final shape = tester
-            .widgetList<Material>(find.descendant(
-              of: find.byType(ChoiceChip),
-              matching: find.byType(Material),
-            ))
+            .widgetList<Material>(
+              find.descendant(
+                of: find.byType(ChoiceChip),
+                matching: find.byType(Material),
+              ),
+            )
             .map((m) => m.shape)
             .whereType<RoundedRectangleBorder>()
             .first;
 
-        expect(radiusOf(shape),
-            selected ? LockoutTheme.radiusChipActive : LockoutTheme.radiusChipRest,
-            reason: 'chip selected=$selected');
+        expect(
+          radiusOf(shape),
+          selected
+              ? LockoutTheme.radiusChipActive
+              : LockoutTheme.radiusChipRest,
+          reason: 'chip selected=$selected',
+        );
       }
     });
 
-    testWidgets('a filled button morphs from pill to 12dp under the finger',
-        (tester) async {
-      await tester.pumpWidget(host(
-        FilledButton(onPressed: () {}, child: const Text('Save')),
-      ));
+    testWidgets('a filled button morphs from pill to 12dp under the finger', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        host(FilledButton(onPressed: () {}, child: const Text('Save'))),
+      );
       await tester.pumpAndSettle();
 
       ShapeBorder? shapeNow() => tester
-          .widgetList<Material>(find.descendant(
-            of: find.byType(FilledButton),
-            matching: find.byType(Material),
-          ))
+          .widgetList<Material>(
+            find.descendant(
+              of: find.byType(FilledButton),
+              matching: find.byType(Material),
+            ),
+          )
           .map((m) => m.shape)
           .whereType<RoundedRectangleBorder>()
           .first;
 
       expect(radiusOf(shapeNow()), LockoutTheme.radiusButtonRest);
 
-      final gesture =
-          await tester.startGesture(tester.getCenter(find.byType(FilledButton)));
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(FilledButton)),
+      );
       await tester.pumpAndSettle();
-      expect(radiusOf(shapeNow()), LockoutTheme.radiusButtonActive,
-          reason: 'the press morph must reach the painted Material, and it '
-              'must land on the 12dp button pill. The 16dp large pill '
-              'belongs to the 60dp hero control, which is '
-              '`NvButton(large: true)`, not the 48dp FilledButton this '
-              'theme styles');
+      expect(
+        radiusOf(shapeNow()),
+        LockoutTheme.radiusButtonActive,
+        reason:
+            'the press morph must reach the painted Material, and it '
+            'must land on the 12dp button pill. The 16dp large pill '
+            'belongs to the 60dp hero control, which is '
+            '`NvButton(large: true)`, not the 48dp FilledButton this '
+            'theme styles',
+      );
 
       await gesture.up();
       await tester.pumpAndSettle();
@@ -486,40 +593,55 @@ void main() {
   group('the house catalog', () {
     test('no framework NavigationBar outside NvNavigationBar', () {
       for (final file in _dartFilesIn('lib')) {
-        if (_posixPath(file.path)
-            .endsWith('widgets/house/nv_navigation_bar.dart')) {
+        if (_posixPath(
+          file.path,
+        ).endsWith('widgets/house/nv_navigation_bar.dart')) {
           continue;
         }
         final source = _withoutComments(file.readAsStringSync());
-        expect(RegExp(r'\bNavigationBar\s*\(').hasMatch(source), isFalse,
-            reason: '${file.path} builds a stock NavigationBar; use '
-                'NvNavigationBar');
+        expect(
+          RegExp(r'\bNavigationBar\s*\(').hasMatch(source),
+          isFalse,
+          reason:
+              '${file.path} builds a stock NavigationBar; use '
+              'NvNavigationBar',
+        );
       }
     });
 
     test('every catalog component resolves colour through the theme', () {
       for (final file in _dartFilesIn('lib/widgets/house')) {
         final source = _withoutComments(file.readAsStringSync());
-        expect(RegExp(r'Color\(0x').hasMatch(source), isFalse,
-            reason: '${file.path} hard-codes a colour; colour resolves '
-                'through Theme.of(context) or LockoutSemantics.of(context)');
-        expect(source.contains('JinatraTokens'), isFalse,
-            reason: '${file.path} reaches for the retired token class');
+        expect(
+          RegExp(r'Color\(0x').hasMatch(source),
+          isFalse,
+          reason:
+              '${file.path} hard-codes a colour; colour resolves '
+              'through Theme.of(context) or LockoutSemantics.of(context)',
+        );
+        expect(
+          source.contains('JinatraTokens'),
+          isFalse,
+          reason: '${file.path} reaches for the retired token class',
+        );
       }
     });
 
-    test('a rebuilt screen composes from the catalog, not the old widgets',
-        () {
+    test('a rebuilt screen composes from the catalog, not the old widgets', () {
       for (final path in _rebuiltScreens) {
         final source = _withoutComments(File(path).readAsStringSync());
         for (final widget in _preRebuildWidgets) {
           // Matched on the import path, not the bare file name: `widgets/`
           // anchors it to `lib/widgets/<widget>` and keeps the catalog's own
-          // `widgets/house/nv_hero_card.dart` from reading as a hit on
+          // `widgets/legacy/nv_hero_card.dart` from reading as a hit on
           // `hero_card.dart`.
-          expect(source.contains('widgets/$widget'), isFalse,
-              reason: '$path still reaches for $widget, a widget written '
-                  'for the previous design');
+          expect(
+            source.contains('widgets/$widget'),
+            isFalse,
+            reason:
+                '$path still reaches for $widget, a widget written '
+                'for the previous design',
+          );
         }
       }
     });
@@ -560,11 +682,15 @@ void main() {
       for (final path in _rebuiltScreens) {
         final source = _withoutComments(File(path).readAsStringSync());
         for (final widget in frameworkButtons) {
-          expect(RegExp('\\b$widget\\b').hasMatch(source), isFalse,
-              reason: '$path builds a $widget; a rebuilt screen composes '
-                  'from lib/widgets/house/ and the theme only, and '
-                  'NvButton is the control that is the same size and '
-                  'presses to the same radius as the rest of the screen');
+          expect(
+            RegExp('\\b$widget\\b').hasMatch(source),
+            isFalse,
+            reason:
+                '$path builds a $widget; a rebuilt screen composes '
+                'from lib/widgets/house/ and the theme only, and '
+                'NvButton is the control that is the same size and '
+                'presses to the same radius as the rest of the screen',
+          );
         }
       }
     });
@@ -581,8 +707,11 @@ void main() {
 
       for (final path in interactive) {
         final source = _withoutComments(File(path).readAsStringSync());
-        expect(source.contains('MorphingSurface('), isTrue,
-            reason: '$path has a press state but does not morph');
+        expect(
+          source.contains('MorphingSurface('),
+          isTrue,
+          reason: '$path has a press state but does not morph',
+        );
         expect(source.contains('restRadius:'), isTrue, reason: path);
         expect(source.contains('activeRadius:'), isTrue, reason: path);
       }
@@ -590,12 +719,18 @@ void main() {
 
     test('the hero card wears the signature outline and does not morph', () {
       final source = _withoutComments(
-        File('lib/widgets/house/nv_hero_card.dart').readAsStringSync(),
+        File('lib/widgets/legacy/nv_hero_card.dart').readAsStringSync(),
       );
-      expect(source.contains('LockoutTheme.heroCardShape'), isTrue,
-          reason: 'the hero card carries the family signature');
-      expect(source.contains('MorphingSurface('), isFalse,
-          reason: 'a card has no pressed state to shape-shift into');
+      expect(
+        source.contains('LockoutTheme.heroCardShape'),
+        isTrue,
+        reason: 'the hero card carries the family signature',
+      );
+      expect(
+        source.contains('MorphingSurface('),
+        isFalse,
+        reason: 'a card has no pressed state to shape-shift into',
+      );
     });
 
     test('every catalog component has a consumer outside the catalog', () {
@@ -603,16 +738,38 @@ void main() {
       // ConnectedGroup shipped a review cycle built, tested, documented and
       // called by nothing. A component with no consumer is not a design
       // system, it is dead code with a doc comment.
-      final consumers = _dartFilesIn('lib')
-          .where((f) => !_inHouseCatalog(f.path))
-          .map((f) => _withoutComments(f.readAsStringSync()))
-          .join('\n');
+      // Follow imports from shipping screens through composed catalog controls.
+      // A navigation bar consumed by NvAppNavigation is a real consumer too.
+      final reached = <String>{};
+      void visit(File file) {
+        final canonical = file.absolute.path.replaceAll('\\', '/');
+        if (!reached.add(canonical)) return;
+        final source = _withoutComments(file.readAsStringSync());
+        for (final m in RegExp(
+          r"(?:import|export) '([^']+)';",
+        ).allMatches(source)) {
+          final uri = m.group(1)!;
+          if (uri.startsWith('dart:') || uri.startsWith('package:')) continue;
+          final target = File.fromUri(file.absolute.uri.resolve(uri));
+          if (target.existsSync()) visit(target);
+        }
+      }
+
+      for (final file in _dartFilesIn('lib/screens')) {
+        visit(file);
+      }
+      visit(File('lib/main.dart'));
+      final consumers = reached.join('\n');
 
       for (final file in _dartFilesIn('lib/widgets/house')) {
         final name = file.uri.pathSegments.last.replaceAll('.dart', '');
-        expect(consumers.contains(name), isTrue,
-            reason: '${file.path} is built but wired to nothing outside the '
-                'catalog');
+        expect(
+          consumers.contains(name),
+          isTrue,
+          reason:
+              '${file.path} is built but wired to nothing outside the '
+              'catalog',
+        );
       }
     });
   });
@@ -629,14 +786,22 @@ void main() {
       // anywhere in this file, and an input is not an exception.
       String windows(String posix) => posix.replaceAll('/', r'\');
 
-      expect(_inHouseCatalog(windows('lib/widgets/house/nv_button.dart')),
-          isTrue,
-          reason: 'Directory.listSync yields this shape on Windows');
-      expect(_inHouseCatalog('lib/widgets/house/nv_button.dart'), isTrue,
-          reason: 'and this shape on the ubuntu runner that gates the APK');
+      expect(
+        _inHouseCatalog(windows('lib/widgets/house/nv_button.dart')),
+        isTrue,
+        reason: 'Directory.listSync yields this shape on Windows',
+      );
+      expect(
+        _inHouseCatalog('lib/widgets/house/nv_button.dart'),
+        isTrue,
+        reason: 'and this shape on the ubuntu runner that gates the APK',
+      );
       expect(_inHouseCatalog(windows('lib/screens/today_tab.dart')), isFalse);
-      expect(_inHouseCatalog('lib/widgets/morphing_surface.dart'), isFalse,
-          reason: 'a widget outside the catalog is a real consumer');
+      expect(
+        _inHouseCatalog('lib/widgets/morphing_surface.dart'),
+        isFalse,
+        reason: 'a widget outside the catalog is a real consumer',
+      );
     });
 
     test('no guard in this file hard-codes a Windows separator', () {
@@ -648,16 +813,18 @@ void main() {
       final source = _withoutComments(
         File('test/expressive_contract_test.dart').readAsStringSync(),
       );
-      final offenders =
-          RegExp(r'(lib|test|widgets|screens|theme|house|dart)\\')
-              .allMatches(source)
-              .map((m) => m.group(0)!)
-              .toList();
-      expect(offenders, isEmpty,
-          reason: 'a path fragment is separated with a backslash. Normalise '
-              'the path first and compare against `/`, as '
-              'no_legacy_theme_test.dart:40 and numeric_guard_test.dart:189 '
-              'already do');
+      final offenders = RegExp(
+        r'(lib|test|widgets|screens|theme|house|dart)\\',
+      ).allMatches(source).map((m) => m.group(0)!).toList();
+      expect(
+        offenders,
+        isEmpty,
+        reason:
+            'a path fragment is separated with a backslash. Normalise '
+            'the path first and compare against `/`, as '
+            'no_legacy_theme_test.dart:40 and numeric_guard_test.dart:189 '
+            'already do',
+      );
     });
   });
 
@@ -682,8 +849,12 @@ void main() {
           .allMatches(File('lib/theme/lockout_motion.dart').readAsStringSync())
           .map((m) => m.group(1))
           .toList();
-      expect(declared,
-          ['springFast', 'springDefault', 'effects', 'ambientDrift']);
+      expect(declared, [
+        'springFast',
+        'springDefault',
+        'effects',
+        'ambientDrift',
+      ]);
     });
 
     test('no animated surface this branch owns hand-rolls a duration', () {
@@ -705,12 +876,17 @@ void main() {
       ];
       for (final path in scanned) {
         if (path.endsWith('lockout_motion.dart')) continue;
-        final source =
-            _withoutSnackBars(_withoutComments(File(path).readAsStringSync()));
-        expect(handRolled.hasMatch(source), isFalse,
-            reason: '${_posixPath(path)} passes a literal Duration to an '
-                'animation; every '
-                'animated surface reads a LockoutMotion tier');
+        final source = _withoutSnackBars(
+          _withoutComments(File(path).readAsStringSync()),
+        );
+        expect(
+          handRolled.hasMatch(source),
+          isFalse,
+          reason:
+              '${_posixPath(path)} passes a literal Duration to an '
+              'animation; every '
+              'animated surface reads a LockoutMotion tier',
+        );
       }
     });
 
@@ -738,9 +914,13 @@ void main() {
           continue;
         }
         final source = _withoutComments(file.readAsStringSync());
-        expect(source.contains('package:material_new_shapes'), isFalse,
-            reason: '${file.path} imports material_new_shapes directly; '
-                'go through lib/theme/lockout_shapes.dart (D14)');
+        expect(
+          source.contains('package:material_new_shapes'),
+          isFalse,
+          reason:
+              '${file.path} imports material_new_shapes directly; '
+              'go through lib/theme/lockout_shapes.dart (D14)',
+        );
       }
     });
 
@@ -758,8 +938,11 @@ void main() {
     test('nothing reaches for a wallpaper-derived scheme', () {
       for (final file in _dartFilesIn('lib')) {
         final source = _withoutComments(file.readAsStringSync());
-        expect(source.contains('DynamicColorBuilder'), isFalse,
-            reason: '${file.path} still uses dynamic colour');
+        expect(
+          source.contains('DynamicColorBuilder'),
+          isFalse,
+          reason: '${file.path} still uses dynamic colour',
+        );
       }
     });
   });
@@ -772,14 +955,21 @@ void main() {
       ];
       for (final file in files) {
         final source = _withoutComments(file.readAsStringSync());
-        expect(RegExp(r'Color\(0x[0-9A-Fa-f]{8}\)').hasMatch(source), isFalse,
-            reason: '${file.path} holds a colour literal that cannot follow '
-                'the generated scheme');
         expect(
-            source.contains('Colors.') &&
-                RegExp(r'Colors\.(?!transparent[^A-Za-z0-9_])\w+').hasMatch(source),
-            isFalse,
-            reason: '${file.path} reaches for a Colors.* constant');
+          RegExp(r'Color\(0x[0-9A-Fa-f]{8}\)').hasMatch(source),
+          isFalse,
+          reason:
+              '${file.path} holds a colour literal that cannot follow '
+              'the generated scheme',
+        );
+        expect(
+          source.contains('Colors.') &&
+              RegExp(
+                r'Colors\.(?!transparent[^A-Za-z0-9_])\w+',
+              ).hasMatch(source),
+          isFalse,
+          reason: '${file.path} reaches for a Colors.* constant',
+        );
       }
     });
   });

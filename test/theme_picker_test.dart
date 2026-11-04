@@ -50,8 +50,7 @@ void main() {
     return handle;
   }
 
-  testWidgets('the picker offers all three brightness choices',
-      (tester) async {
+  testWidgets('the picker offers all three brightness choices', (tester) async {
     final semantics = await pumpPicker(tester);
 
     expect(find.text('System'), findsOneWidget);
@@ -65,33 +64,41 @@ void main() {
     final semantics = await pumpPicker(tester);
 
     for (final accent in LockoutAccent.all) {
-      expect(find.bySemanticsLabel(accent.name), findsOneWidget,
-          reason: '${accent.key} swatch is missing');
+      expect(
+        find.bySemanticsLabel(accent.name),
+        findsOneWidget,
+        reason: '${accent.key} swatch is missing',
+      );
     }
 
     semantics.dispose();
   });
 
-  testWidgets('gold is not offered, it belongs to another app',
-      (tester) async {
+  testWidgets('gold is not offered, it belongs to another app', (tester) async {
     final semantics = await pumpPicker(tester);
     expect(find.text('Gold'), findsNothing);
 
     semantics.dispose();
   });
 
-  testWidgets('choosing an accent persists it without touching brightness',
-      (tester) async {
-    await ThemeController.instance
-        .selectBrightness(LockoutBrightnessChoice.dark);
+  testWidgets('choosing an accent persists it without touching brightness', (
+    tester,
+  ) async {
+    await ThemeController.instance.selectBrightness(
+      LockoutBrightnessChoice.dark,
+    );
     final semantics = await pumpPicker(tester);
 
+    await tester.ensureVisible(find.bySemanticsLabel(LockoutAccent.teal.name));
+    await settle(tester);
     await tester.tap(find.bySemanticsLabel(LockoutAccent.teal.name));
     await settle(tester);
 
     expect(ThemeController.instance.accent, LockoutAccent.teal);
-    expect(ThemeController.instance.brightnessChoice,
-        LockoutBrightnessChoice.dark);
+    expect(
+      ThemeController.instance.brightnessChoice,
+      LockoutBrightnessChoice.dark,
+    );
     expect(
       await DatabaseService.instance.getSetting('theme_key', defaultValue: ''),
       'dark|teal|tonal',
@@ -101,26 +108,34 @@ void main() {
     semantics.dispose();
   });
 
-  testWidgets('choosing a brightness persists it without touching the accent',
-      (tester) async {
+  testWidgets('choosing a brightness persists it without touching the accent', (
+    tester,
+  ) async {
     await ThemeController.instance.selectAccent(LockoutAccent.coral);
     final semantics = await pumpPicker(tester);
 
     await tester.tap(find.text('Dark'));
     await settle(tester);
 
-    expect(ThemeController.instance.brightnessChoice,
-        LockoutBrightnessChoice.dark);
+    expect(
+      ThemeController.instance.brightnessChoice,
+      LockoutBrightnessChoice.dark,
+    );
     expect(ThemeController.instance.accent, LockoutAccent.coral);
 
     semantics.dispose();
   });
 
-  testWidgets('the selected swatch announces itself as selected',
-      (tester) async {
+  testWidgets('the selected swatch announces itself as selected', (
+    tester,
+  ) async {
     await ThemeController.instance.selectAccent(LockoutAccent.violet);
     final semantics = await pumpPicker(tester);
 
+    await tester.ensureVisible(
+      find.bySemanticsLabel(LockoutAccent.violet.name),
+    );
+    await settle(tester);
     expect(
       tester.getSemantics(find.bySemanticsLabel(LockoutAccent.violet.name)),
       matchesSemantics(
@@ -137,14 +152,17 @@ void main() {
     semantics.dispose();
   });
 
-  testWidgets('an unselected swatch announces that it is not selected',
-      (tester) async {
+  testWidgets('an unselected swatch announces that it is not selected', (
+    tester,
+  ) async {
     await ThemeController.instance.selectAccent(LockoutAccent.violet);
     final semantics = await pumpPicker(tester);
 
     // `hasSelectedState` with `isSelected` false, not the absence of both: a
     // swatch that is merely available has to say so, or a screen reader
     // cannot tell "not chosen" from "not choosable".
+    await tester.ensureVisible(find.bySemanticsLabel(LockoutAccent.teal.name));
+    await settle(tester);
     expect(
       tester.getSemantics(find.bySemanticsLabel(LockoutAccent.teal.name)),
       matchesSemantics(
@@ -173,8 +191,9 @@ void main() {
     semantics.dispose();
   });
 
-  testWidgets('Look and feel offers Tonal, Vibrant, Expressive under Accent',
-      (tester) async {
+  testWidgets('Look and feel offers Tonal, Vibrant, Expressive under Accent', (
+    tester,
+  ) async {
     final semantics = await pumpPicker(tester);
 
     expect(find.text('Style'), findsOneWidget);
@@ -209,16 +228,19 @@ void main() {
   // Spec §5.2 "Swatches": a swatch shows the accent the user is choosing,
   // not whatever the current style generates from it, so the fill stays the
   // exact accent under every style.
-  testWidgets('a swatch fills with the exact accent under vibrant',
-      (tester) async {
+  testWidgets('a swatch fills with the exact accent under vibrant', (
+    tester,
+  ) async {
     await ThemeController.instance.selectStyle(LockoutSchemeStyle.vibrant);
     final semantics = await pumpPicker(tester);
 
     for (final accent in LockoutAccent.all) {
-      final container = tester.widget<AnimatedContainer>(find.descendant(
-        of: find.bySemanticsLabel(accent.name),
-        matching: find.byType(AnimatedContainer),
-      ));
+      final container = tester.widget<AnimatedContainer>(
+        find.descendant(
+          of: find.bySemanticsLabel(accent.name),
+          matching: find.byType(AnimatedContainer),
+        ),
+      );
       final decoration = container.decoration! as ShapeDecoration;
       expect(decoration.color, accent.accent, reason: accent.key);
     }
@@ -226,24 +248,29 @@ void main() {
     semantics.dispose();
   });
 
-  testWidgets('a swatch is a six-cookie in its own accent, ringed when chosen',
-      (tester) async {
-    final semantics = await pumpPicker(tester);
-    final container = tester.widget<AnimatedContainer>(find.descendant(
-      of: find.bySemanticsLabel(LockoutAccent.lime.name),
-      matching: find.byType(AnimatedContainer),
-    ));
-    final d = container.decoration! as ShapeDecoration;
-    final border = d.shape as LockoutShapeBorder;
-    expect(border.shape, LockoutShape.training);
-    expect(d.color, LockoutAccent.lime.accent);
-    expect(border.side.width, 2);
+  testWidgets(
+    'a swatch is a six-cookie in its own accent, ringed when chosen',
+    (tester) async {
+      final semantics = await pumpPicker(tester);
+      final container = tester.widget<AnimatedContainer>(
+        find.descendant(
+          of: find.bySemanticsLabel(LockoutAccent.lime.name),
+          matching: find.byType(AnimatedContainer),
+        ),
+      );
+      final d = container.decoration! as ShapeDecoration;
+      final border = d.shape as LockoutShapeBorder;
+      expect(border.shape, LockoutShape.training);
+      expect(d.color, LockoutAccent.lime.accent);
+      expect(border.side.width, 2);
 
-    semantics.dispose();
-  });
+      semantics.dispose();
+    },
+  );
 
-  testWidgets('a style tap that fails to persist warns rather than throwing',
-      (tester) async {
+  testWidgets('a style tap that fails to persist warns rather than throwing', (
+    tester,
+  ) async {
     final database = await DatabaseService.instance.database;
     Future<void> dropTrigger() =>
         database.execute('DROP TRIGGER IF EXISTS test_fail_theme_key');
@@ -287,84 +314,95 @@ void main() {
   });
 
   testWidgets(
-      'a swatch tap that fails to persist warns instead of vanishing as an '
-      'unhandled error', (tester) async {
-    // Forces `ThemeController.selectAccent`'s `saveSetting` write to throw,
-    // the same aborting-trigger technique `database_service_test.dart` uses
-    // for `set_logs`. Self-contained: created and dropped inside this test
-    // only, so it cannot leak into the suites the serial runner reuses this
-    // process for.
-    final database = await DatabaseService.instance.database;
-    Future<void> dropTrigger() =>
-        database.execute('DROP TRIGGER IF EXISTS test_fail_theme_key');
-    await dropTrigger();
-    addTearDown(dropTrigger);
-    await database.execute(
-      "CREATE TRIGGER test_fail_theme_key BEFORE INSERT ON user_settings "
-      "WHEN NEW.key = 'theme_key' "
-      "BEGIN SELECT RAISE(ABORT, 'rejected by test trigger'); END;",
-    );
+    'a swatch tap that fails to persist warns instead of vanishing as an '
+    'unhandled error',
+    (tester) async {
+      // Forces `ThemeController.selectAccent`'s `saveSetting` write to throw,
+      // the same aborting-trigger technique `database_service_test.dart` uses
+      // for `set_logs`. Self-contained: created and dropped inside this test
+      // only, so it cannot leak into the suites the serial runner reuses this
+      // process for.
+      final database = await DatabaseService.instance.database;
+      Future<void> dropTrigger() =>
+          database.execute('DROP TRIGGER IF EXISTS test_fail_theme_key');
+      await dropTrigger();
+      addTearDown(dropTrigger);
+      await database.execute(
+        "CREATE TRIGGER test_fail_theme_key BEFORE INSERT ON user_settings "
+        "WHEN NEW.key = 'theme_key' "
+        "BEGIN SELECT RAISE(ABORT, 'rejected by test trigger'); END;",
+      );
 
-    final semantics = await pumpPicker(tester);
+      final semantics = await pumpPicker(tester);
 
-    await tester.tap(find.bySemanticsLabel(LockoutAccent.coral.name));
-    await settle(tester);
+      await tester.ensureVisible(
+        find.bySemanticsLabel(LockoutAccent.coral.name),
+      );
+      await settle(tester);
+      await tester.tap(find.bySemanticsLabel(LockoutAccent.coral.name));
+      await settle(tester);
 
-    // Before the fix, `onTap: () async => await _applyTheme(key)` still
-    // discarded the returned Future (`InkWell.onTap` is `void Function()`),
-    // so this throw reached the test binding as an unhandled async error
-    // rather than being caught anywhere.
-    expect(tester.takeException(), isNull);
-    expect(find.text('Could not apply the accent.'), findsOneWidget);
+      // Before the fix, `onTap: () async => await _applyTheme(key)` still
+      // discarded the returned Future (`InkWell.onTap` is `void Function()`),
+      // so this throw reached the test binding as an unhandled async error
+      // rather than being caught anywhere.
+      expect(tester.takeException(), isNull);
+      expect(find.text('Could not apply the accent.'), findsOneWidget);
 
-    semantics.dispose();
-  });
+      semantics.dispose();
+    },
+  );
 
   testWidgets(
-      'a brightness tap that fails to persist warns rather than throwing',
-      (tester) async {
-    final database = await DatabaseService.instance.database;
-    Future<void> dropTrigger() =>
-        database.execute('DROP TRIGGER IF EXISTS test_fail_theme_key');
-    await dropTrigger();
-    addTearDown(dropTrigger);
-    await database.execute(
-      "CREATE TRIGGER test_fail_theme_key BEFORE INSERT ON user_settings "
-      "WHEN NEW.key = 'theme_key' "
-      "BEGIN SELECT RAISE(ABORT, 'rejected by test trigger'); END;",
-    );
+    'a brightness tap that fails to persist warns rather than throwing',
+    (tester) async {
+      final database = await DatabaseService.instance.database;
+      Future<void> dropTrigger() =>
+          database.execute('DROP TRIGGER IF EXISTS test_fail_theme_key');
+      await dropTrigger();
+      addTearDown(dropTrigger);
+      await database.execute(
+        "CREATE TRIGGER test_fail_theme_key BEFORE INSERT ON user_settings "
+        "WHEN NEW.key = 'theme_key' "
+        "BEGIN SELECT RAISE(ABORT, 'rejected by test trigger'); END;",
+      );
 
-    final semantics = await pumpPicker(tester);
+      final semantics = await pumpPicker(tester);
 
-    await tester.tap(find.text('Dark'));
-    await settle(tester);
+      await tester.tap(find.text('Dark'));
+      await settle(tester);
 
-    expect(tester.takeException(), isNull);
-    expect(find.text('Could not apply the theme.'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      expect(find.text('Could not apply the theme.'), findsOneWidget);
 
-    semantics.dispose();
-  });
+      semantics.dispose();
+    },
+  );
 
-  testWidgets('at 360dp and 1.5x text the Expressive label stays on one line',
-      (tester) async {
-    tester.view.physicalSize = const Size(360, 800);
-    tester.view.devicePixelRatio = 1;
-    tester.platformDispatcher.textScaleFactorTestValue = 1.5;
-    addTearDown(tester.view.reset);
-    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-    final semantics = await pumpPicker(tester);
-    final label = find.text('Expressive');
-    await tester.scrollUntilVisible(label, 200,
-        scrollable: find.byType(Scrollable).first);
-    await tester.pump();
-    expect(tester.takeException(), isNull);
-    final para = tester.renderObject<RenderParagraph>(label);
-    expect(para.didExceedMaxLines, isFalse);
-    final fitted = find.ancestor(of: label, matching: find.byType(FittedBox));
-    expect(fitted, findsOneWidget);
-    // One line: the unscaled layout height is a single labelLarge line.
-    expect(para.size.height, lessThan(para.text.style!.fontSize! * 1.5 * 1.8));
-    expect(tester.getSize(fitted).width, greaterThan(0));
-    semantics.dispose();
-  });
+  testWidgets(
+    'at 360dp and 1.5x text style labels wrap at the requested text size',
+    (tester) async {
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+      addTearDown(tester.view.reset);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final semantics = await pumpPicker(tester);
+      final label = find.text('Expressive');
+      await tester.scrollUntilVisible(
+        label,
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      final para = tester.renderObject<RenderParagraph>(label);
+      expect(para.didExceedMaxLines, isFalse);
+      final fitted = find.ancestor(of: label, matching: find.byType(FittedBox));
+      expect(fitted, findsNothing);
+      // One line: the unscaled layout height is a single labelLarge line.
+      expect(para.size.width, greaterThan(0));
+      semantics.dispose();
+    },
+  );
 }

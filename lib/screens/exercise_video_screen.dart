@@ -1,9 +1,11 @@
+import '../theme/lockout_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../data/exercise_library.dart';
-import '../theme/lockout_semantics.dart';
-import '../theme/lockout_theme.dart';
-import '../widgets/lockout_card.dart';
+import '../theme/lockout_shapes.dart';
+import '../widgets/house/nv_expressive.dart';
+import '../widgets/house/nv_wavy_progress.dart';
+import '../widgets/house/nv_button.dart';
 
 /// Schemes the in-app webview will actually load. `javascript:` and
 /// `file:` both parse and both answer `hasScheme`, so promoting on that
@@ -50,9 +52,9 @@ Uri? pinnedVideoUri(String raw) {
 /// The YouTube results page for [exerciseName]'s form query — the unpinned
 /// case. A query rather than a baked-in video id means a link cannot rot.
 Uri searchVideoUri(String exerciseName) => Uri.parse(
-      'https://m.youtube.com/results?search_query='
-      '${Uri.encodeQueryComponent(ExerciseLibrary.queryFor(exerciseName))}',
-    );
+  'https://m.youtube.com/results?search_query='
+  '${Uri.encodeQueryComponent(ExerciseLibrary.queryFor(exerciseName))}',
+);
 
 /// In-app YouTube view for an exercise's form demonstration.
 ///
@@ -164,54 +166,74 @@ class _ExerciseVideoScreenState extends State<ExerciseVideoScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              widget.exerciseName,
-              style: theme.textTheme.titleMedium,
-              overflow: TextOverflow.ellipsis,
-            ),
-            Text(
-              _isPinned ? 'PINNED VIDEO' : 'FORM GUIDE',
-              style: theme.textTheme.labelSmall,
-            ),
-          ],
+        title: const Text('Exercise form'),
+        leading: Padding(
+          padding: const EdgeInsets.all(LockoutTheme.spaceXs),
+          child: NvShapeButton(
+            icon: Icons.arrow_back_rounded,
+            label: 'Back',
+            onPressed: () => Navigator.of(context).pop(),
+          ),
         ),
         actions: [
           if (_target != null)
-            IconButton(
-              tooltip: 'Reload',
-              icon: const Icon(Icons.refresh),
-              onPressed: _retry,
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: NvShapeButton(
+                icon: Icons.refresh_rounded,
+                label: 'Reload',
+                tone: NvTone.secondary,
+                onPressed: _retry,
+              ),
             ),
         ],
       ),
-      // Same edge-to-edge gap as settings_screen.dart: an `AppBar` but no
-      // `bottomNavigationBar`, so without this the webview's last rows —
-      // where the player paints its own controls — sit under the navigation
-      // bar. A `SafeArea` rather than padding because nothing here scrolls.
       body: SafeArea(
         top: false,
         child: Column(
           children: [
+            Padding(
+              padding: const EdgeInsets.all(LockoutTheme.screenPadding),
+              child: Row(
+                children: [
+                  const NvIconBadge(
+                    icon: Icons.fitness_center_rounded,
+                    shape: LockoutShape.flower,
+                    size: 56,
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.exerciseName,
+                          style: theme.textTheme.headlineSmall,
+                        ),
+                        Text(
+                          _isPinned ? 'Pinned video' : 'Form guide',
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
             if (_progress < 100 && !_failed && _target != null)
-              LinearProgressIndicator(value: _progress / 100),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: NvWavyProgress(value: _progress / 100),
+              ),
             Expanded(
               child: _target == null
                   ? _buildUnusableLinkNotice()
                   : _failed
-                      ? _buildOfflineNotice()
-                      : ClipRRect(
-                          borderRadius:
-                              BorderRadius.circular(LockoutTheme.radiusCard),
-                          child: WebViewWidget(controller: _controller),
-                        ),
+                  ? _buildOfflineNotice()
+                  : WebViewWidget(controller: _controller),
             ),
           ],
         ),
@@ -219,76 +241,36 @@ class _ExerciseVideoScreenState extends State<ExerciseVideoScreen> {
     );
   }
 
-  /// The pinned link is not a web address at all — no host to promote, or a
-  /// scheme the webview will not load. There is nothing to retry, so this
-  /// says what is wrong and where to fix it instead of offering a button
-  /// that would do nothing.
-  ///
-  /// This and [_buildOfflineNotice] colour their icon with
-  /// `semantics.warning` — not `colorScheme.error` or `tertiaryContainer` —
-  /// because neither is a destructive-confirmation moment (that role is
-  /// `LockoutSemantics.danger`, reserved for e.g. LOG's DELETE ENTRY) or an
-  /// invalid-form-field moment (`colorScheme.error`). Both are advisory, the
-  /// same role the leg-safety notice uses `warning` for.
-  Widget _buildUnusableLinkNotice() {
-    final theme = Theme.of(context);
-    final semantics = LockoutSemantics.of(context);
+  Widget _buildUnusableLinkNotice() => SingleChildScrollView(
+    padding: const EdgeInsets.all(LockoutTheme.screenPadding),
+    child: NvEmpty(
+      title: 'Link not usable',
+      message:
+          'Edit this exercise and paste a complete YouTube link, or clear the link to search for a form guide instead.',
+      icon: Icons.link_off_rounded,
+    ),
+  );
 
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(LockoutTheme.spaceLg),
-        child: LockoutCard(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.link_off, size: 40, color: semantics.warning),
-              const SizedBox(height: LockoutTheme.spaceMd),
-              Text('Link not usable', style: theme.textTheme.titleMedium),
-              const SizedBox(height: LockoutTheme.spaceSm),
-              Text(
-                'The pinned video link for this exercise is not a web address '
-                'this app can open. Edit the exercise and paste a full '
-                'youtube.com link, or clear the field to search instead.',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium,
-              ),
-            ],
-          ),
+  Widget _buildOfflineNotice() => SingleChildScrollView(
+    padding: const EdgeInsets.all(LockoutTheme.screenPadding),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        NvEmpty(
+          title: 'Video unavailable',
+          message:
+              'Form videos stream from YouTube and need a connection. Your routines, logs and body data stay on-device and work offline.',
+          icon: Icons.wifi_off_rounded,
+          action: 'Try again',
+          onPressed: _retry,
         ),
-      ),
-    );
-  }
-
-  Widget _buildOfflineNotice() {
-    final theme = Theme.of(context);
-    final semantics = LockoutSemantics.of(context);
-
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(LockoutTheme.spaceLg),
-        child: LockoutCard(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.wifi_off, size: 40, color: semantics.warning),
-              const SizedBox(height: LockoutTheme.spaceMd),
-              Text('Video unavailable', style: theme.textTheme.titleMedium),
-              const SizedBox(height: LockoutTheme.spaceSm),
-              Text(
-                'Form videos stream from YouTube and need a connection. '
-                'Your routines, logs and body data stay on-device and work offline.',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium,
-              ),
-              const SizedBox(height: LockoutTheme.spaceMd),
-              FilledButton(
-                onPressed: _retry,
-                child: const Text('Retry'),
-              ),
-            ],
-          ),
+        const SizedBox(height: 20),
+        NvButton(
+          variant: NvButtonVariant.tonal,
+          label: 'Back to exercise',
+          onPressed: () => Navigator.of(context).pop(),
         ),
-      ),
-    );
-  }
+      ],
+    ),
+  );
 }

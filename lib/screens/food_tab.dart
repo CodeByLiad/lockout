@@ -1,22 +1,23 @@
 import 'package:flutter/material.dart';
-import '../theme/lockout_theme.dart';
+import 'package:intl/intl.dart';
+import '../theme/lockout_shapes.dart';
+import '../widgets/house/nv_expressive.dart';
+import '../widgets/house/nv_food_picker.dart';
+import '../widgets/house/nv_button.dart';
+import '../widgets/house/nv_grouped_list.dart';
+import '../widgets/house/nv_wavy_progress.dart';
+import '../widgets/house/nv_feedback.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
 import '../services/numeric_guard.dart';
 import '../services/goal_service.dart';
-import '../widgets/food_picker.dart';
-import '../widgets/lockout_field.dart';
-import '../widgets/meal_section.dart';
-import '../widgets/progress_hero.dart';
-import '../widgets/sheet_scaffold.dart';
-import '../widgets/stat_tile.dart';
-import '../widgets/undo_banner.dart';
 
 class FoodTab extends StatefulWidget {
+  final VoidCallback? onOpenSettings;
   // Non-const constructor: see "Why some constructors in this app are
   // not const" at the top of lib/widgets/day_block.dart.
   // ignore: prefer_const_constructors_in_immutables
-  FoodTab({super.key});
+  FoodTab({super.key, this.onOpenSettings});
 
   @override
   State<FoodTab> createState() => FoodTabState();
@@ -33,6 +34,10 @@ class FoodTabState extends State<FoodTab> {
   List<FoodEntry> _foodLogs = [];
   int _targetKcal = DatabaseService.defaultCalorieTarget;
   bool _isLoading = true;
+  DateTime _date = DateTime.now();
+  String? _loadError;
+  int _loadRevision = 0;
+  String get _dateKey => DateFormat('yyyy-MM-dd').format(_date);
 
   @override
   void initState() {
@@ -44,20 +49,30 @@ class FoodTabState extends State<FoodTab> {
   Future<void> reload() => _loadData();
 
   Future<void> _loadData() async {
+    final revision = ++_loadRevision;
+    try {
     final db = DatabaseService.instance;
-    final dateToday = DateTime.now().toIso8601String().split('T').first;
+    final dateToday = _dateKey;
     final rows = await db.getFoodLogsForDate(dateToday);
     // Resolved through GoalService — the single place Ruling A's "plan
     // value first, then the manual override, then the default" order lives
     // — so this can never disagree with what HOME shows for the same day.
     final snapshot = await GoalService.instance.snapshot();
 
-    if (!mounted) return;
+    if (!mounted || revision != _loadRevision) return;
     setState(() {
       _foodLogs = rows.map(FoodEntry.fromMap).toList();
       _targetKcal = snapshot.calorieTarget;
       _isLoading = false;
+      _loadError = null;
     });
+    } catch (_) {
+      if (!mounted || revision != _loadRevision) return;
+      setState(() {
+        _isLoading = false;
+        _loadError = 'Food could not be loaded. Please try again.';
+      });
+    }
   }
 
   int get _totalKcal => _foodLogs.fold(0, (sum, item) => sum + item.kcal);
@@ -76,14 +91,36 @@ class FoodTabState extends State<FoodTab> {
 
   /// Catalog picker first, then a confirm sheet with everything prefilled and
   /// still editable — a catalog figure is a starting point, not a fact.
-  Future<void> _addFood() async {
+  Future<void> _addFood() => _addFoodForSlot(_defaultSlot);
+
+  Future<void> _addFoodForSlot(String slot) async {
     final picked = await showFoodPicker(context);
     if (picked == null || !mounted) return;
-
-    final saved = await showLockoutSheet<bool>(
+    final saved = await showNvEditor<bool>(
       context: context,
-      title: 'LOG MEAL ITEM',
-      builder: (ctx) => _LogMealForm(picked: picked, defaultSlot: _defaultSlot),
+      title: 'Log food',
+      builder: (_) =>
+          _LogMealForm(picked: picked, defaultSlot: slot, date: _dateKey),
+    );
+    if (saved == true && mounted) await reload();
+  }
+
+  Future<void> _editFood(FoodEntry entry) async {
+    final saved = await showNvEditor<bool>(
+      context: context,
+      title: 'Edit food',
+      builder: (_) => _LogMealForm(
+        picked: PickedFood(
+          name: entry.name,
+          kcal: entry.kcal,
+          proteinG: entry.proteinG,
+          carbG: entry.carbG,
+          fatG: entry.fatG,
+        ),
+        defaultSlot: entry.mealSlot,
+        date: entry.dateStr,
+        existing: entry,
+      ),
     );
     if (saved == true && mounted) await reload();
   }
@@ -99,9 +136,9 @@ class FoodTabState extends State<FoodTab> {
     await reload();
     if (!mounted) return;
 
-    showUndoBanner(
+    showNvUndo(
       context,
-      message: 'DELETED ${entry.name.toUpperCase()}',
+      message: '${entry.name} deleted',
       onUndo: () => _restoreEntry(entry),
     );
   }
@@ -117,99 +154,201 @@ class FoodTabState extends State<FoodTab> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return Center(
-          child: CircularProgressIndicator());
-    }
-
-    final eaten = _totalKcal;
-    final target = _targetKcal;
-    final left = target - eaten;
-
-    return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      // SafeArea(bottom: false): MainScreen dropped its global AppBar in the
-      // five-tab restructure, so each tab now owns its top inset. Without it
-      // the header paints under the status bar on an edge-to-edge window and
-      // swallows taps there. Bottom is left alone — BottomNav carries its own
-      // inset and content should scroll under it.
-      body: SafeArea(
-        bottom: false,
-        child: ListView(
-          padding: const EdgeInsets.all(LockoutTheme.screenPadding),
+    if (_isLoading) return const Center(child: CircularProgressIndicator());
+    final theme = Theme.of(context);
+    final date = DateFormat('EEE, d MMM').format(_date);
+    final remaining = _targetKcal - _totalKcal;
+    final allSlots = [
+      ...mealSlots,
+      if (_foodLogs.any((f) => !mealSlots.contains(f.mealSlot))) 'Other',
+    ];
+    return NvPage(
+      title: 'Food',
+      actions: [
+        NvShapeButton(
+          key: const ValueKey('open-settings'),
+          icon: Icons.settings_outlined,
+          label: 'Settings',
+          onPressed: widget.onOpenSettings,
+        ),
+      ],
+      footer: NvButton(
+        variant: NvButtonVariant.filled,
+        label: 'Log food',
+        icon: Icons.add_rounded,
+        large: true,
+        onPressed: _addFood,
+      ),
+      children: [
+        Row(
           children: [
-          ProgressHero(
-            eyebrow: 'TODAY',
-            title: '$eaten / $target kcal',
-            subtitle: left >= 0 ? '$left left' : '${left.abs()} over',
-            progress: target <= 0 ? 0.0 : eaten / target,
-            // The bar turns to the error role once the day is over budget.
-            // Without it an over-budget day reads identically to an on-track
-            // one except for the supporting line.
-            accent: left < 0
-                ? Theme.of(context).colorScheme.error
-                : Theme.of(context).colorScheme.primary,
-          ),
-          const SizedBox(height: 20),
-          Row(
+            NvShapeButton(
+              key: const ValueKey('previous-food-day'),
+              icon: Icons.chevron_left_rounded,
+              label: 'Previous day',
+              tone: NvTone.secondary,
+              onPressed: () {
+                setState(() => _date = _date.subtract(const Duration(days: 1)));
+                reload();
+              },
+            ),
+            Expanded(
+              child: Text(
+                date,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.titleMedium,
+              ),
+            ),
+            NvShapeButton(
+              key: const ValueKey('next-food-day'),
+              icon: Icons.chevron_right_rounded,
+              label: 'Next day',
+              tone: NvTone.tertiary,
+              onPressed: () {
+                setState(() => _date = _date.add(const Duration(days: 1)));
+                reload();
+              },
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+        NvSurface(
+          tone: NvTone.secondary,
+          radius: 36,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: StatTile(
-                  label: 'Protein',
-                  value: '${_num(_totalProtein)} g',
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '$_totalKcal',
+                          style: theme.textTheme.displayLarge,
+                        ),
+                        Text(
+                          'of $_targetKcal kcal',
+                          style: theme.textTheme.titleMedium,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const NvIconBadge(
+                    icon: Icons.restaurant_rounded,
+                    shape: LockoutShape.bun,
+                    size: 72,
+                  ),
+                ],
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: StatTile(
-                  label: 'Carbs',
-                  value: '${_num(_totalCarb)} g',
-                ),
+              const SizedBox(height: 16),
+              Text(
+                remaining >= 0
+                    ? '$remaining kcal left'
+                    : '${-remaining} kcal over target',
+                style: theme.textTheme.bodyLarge,
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: StatTile(
-                  label: 'Fat',
-                  value: '${_num(_totalFat)} g',
-                ),
+              const SizedBox(height: 16),
+              NvWavyProgress(
+                value: _targetKcal <= 0
+                    ? 0
+                    : (_totalKcal / _targetKcal).clamp(0.0, 1.0),
               ),
             ],
           ),
-          const SizedBox(height: 20),
-          FilledButton.icon(onPressed: _addFood, icon: Icon(Icons.add), label: Text('Log food')),
-          const SizedBox(height: 20),
-          if (_foodLogs.isEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 24),
-              child: Center(
-                child: Text(
-                  'Nothing logged today.\nTap "Log food" and pick from the '
-                  'catalog.',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                ),
-              ),
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            NvMetric(
+              label: 'Protein',
+              value: '${_num(_totalProtein)} g',
+              tone: NvTone.primary,
             ),
-          ...mealSlots.map(
-            (slot) => MealSection(
-              title: slot,
-              entries: _foodLogs.where((f) => f.mealSlot == slot).toList(),
-              onDelete: _deleteEntry,
+            NvMetric(
+              label: 'Carbs',
+              value: '${_num(_totalCarb)} g',
+              tone: NvTone.tertiary,
             ),
-          ),
-          MealSection(
-            title: 'Other',
-            entries: _foodLogs
-                .where((f) => !mealSlots.contains(f.mealSlot))
-                .toList(),
-            onDelete: _deleteEntry,
-          ),
-            const SizedBox(height: 28),
+            NvMetric(
+              label: 'Fat',
+              value: '${_num(_totalFat)} g',
+              tone: NvTone.secondary,
+            ),
           ],
         ),
-      ),
+        if (_loadError != null) ...[
+          const SizedBox(height: 16),
+          Text(_loadError!),
+          NvButton(
+            variant: NvButtonVariant.tonal,
+            label: 'Try again',
+            onPressed: reload,
+          ),
+        ],
+        const NvHeading('Your meals'),
+        for (var i = 0; i < allSlots.length; i++) ...[
+          Builder(
+            builder: (_) {
+              final slot = allSlots[i];
+              final entries = _foodLogs
+                  .where(
+                    (f) => slot == 'Other'
+                        ? !mealSlots.contains(f.mealSlot)
+                        : f.mealSlot == slot,
+                  )
+                  .toList();
+              final kcal = entries.fold<int>(0, (sum, f) => sum + f.kcal);
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  NvListItem(
+                    leading: NvIconBadge(
+                      icon: [
+                        Icons.wb_twilight_rounded,
+                        Icons.wb_sunny_outlined,
+                        Icons.nightlight_outlined,
+                        Icons.apple_outlined,
+                        Icons.restaurant_rounded,
+                      ][i % 5],
+                      shape: LockoutShape.values[[6, 11, 8, 14, 9][i % 5]],
+                      tone: NvTone.values[i % 3],
+                    ),
+                    title: slot,
+                    supporting: entries.isEmpty
+                        ? 'Nothing logged yet'
+                        : '$kcal kcal',
+                    trailing: const Icon(Icons.add_rounded),
+                    onTap: () => _addFoodForSlot(slot),
+                  ),
+                  if (entries.isNotEmpty)
+                    NvGroupedList(
+                      children: [
+                        for (final entry in entries)
+                          NvListItem(
+                            title: entry.name,
+                            supporting:
+                                '${entry.kcal} kcal · ${_num(entry.proteinG)} g protein',
+                            trailing: NvShapeButton(
+                              icon: Icons.close_rounded,
+                              label: 'Delete ${entry.name}',
+                              tone: NvTone.surface,
+                              onPressed: () => _deleteEntry(entry),
+                            ),
+                            onTap: () => _editFood(entry),
+                          ),
+                      ],
+                    ),
+                  const SizedBox(height: 12),
+                ],
+              );
+            },
+          ),
+        ],
+      ],
     );
   }
 }
@@ -217,7 +356,8 @@ class FoodTabState extends State<FoodTab> {
 /// One decimal place, trimmed to a whole number when exact. Library-level
 /// rather than a method on [FoodTabState] — [_LogMealFormState] is an
 /// unrelated widget's `State` and had no business reaching into that one.
-String _num(double v) => v % 1 == 0 ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
+String _num(double v) =>
+    v % 1 == 0 ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
 
 // --- FORM WIDGET ---
 //
@@ -234,8 +374,15 @@ String _num(double v) => v % 1 == 0 ? v.toStringAsFixed(0) : v.toStringAsFixed(1
 class _LogMealForm extends StatefulWidget {
   final PickedFood picked;
   final String defaultSlot;
+  final String date;
+  final FoodEntry? existing;
 
-  const _LogMealForm({required this.picked, required this.defaultSlot});
+  const _LogMealForm({
+    required this.picked,
+    required this.defaultSlot,
+    required this.date,
+    this.existing,
+  });
 
   @override
   State<_LogMealForm> createState() => _LogMealFormState();
@@ -249,6 +396,8 @@ class _LogMealFormState extends State<_LogMealForm> {
   late final TextEditingController _fatCtrl;
   late String _slot;
   bool _saving = false;
+  double _servings = 1;
+  String? _error;
 
   @override
   void initState() {
@@ -272,108 +421,178 @@ class _LogMealFormState extends State<_LogMealForm> {
   }
 
   Future<void> _save() async {
-    // Guards against two fast taps inserting two rows: `_save` awaits the
-    // insert before popping, so nothing else stopped a second `onTapUp`
-    // landing before the sheet closes.
     if (_saving) return;
-    if (_nameCtrl.text.trim().isEmpty) return;
-    _saving = true;
-    try {
-      final dateToday = DateTime.now().toIso8601String().split('T').first;
-      final entry = FoodEntry(
-        id: DateTime.now().microsecondsSinceEpoch.toString(),
-        dateStr: dateToday,
-        mealSlot: _slot,
-        name: _nameCtrl.text.trim(),
-        kcal: int.tryParse(_kcalCtrl.text) ?? 0,
-        // The same guard the routine builder's weight field needed, for
-        // the same reason: these are REAL columns with no
-        // `inputFormatters` in front of them, `double.tryParse` accepts
-        // 'Infinity', and the macro totals this feeds are rendered with
-        // `toInt()`. `kcal` is an `int.tryParse`, which has no Infinity or
-        // NaN to let through.
-        proteinG: NumericGuard.sanitiseKg(_proteinCtrl.text),
-        carbG: NumericGuard.sanitiseKg(_carbCtrl.text),
-        fatG: NumericGuard.sanitiseKg(_fatCtrl.text),
+    final kcal = int.tryParse(_kcalCtrl.text);
+    final protein = NumericGuard.parse(_proteinCtrl.text, min: 0);
+    final carb = NumericGuard.parse(_carbCtrl.text, min: 0);
+    final fat = NumericGuard.parse(_fatCtrl.text, min: 0);
+    if (_nameCtrl.text.trim().isEmpty ||
+        kcal == null ||
+        kcal < 0 ||
+        protein == null ||
+        carb == null ||
+        fat == null) {
+      setState(
+        () => _error =
+            'Enter a food name and valid, non-negative nutrition values.',
       );
-      await DatabaseService.instance.insertFoodLog(entry.toMap());
-      if (!mounted) return;
-      Navigator.pop(context, true);
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await DatabaseService.instance.insertFoodLog(
+        FoodEntry(
+          id:
+              widget.existing?.id ??
+              DateTime.now().microsecondsSinceEpoch.toString(),
+          dateStr: widget.date,
+          mealSlot: _slot,
+          name: _nameCtrl.text.trim(),
+          kcal: kcal,
+          proteinG: protein,
+          carbG: carb,
+          fatG: fat,
+        ).toMap(),
+      );
+      if (mounted) Navigator.pop(context, true);
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error =
+              'Food not saved. Your changes are still here. Try again.',
+        );
+      }
     } finally {
-      _saving = false;
+      if (mounted) setState(() => _saving = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    void changeServing(double next) {
+      if (next < .25) return;
+      setState(() {
+        _servings = next;
+        _kcalCtrl.text = (widget.picked.kcal * next).round().toString();
+        _proteinCtrl.text = _num(widget.picked.proteinG * next);
+        _carbCtrl.text = _num(widget.picked.carbG * next);
+        _fatCtrl.text = _num(widget.picked.fatG * next);
+      });
+    }
+
     return Column(
-      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Meal', style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: LockoutTheme.spaceSm),
-        // ChoiceChip rather than a hand-rolled toggle: it carries the
-        // selected state to accessibility services, which a tappable
-        // Container never did.
-        Wrap(
-          spacing: LockoutTheme.spaceSm,
-          runSpacing: LockoutTheme.spaceSm,
+        Row(
           children: [
-            for (final slot in FoodTabState.mealSlots)
-              ChoiceChip(
-                label: Text(slot),
-                selected: slot == _slot,
-                onSelected: (_) => setState(() => _slot = slot),
+            const NvIconBadge(
+              icon: Icons.restaurant_rounded,
+              shape: LockoutShape.bun,
+              size: 64,
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                widget.picked.name,
+                style: theme.textTheme.headlineMedium,
               ),
+            ),
           ],
         ),
+        if (widget.picked.ingredients.isNotEmpty) ...[
+          const NvHeading('Ingredients assumed'),
+          NvSurface(
+            tone: NvTone.secondary,
+            child: Text(widget.picked.ingredients),
+          ),
+        ],
+        if (widget.existing == null && widget.picked.kcal > 0) ...[
+          const NvHeading('Serving size'),
+          Text(widget.picked.serving, style: theme.textTheme.bodyMedium),
+          const SizedBox(height: 12),
+          NvSurface(
+            tone: NvTone.primary,
+            child: Row(
+              children: [
+                NvShapeButton(
+                  icon: Icons.remove_rounded,
+                  label: 'Fewer servings',
+                  onPressed: () => changeServing(_servings - .25),
+                  tone: NvTone.surface,
+                ),
+                Expanded(
+                  child: Text(
+                    '${_num(_servings)} servings',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.titleLarge,
+                  ),
+                ),
+                NvShapeButton(
+                  icon: Icons.add_rounded,
+                  label: 'More servings',
+                  onPressed: () => changeServing(_servings + .25),
+                  tone: NvTone.surface,
+                ),
+              ],
+            ),
+          ),
+        ],
+        const SizedBox(height: 24),
+        NvField(label: 'Food name', controller: _nameCtrl),
         const SizedBox(height: 16),
-        LockoutField(label: 'Food name', controller: _nameCtrl),
-        const SizedBox(height: LockoutTheme.spaceMd),
-        LockoutField(
+        NvField(
           label: 'Calories (kcal)',
           controller: _kcalCtrl,
           keyboardType: TextInputType.number,
         ),
-        const SizedBox(height: LockoutTheme.spaceMd),
-        Row(
+        const SizedBox(height: 16),
+        NvField(
+          label: 'Protein (g)',
+          controller: _proteinCtrl,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        ),
+        const SizedBox(height: 16),
+        NvField(
+          label: 'Carbs (g)',
+          controller: _carbCtrl,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        ),
+        const SizedBox(height: 16),
+        NvField(
+          label: 'Fat (g)',
+          controller: _fatCtrl,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        ),
+        const NvHeading('Meal'),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
           children: [
-            Expanded(
-              child: LockoutField(
-                label: 'Protein (g)',
-                controller: _proteinCtrl,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
+            for (final slot in FoodTabState.mealSlots)
+              ChoiceChip(
+                label: Text(slot),
+                selected: _slot == slot,
+                onSelected: (_) => setState(() => _slot = slot),
               ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: LockoutField(
-                label: 'Carbs (g)',
-                controller: _carbCtrl,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: LockoutField(
-                label: 'Fat (g)',
-                controller: _fatCtrl,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-              ),
-            ),
           ],
         ),
-        const SizedBox(height: LockoutTheme.spaceMd),
-        SizedBox(
-          width: double.infinity,
-          child: FilledButton(
-            onPressed: _save,
-            child: const Text('Save entry'),
-          ),
+        if (_error != null) ...[
+          const SizedBox(height: 16),
+          Text(_error!, style: TextStyle(color: theme.colorScheme.error)),
+        ],
+        const SizedBox(height: 24),
+        NvButton(
+          variant: NvButtonVariant.filled,
+          label: _saving ? 'Saving…' : 'Save food',
+          large: true,
+          onPressed: _saving ? null : _save,
         ),
+        const SizedBox(height: 12),
+        const Text('Adjust values to match your portion.'),
       ],
     );
   }

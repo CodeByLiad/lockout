@@ -172,8 +172,9 @@ final label = 'double.tryParse';
 final value = double
     .tryParse(raw);
 ''';
-      final matches =
-          RegExp(r'double\s*\.\s*tryParse').allMatches(blankComments(sample));
+      final matches = RegExp(
+        r'double\s*\.\s*tryParse',
+      ).allMatches(blankComments(sample));
       // Only the real call and the string literal survive — and the split
       // call is found, which the old line-by-line check could not see.
       expect(matches, hasLength(2));
@@ -182,10 +183,11 @@ final value = double
     test('lib contains no bare double.tryParse outside NumericGuard', () {
       final offenders = <String>[];
       var scanned = 0;
-      for (final file in Directory('lib')
-          .listSync(recursive: true)
-          .whereType<File>()
-          .where((f) => f.path.endsWith('.dart'))) {
+      for (final file
+          in Directory('lib')
+              .listSync(recursive: true)
+              .whereType<File>()
+              .where((f) => f.path.endsWith('.dart'))) {
         final path = file.path.replaceAll(r'\', '/');
         // The one call the whole rule exists to concentrate in one place.
         if (path.endsWith('lib/services/numeric_guard.dart')) continue;
@@ -193,7 +195,9 @@ final value = double
         // `int.tryParse` is fine either way: ints have no Infinity or NaN
         // to let through.
         final code = blankComments(file.readAsStringSync());
-        for (final match in RegExp(r'double\s*\.\s*tryParse').allMatches(code)) {
+        for (final match in RegExp(
+          r'double\s*\.\s*tryParse',
+        ).allMatches(code)) {
           final line = '\n'.allMatches(code.substring(0, match.start)).length;
           offenders.add('$path:${line + 1}');
         }
@@ -201,11 +205,18 @@ final value = double
       // Without this, a mistyped directory makes the loop iterate zero
       // times and the offender list come back empty — the shape in which
       // this test passes loudly while checking nothing at all.
-      expect(scanned, greaterThan(0),
-          reason: 'scanned no Dart files: the path is wrong');
-      expect(offenders, isEmpty,
-          reason: 'route the value through NumericGuard instead, so the '
-              'finite/floor rule stays in one place');
+      expect(
+        scanned,
+        greaterThan(0),
+        reason: 'scanned no Dart files: the path is wrong',
+      );
+      expect(
+        offenders,
+        isEmpty,
+        reason:
+            'route the value through NumericGuard instead, so the '
+            'finite/floor rule stays in one place',
+      );
     });
   });
 }

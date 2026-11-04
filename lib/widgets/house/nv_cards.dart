@@ -81,10 +81,7 @@ class DashedBorderPainter extends CustomPainter {
 
     final outline = Path()
       ..addRRect(
-        RRect.fromRectAndRadius(
-          Offset.zero & size,
-          Radius.circular(radius),
-        ),
+        RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(radius)),
       );
 
     const dash = 6.0;

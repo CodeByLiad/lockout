@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/lockout_motion.dart';
+import 'nv_keyboard_action.dart';
 
 /// One destination of an [NvNavigationBar].
 class NvNavigationDestination {
@@ -49,6 +50,7 @@ class NvNavigationBar extends StatefulWidget {
 
 class _NvNavigationBarState extends State<NvNavigationBar> {
   int? _pressed;
+  int? _focused;
 
   void _setPressed(int? value) {
     if (!mounted) return;
@@ -117,60 +119,68 @@ class _NvNavigationBarState extends State<NvNavigationBar> {
   }
 
   Widget _destination(BuildContext context, int i) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
+    final theme = Theme.of(context), colors = theme.colorScheme;
     final d = widget.destinations[i];
     final selected = i == widget.selectedIndex;
-    // The press rides a `Listener`: a tap recognizer delays `onTapDown` by
-    // `kPressTimeout` (100ms), which would eat most of a springFast squash.
-    return Semantics(
-      button: true,
-      selected: selected,
-      label: d.label,
-      onTap: () => widget.onDestinationSelected(i),
-      excludeSemantics: true,
-      child: Listener(
-        behavior: HitTestBehavior.opaque,
-        onPointerDown: (_) => _setPressed(i),
-        onPointerUp: (_) => _setPressed(null),
-        onPointerCancel: (_) => _setPressed(null),
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => widget.onDestinationSelected(i),
-          child: Padding(
-            padding: const EdgeInsets.only(
-              top: NvNavigationBar._top,
-              bottom: 4,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  height: 32,
-                  child: Icon(
-                    selected ? d.selectedIcon : d.icon,
-                    size: 24,
-                    color: selected
-                        ? colors.onSecondaryContainer
-                        : colors.onSurfaceVariant,
-                  ),
+    return Tooltip(
+      message: d.label,
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: d.label,
+        onTap: () => widget.onDestinationSelected(i),
+        excludeSemantics: true,
+        child: NvKeyboardAction(
+          onPressed: () => widget.onDestinationSelected(i),
+          onFocusChanged: (value) =>
+              setState(() => _focused = value ? i : null),
+          child: Listener(
+            behavior: HitTestBehavior.opaque,
+            onPointerDown: (_) => _setPressed(i),
+            onPointerUp: (_) => _setPressed(null),
+            onPointerCancel: (_) => _setPressed(null),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => widget.onDestinationSelected(i),
+              child: Container(
+                padding: const EdgeInsets.only(
+                  top: NvNavigationBar._top,
+                  bottom: 4,
                 ),
-                const SizedBox(height: 4),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    d.label,
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      color: selected
-                          ? colors.onSurface
-                          : colors.onSurfaceVariant,
-                      fontWeight: selected ? FontWeight.w700 : null,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  border: _focused == i
+                      ? Border.all(color: colors.primary, width: 2)
+                      : null,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      height: 32,
+                      child: Icon(
+                        selected ? d.selectedIcon : d.icon,
+                        size: 24,
+                        color: selected
+                            ? colors.onSecondaryContainer
+                            : colors.onSurfaceVariant,
+                      ),
                     ),
-                    maxLines: 1,
-                    softWrap: false,
-                  ),
+                    const SizedBox(height: 4),
+                    Text(
+                      d.label,
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: selected
+                            ? colors.onSurface
+                            : colors.onSurfaceVariant,
+                        fontWeight: selected ? FontWeight.w700 : null,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         ),

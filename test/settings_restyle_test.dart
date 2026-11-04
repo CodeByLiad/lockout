@@ -43,10 +43,11 @@ void main() {
     test('no widget or screen uses BorderRadius.zero', () {
       final offenders = <String>[];
       for (final dir in ['lib/widgets', 'lib/screens']) {
-        for (final f in Directory(dir)
-            .listSync(recursive: true)
-            .whereType<File>()
-            .where((f) => f.path.endsWith('.dart'))) {
+        for (final f
+            in Directory(dir)
+                .listSync(recursive: true)
+                .whereType<File>()
+                .where((f) => f.path.endsWith('.dart'))) {
           if (f.readAsStringSync().contains('BorderRadius.zero')) {
             offenders.add(f.path);
           }
@@ -58,10 +59,11 @@ void main() {
     test('screens do not hardcode palette colours', () {
       final offenders = <String>[];
       final hex = RegExp(r'Color\(0x[0-9A-Fa-f]{8}\)');
-      for (final f in Directory('lib/screens')
-          .listSync(recursive: true)
-          .whereType<File>()
-          .where((f) => f.path.endsWith('.dart'))) {
+      for (final f
+          in Directory('lib/screens')
+              .listSync(recursive: true)
+              .whereType<File>()
+              .where((f) => f.path.endsWith('.dart'))) {
         if (hex.hasMatch(f.readAsStringSync())) offenders.add(f.path);
       }
       expect(offenders, isEmpty);
@@ -98,8 +100,10 @@ void main() {
       await tester.tap(find.text('Calculate my target'));
       await settle(tester);
 
-      final stored = await DatabaseService.instance
-          .getSetting('target_weight_kg', defaultValue: '');
+      final stored = await DatabaseService.instance.getSetting(
+        'target_weight_kg',
+        defaultValue: '',
+      );
 
       // Flush the toast's auto-dismiss Timer so none is left pending when
       // the tree is torn down.
@@ -107,8 +111,9 @@ void main() {
       return stored;
     }
 
-    testWidgets('a non-finite target weight never reaches the database',
-        (tester) async {
+    testWidgets('a non-finite target weight never reaches the database', (
+      tester,
+    ) async {
       // `double.tryParse('Infinity')` succeeds, so an unguarded save let the
       // BODY screen's TARGET tile render "Infinity kg" and poisoned every
       // calculation downstream of the goal profile.
@@ -122,8 +127,9 @@ void main() {
       expect(profile.targetWeightKg.isFinite, isTrue);
     });
 
-    testWidgets('a negative target weight never reaches the database',
-        (tester) async {
+    testWidgets('a negative target weight never reaches the database', (
+      tester,
+    ) async {
       final stored = await saveTargetWeight(tester, '-72');
 
       final parsed = double.tryParse(stored);
@@ -140,8 +146,9 @@ void main() {
   // scroll view runs to the physical bottom of the screen and fixed padding
   // alone cannot clear a 48dp navigation bar. The tab screens escape this
   // because BottomNav carries its own SafeArea; a pushed route has nothing.
-  testWidgets('the last settings card scrolls clear of the navigation bar',
-      (tester) async {
+  testWidgets('the last settings card scrolls clear of the navigation bar', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(640, 1000);
     tester.view.devicePixelRatio = 1.0;
     tester.view.padding = const FakeViewPadding(bottom: 48);
@@ -234,11 +241,13 @@ void main() {
     await db.saveSetting('age', '30');
     await db.saveSetting('target_weight_kg', '70');
     await db.saveSetting('goal_weeks', '4');
-    await db.insertBodyLog(BodyEntry(
-      id: 'seed-plan',
-      dateStr: '2026-09-10',
-      weightKg: 100.0,
-    ).toMap());
+    await db.insertBodyLog(
+      BodyEntry(
+        id: 'seed-plan',
+        dateStr: '2026-09-10',
+        weightKg: 100.0,
+      ).toMap(),
+    );
   }
 
   // Step 5 of the brief is the task's only new user-facing capability, and
@@ -248,14 +257,20 @@ void main() {
   testWidgets('the About row pushes the About screen', (tester) async {
     await pumpSettings(tester);
 
-    expect(find.byType(AboutScreen), findsNothing,
-        reason: 'About must arrive by the tap, not by already being there');
+    expect(
+      find.byType(AboutScreen),
+      findsNothing,
+      reason: 'About must arrive by the tap, not by already being there',
+    );
 
     await tester.tap(find.text('About Lockout'));
     await tester.pumpAndSettle();
 
-    expect(find.byType(AboutScreen), findsOneWidget,
-        reason: 'the About row is the only way into the About screen');
+    expect(
+      find.byType(AboutScreen),
+      findsOneWidget,
+      reason: 'the About row is the only way into the About screen',
+    );
   });
 
   /// The text sitting in the field labelled [label].
@@ -285,8 +300,10 @@ void main() {
       await tester.tap(find.text('Save height'));
       await settle(tester);
 
-      final stored = await DatabaseService.instance
-          .getSetting('height_cm', defaultValue: '');
+      final stored = await DatabaseService.instance.getSetting(
+        'height_cm',
+        defaultValue: '',
+      );
 
       // Flush the toast's auto-dismiss Timer so none is left pending when
       // the tree is torn down.
@@ -294,8 +311,9 @@ void main() {
       return stored;
     }
 
-    testWidgets('a non-finite height never reaches the database',
-        (tester) async {
+    testWidgets('a non-finite height never reaches the database', (
+      tester,
+    ) async {
       // `double.tryParse('Infinity')` succeeds and `Infinity > 0` is true, so
       // an unguarded save stored the literal string 'Infinity'. Reading it
       // back threw `Unsupported operation: Infinity or NaN toInt` out of
@@ -344,8 +362,9 @@ void main() {
     /// the same throw inside `_import` swallowed the reschedule, the
     /// `onSettingsUpdated` callback and the "Import complete" toast.
     for (final poison in ['Infinity', 'NaN']) {
-      testWidgets('a stored height of $poison loads as the default',
-          (tester) async {
+      testWidgets('a stored height of $poison loads as the default', (
+        tester,
+      ) async {
         await seedCalculablePlan(heightCm: poison);
         await pumpSettings(tester);
 
@@ -389,34 +408,52 @@ void main() {
     /// reaching for a platform instance nothing ever registered.
     void answerTheTimezoneChannel(WidgetTester tester) {
       const timezone = MethodChannel('flutter_timezone');
-      tester.binding.defaultBinaryMessenger
-          .setMockMethodCallHandler(timezone, (call) async => 'UTC');
-      addTearDown(() => tester.binding.defaultBinaryMessenger
-          .setMockMethodCallHandler(timezone, null));
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        timezone,
+        (call) async => 'UTC',
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          timezone,
+          null,
+        ),
+      );
     }
 
-    testWidgets('switching reminders on refuses rather than throwing',
-        (tester) async {
+    testWidgets('switching reminders on refuses rather than throwing', (
+      tester,
+    ) async {
       answerTheTimezoneChannel(tester);
       await pumpSettings(tester);
 
-      final toggle = find.widgetWithText(NvSwitchRow, 'Daily training nudge');
+      final toggle = find.widgetWithText(NvSwitchRow, 'Training reminder');
       await tester.tap(
         find.descendant(of: toggle, matching: find.byType(Switch)),
       );
       await settle(tester);
 
-      expect(tester.takeException(), isNull,
-          reason: 'the toggle awaits `requestPermission()`, which awaits an '
-              '`init()` that throws here, with nothing between them');
-      expect(tester.widget<NvSwitchRow>(toggle).value, isFalse,
-          reason: 'a switch that goes on while the service is dead promises '
-              'reminders that can never fire');
-      expect(find.textContaining('Notification permission denied'),
-          findsOneWidget,
-          reason: 'a service that cannot start and a user who declines are '
-              'the same outcome for this caller: no reminders, and a switch '
-              'that stays off rather than lying');
+      expect(
+        tester.takeException(),
+        isNull,
+        reason:
+            'the toggle awaits `requestPermission()`, which awaits an '
+            '`init()` that throws here, with nothing between them',
+      );
+      expect(
+        tester.widget<NvSwitchRow>(toggle).value,
+        isFalse,
+        reason:
+            'a switch that goes on while the service is dead promises '
+            'reminders that can never fire',
+      );
+      expect(
+        find.textContaining('Notification permission denied'),
+        findsOneWidget,
+        reason:
+            'a service that cannot start and a user who declines are '
+            'the same outcome for this caller: no reminders, and a switch '
+            'that stays off rather than lying',
+      );
 
       await tester.pump(const Duration(seconds: 6));
     });
@@ -430,16 +467,18 @@ void main() {
       answerTheTimezoneChannel(tester);
 
       final realPicker = FilePickerPlatform.instance;
-      FilePickerPlatform.instance = _StubFilePicker(jsonEncode({
-        'app': 'lockout',
-        'schemaVersion': 2,
-        'data': {
-          'user_settings': [
-            {'key': 'reminders_enabled', 'value': 'true'},
-            {'key': 'reminder_hour', 'value': '7'},
-          ],
-        },
-      }));
+      FilePickerPlatform.instance = _StubFilePicker(
+        jsonEncode({
+          'app': 'lockout',
+          'schemaVersion': 2,
+          'data': {
+            'user_settings': [
+              {'key': 'reminders_enabled', 'value': 'true'},
+              {'key': 'reminder_hour', 'value': '7'},
+            ],
+          },
+        }),
+      );
       addTearDown(() => FilePickerPlatform.instance = realPicker);
       addTearDown(() => SettingsBody.importInFlight.value = false);
 
@@ -449,22 +488,28 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
 
       var callbacks = 0;
-      await tester.pumpWidget(MaterialApp(
-        theme: lockoutTestTheme(),
-        home: SettingsScreen(onSettingsUpdated: () => callbacks++),
-      ));
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: lockoutTestTheme(),
+          home: SettingsScreen(onSettingsUpdated: () => callbacks++),
+        ),
+      );
       await settle(tester);
 
-      await tester.tap(find.text('Import backup JSON'));
+      await tester.tap(find.text('Restore backup'));
       await settle(tester);
       await tester.tap(find.text('Choose file'));
       await settle(tester);
 
       expect(tester.takeException(), isNull);
       expect(callbacks, 1, reason: 'onSettingsUpdated must still fire');
-      expect(find.textContaining('Import complete'), findsOneWidget,
-          reason: 'the import applied, so the user must be told so even when '
-              'the reminders inside it cannot be scheduled');
+      expect(
+        find.textContaining('Import complete'),
+        findsOneWidget,
+        reason:
+            'the import applied, so the user must be told so even when '
+            'the reminders inside it cannot be scheduled',
+      );
 
       await tester.pump(const Duration(seconds: 6));
     });
@@ -476,22 +521,25 @@ void main() {
     /// never answers at all, so the `await` inside `init()` hangs forever
     /// and nothing after it in `_import` runs. Mocking them also makes the
     /// reschedule observable — nothing registers a
-    /// `FlutterLocalNotificationsPlatform` in a test, so
+    /// `FlutterLocalRemindersPlatform` in a test, so
     /// `registerWith()` here stands in for the plugin registrant.
-    const notifications =
-        MethodChannel('dexterous.com/flutter/local_notifications');
+    const notifications = MethodChannel(
+      'dexterous.com/flutter/local_notifications',
+    );
     const timezone = MethodChannel('flutter_timezone');
 
     /// Drives the whole import tail through the UI — picker, restore,
     /// reschedule, callback, toast — over [raw], and hands back the three
     /// things the tail is pinned on.
     Future<
-        ({
-          List<String> notificationCalls,
-          int callbacks,
-          SnackBar toast,
-          bool? lockWhilePicking,
-        })> runImport(WidgetTester tester, String raw) async {
+      ({
+        List<String> notificationCalls,
+        int callbacks,
+        SnackBar toast,
+        bool? lockWhilePicking,
+      })
+    >
+    runImport(WidgetTester tester, String raw) async {
       final realPicker = FilePickerPlatform.instance;
       final picker = _StubFilePicker(raw);
       FilePickerPlatform.instance = picker;
@@ -509,12 +557,22 @@ void main() {
           return call.method == 'initialize' ? true : null;
         },
       );
-      addTearDown(() => tester.binding.defaultBinaryMessenger
-          .setMockMethodCallHandler(notifications, null));
-      tester.binding.defaultBinaryMessenger
-          .setMockMethodCallHandler(timezone, (call) async => 'UTC');
-      addTearDown(() => tester.binding.defaultBinaryMessenger
-          .setMockMethodCallHandler(timezone, null));
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          notifications,
+          null,
+        ),
+      );
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        timezone,
+        (call) async => 'UTC',
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          timezone,
+          null,
+        ),
+      );
 
       var callbacks = 0;
       tester.view.physicalSize = const Size(800, 6000);
@@ -522,13 +580,15 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
 
-      await tester.pumpWidget(MaterialApp(
-        theme: lockoutTestTheme(),
-        home: SettingsScreen(onSettingsUpdated: () => callbacks++),
-      ));
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: lockoutTestTheme(),
+          home: SettingsScreen(onSettingsUpdated: () => callbacks++),
+        ),
+      );
       await settle(tester);
 
-      await tester.tap(find.text('Import backup JSON'));
+      await tester.tap(find.text('Restore backup'));
       await settle(tester);
       await tester.tap(find.text('Choose file'));
       await settle(tester);
@@ -545,82 +605,101 @@ void main() {
     }
 
     String backupJson(Object? weightKg) => jsonEncode({
-          'app': 'lockout',
-          'schemaVersion': 2,
-          'data': {
-            'body_logs': [
-              {
-                'id': '1',
-                'date_str': '2026-01-01',
-                'weight_kg': weightKg,
-                'waist_cm': 0.0,
-              },
-            ],
-            'user_settings': [
-              {'key': 'reminders_enabled', 'value': 'true'},
-              {'key': 'reminder_hour', 'value': '7'},
-              {'key': 'reminder_minute', 'value': '30'},
-            ],
+      'app': 'lockout',
+      'schemaVersion': 2,
+      'data': {
+        'body_logs': [
+          {
+            'id': '1',
+            'date_str': '2026-01-01',
+            'weight_kg': weightKg,
+            'waist_cm': 0.0,
           },
-        });
-
-    testWidgets(
-        'a backup carrying a non-numeric weight_kg still reschedules, still '
-        'calls back and still tells the user the import applied',
-        (tester) async {
-      // A hand-edited backup puts the string 'heavy' into
-      // `body_logs.weight_kg` — a REAL-affinity column SQLite will happily
-      // keep as TEXT. `_loadSettings` reads it back through
-      // `GoalService.snapshot()`, whose `bodyRows.first['weight_kg'] as num`
-      // threw a `TypeError` on the `await` that sits ahead of
-      // `rescheduleAll()`, `onSettingsUpdated()` and the "Import complete"
-      // toast: the import applied, the OS kept the pre-restore reminder
-      // schedule forever and the user was told nothing.
-      //
-      // The coercion happens inside `BackupService.importFromJson`, so the
-      // bad value never reaches the column at all and every caller is
-      // covered at once. This test still drives the whole import tail — the
-      // reschedule, the callback and the toast are what it was written to
-      // pin — but the expected outcome is a clean read-back rather than a
-      // reported failure.
-      final imported = await runImport(tester, backupJson('heavy'));
-
-      // The rows did land — this is a completed import, not a rejected one
-      // — and the poisoned cell is a number by the time it is stored.
-      final rows = await DatabaseService.instance.getBodyLogs();
-      expect(rows.single['weight_kg'], isA<num>());
-
-      expect(tester.takeException(), isNull);
-      expect(imported.notificationCalls, contains('zonedSchedule'),
-          reason: 'the imported reminder settings must reach the OS');
-      expect(imported.callbacks, 1,
-          reason: 'onSettingsUpdated must still fire');
-      expect(find.textContaining('Import complete'), findsOneWidget);
+        ],
+        'user_settings': [
+          {'key': 'reminders_enabled', 'value': 'true'},
+          {'key': 'reminder_hour', 'value': '7'},
+          {'key': 'reminder_minute', 'value': '30'},
+        ],
+      },
     });
 
     testWidgets(
-        'the user is told how many cells the import had to rewrite, and told '
-        'it in the warning styling', (tester) async {
-      final imported = await runImport(tester, backupJson('heavy'));
+      'a backup carrying a non-numeric weight_kg still reschedules, still '
+      'calls back and still tells the user the import applied',
+      (tester) async {
+        // A hand-edited backup puts the string 'heavy' into
+        // `body_logs.weight_kg` — a REAL-affinity column SQLite will happily
+        // keep as TEXT. `_loadSettings` reads it back through
+        // `GoalService.snapshot()`, whose `bodyRows.first['weight_kg'] as num`
+        // threw a `TypeError` on the `await` that sits ahead of
+        // `rescheduleAll()`, `onSettingsUpdated()` and the "Import complete"
+        // toast: the import applied, the OS kept the pre-restore reminder
+        // schedule forever and the user was told nothing.
+        //
+        // The coercion happens inside `BackupService.importFromJson`, so the
+        // bad value never reaches the column at all and every caller is
+        // covered at once. This test still drives the whole import tail — the
+        // reschedule, the callback and the toast are what it was written to
+        // pin — but the expected outcome is a clean read-back rather than a
+        // reported failure.
+        final imported = await runImport(tester, backupJson('heavy'));
 
-      expect(find.textContaining('Import complete'), findsOneWidget);
-      expect(find.textContaining('could not be read'), findsOneWidget,
-          reason: 'a rewritten cell must not be reported as a clean import');
-      expect(find.textContaining('1 value'), findsOneWidget);
+        // The rows did land — this is a completed import, not a rejected one
+        // — and the poisoned cell is a number by the time it is stored.
+        final rows = await DatabaseService.instance.getBodyLogs();
+        expect(rows.single['weight_kg'], isA<num>());
 
-      final colors = lockoutTestTheme().colorScheme;
-      expect(imported.toast.backgroundColor, colors.errorContainer,
-          reason: 'it must look different from a clean import, not just '
-              'read differently');
-    });
+        expect(tester.takeException(), isNull);
+        expect(
+          imported.notificationCalls,
+          contains('zonedSchedule'),
+          reason: 'the imported reminder settings must reach the OS',
+        );
+        expect(
+          imported.callbacks,
+          1,
+          reason: 'onSettingsUpdated must still fire',
+        );
+        expect(find.textContaining('Import complete'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'the user is told how many cells the import had to rewrite, and told '
+      'it in the warning styling',
+      (tester) async {
+        final imported = await runImport(tester, backupJson('heavy'));
+
+        expect(find.textContaining('Import complete'), findsOneWidget);
+        expect(
+          find.textContaining('could not be read'),
+          findsOneWidget,
+          reason: 'a rewritten cell must not be reported as a clean import',
+        );
+        expect(find.textContaining('1 value'), findsOneWidget);
+
+        final colors = lockoutTestTheme().colorScheme;
+        expect(
+          imported.toast.backgroundColor,
+          colors.errorContainer,
+          reason:
+              'it must look different from a clean import, not just '
+              'read differently',
+        );
+      },
+    );
 
     testWidgets('a clean backup gets no warning and no count', (tester) async {
       final imported = await runImport(tester, backupJson(81.25));
 
       expect(tester.takeException(), isNull);
       expect(find.textContaining('Import complete'), findsOneWidget);
-      expect(find.textContaining('could not be read'), findsNothing,
-          reason: 'nothing was rewritten, so there is nothing to warn about');
+      expect(
+        find.textContaining('could not be read'),
+        findsNothing,
+        reason: 'nothing was rewritten, so there is nothing to warn about',
+      );
 
       final colors = lockoutTestTheme().colorScheme;
       expect(imported.toast.backgroundColor, colors.inverseSurface);
@@ -633,197 +712,259 @@ void main() {
     // belongs to the screen — raising the lock for the destructive
     // operation only, and dropping it after. That `MainScreen` obeys it is
     // pinned in `main_screen_test.dart`.
-    testWidgets('a destructive import raises the nav lock and drops it again',
-        (tester) async {
+    testWidgets('a destructive import raises the nav lock and drops it again', (
+      tester,
+    ) async {
       final imported = await runImport(tester, backupJson(81.25));
 
-      expect(imported.lockWhilePicking, isTrue,
-          reason: 'the lock must be up while the database is being '
-              'replaced, not merely after');
-      expect(SettingsBody.importInFlight.value, isFalse,
-          reason: 'a lock that outlives its import leaves the nav bar dead '
-              'for the rest of the session');
+      expect(
+        imported.lockWhilePicking,
+        isTrue,
+        reason:
+            'the lock must be up while the database is being '
+            'replaced, not merely after',
+      );
+      expect(
+        SettingsBody.importInFlight.value,
+        isFalse,
+        reason:
+            'a lock that outlives its import leaves the nav bar dead '
+            'for the rest of the session',
+      );
     });
 
     testWidgets(
-        'a throw inside the reschedule still calls back and still tells the '
-        'user the import applied', (tester) async {
-      // The gap the previous guard could not see. `rescheduleAll()` returns
-      // early whenever `_ensureReady()` is false, and the test above it in
-      // this file leaves the plugin absent, so it never reaches anything
-      // that can throw. `runImport` registers the plugin and answers both
-      // channels, so this one gets all the way into `_workoutReminderBody`
-      // -> `ScheduleService.resolveToday()` — the database read the import
-      // has just replaced the contents of.
-      //
-      // The throw is injected through `ScheduleService.calendarDay`, the
-      // seam that class documents for exactly this (restored below). The
-      // honest reason it is a seam and not poisoned backup data: every
-      // model read on this path now goes through `NumericGuard` or a
-      // TEXT-affinity column, so no JSON a backup file can carry still
-      // reaches a cast that throws. What is left is the unenumerable class
-      // — a schema the running build does not know, a disk error — and the
-      // consequence of leaving it unguarded is unchanged and is what this
-      // pins: the import applies, `onSettingsUpdated()` never fires and the
-      // user is told nothing.
-      //
-      // What the OS is left holding, checked rather than assumed:
-      // `rescheduleAll()` calls `await cancelAll()`
-      // (`notification_service.dart:143`) BEFORE it builds any body, so by
-      // the time the injected throw lands both reminder ids are already
-      // cancelled. Reminders are OFF — not stale — until the next settings
-      // change calls `rescheduleAll()` again. That is worse than keeping
-      // the pre-restore schedule, and it is what the toast has to be judged
-      // against.
-      final realCalendar = ScheduleService.calendarDay;
-      addTearDown(() => ScheduleService.calendarDay = realCalendar);
-      ScheduleService.calendarDay =
-          (_) => throw StateError('the schedule read failed');
+      'a throw inside the reschedule still calls back and still tells the '
+      'user the import applied',
+      (tester) async {
+        // The gap the previous guard could not see. `rescheduleAll()` returns
+        // early whenever `_ensureReady()` is false, and the test above it in
+        // this file leaves the plugin absent, so it never reaches anything
+        // that can throw. `runImport` registers the plugin and answers both
+        // channels, so this one gets all the way into `_workoutReminderBody`
+        // -> `ScheduleService.resolveToday()` — the database read the import
+        // has just replaced the contents of.
+        //
+        // The throw is injected through `ScheduleService.calendarDay`, the
+        // seam that class documents for exactly this (restored below). The
+        // honest reason it is a seam and not poisoned backup data: every
+        // model read on this path now goes through `NumericGuard` or a
+        // TEXT-affinity column, so no JSON a backup file can carry still
+        // reaches a cast that throws. What is left is the unenumerable class
+        // — a schema the running build does not know, a disk error — and the
+        // consequence of leaving it unguarded is unchanged and is what this
+        // pins: the import applies, `onSettingsUpdated()` never fires and the
+        // user is told nothing.
+        //
+        // What the OS is left holding, checked rather than assumed:
+        // `rescheduleAll()` calls `await cancelAll()`
+        // (`notification_service.dart:143`) BEFORE it builds any body, so by
+        // the time the injected throw lands both reminder ids are already
+        // cancelled. Reminders are OFF — not stale — until the next settings
+        // change calls `rescheduleAll()` again. That is worse than keeping
+        // the pre-restore schedule, and it is what the toast has to be judged
+        // against.
+        final realCalendar = ScheduleService.calendarDay;
+        addTearDown(() => ScheduleService.calendarDay = realCalendar);
+        ScheduleService.calendarDay = (_) =>
+            throw StateError('the schedule read failed');
 
-      final imported = await runImport(
-        tester,
-        jsonEncode({
-          'app': 'lockout',
-          'schemaVersion': 2,
-          'data': {
-            // ROTATING, so resolution runs through `matchByRotation` and
-            // therefore through the calendar above.
-            'routines': [
-              {
-                'id': 'r1',
-                'name': 'Push pull legs',
-                'scheduling_mode': 'ROTATING',
-                'is_active': 1,
-                'created_at': '2026-01-01',
-              },
-            ],
-            'training_days': [
-              {
-                'id': 'd1',
-                'routine_id': 'r1',
-                'name': 'Push',
-                'tag': 'A',
-                'order_index': 0,
-              },
-            ],
-            'user_settings': [
-              {'key': 'reminders_enabled', 'value': 'true'},
-              {'key': 'active_routine_id', 'value': 'r1'},
-            ],
-          },
-        }),
-      );
+        final imported = await runImport(
+          tester,
+          jsonEncode({
+            'app': 'lockout',
+            'schemaVersion': 2,
+            'data': {
+              // ROTATING, so resolution runs through `matchByRotation` and
+              // therefore through the calendar above.
+              'routines': [
+                {
+                  'id': 'r1',
+                  'name': 'Push pull legs',
+                  'scheduling_mode': 'ROTATING',
+                  'is_active': 1,
+                  'created_at': '2026-01-01',
+                },
+              ],
+              'training_days': [
+                {
+                  'id': 'd1',
+                  'routine_id': 'r1',
+                  'name': 'Push',
+                  'tag': 'A',
+                  'order_index': 0,
+                },
+              ],
+              'user_settings': [
+                {'key': 'reminders_enabled', 'value': 'true'},
+                {'key': 'active_routine_id', 'value': 'r1'},
+              ],
+            },
+          }),
+        );
 
-      expect(tester.takeException(), isNull,
-          reason: 'an unguarded await here is an unhandled async error');
-      expect(imported.notificationCalls, contains('cancel'),
-          reason: 'the first half of the premise: the throw lands after '
-              '`cancelAll()`, so the OS has already been emptied');
-      expect(imported.notificationCalls, isNot(contains('zonedSchedule')),
-          reason: 'the second half: nothing was put back, so reminders are '
-              'off entirely until the next settings change');
-      expect(imported.callbacks, 1,
-          reason: 'the import applied, so the host has to re-read it '
-              'whatever the reminder schedule did');
-      expect(find.textContaining('Import complete'), findsOneWidget,
-          reason: 'the toast is the part that must survive — a restore the '
-              'user is never told about is the worst outcome here');
-      expect(find.textContaining('Reminders could not be rescheduled'),
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: 'an unguarded await here is an unhandled async error',
+        );
+        expect(
+          imported.notificationCalls,
+          contains('cancel'),
+          reason:
+              'the first half of the premise: the throw lands after '
+              '`cancelAll()`, so the OS has already been emptied',
+        );
+        expect(
+          imported.notificationCalls,
+          isNot(contains('zonedSchedule')),
+          reason:
+              'the second half: nothing was put back, so reminders are '
+              'off entirely until the next settings change',
+        );
+        expect(
+          imported.callbacks,
+          1,
+          reason:
+              'the import applied, so the host has to re-read it '
+              'whatever the reminder schedule did',
+        );
+        expect(
+          find.textContaining('Import complete'),
           findsOneWidget,
-          reason: 'and it must not report an unqualified success while the '
-              'OS holds no reminder at all');
-      expect(find.textContaining('Open Notifications to set them again'),
+          reason:
+              'the toast is the part that must survive — a restore the '
+              'user is never told about is the worst outcome here',
+        );
+        expect(
+          find.textContaining('Reminders could not be rescheduled'),
           findsOneWidget,
-          reason: 'reminders are off, so the message has to name the repair '
+          reason:
+              'and it must not report an unqualified success while the '
+              'OS holds no reminder at all',
+        );
+        expect(
+          find.textContaining('Open Notifications to set them again'),
+          findsOneWidget,
+          reason:
+              'reminders are off, so the message has to name the repair '
               'rather than leave the user assuming the old schedule '
-              'survived');
-      expect(imported.toast.backgroundColor,
+              'survived',
+        );
+        expect(
+          imported.toast.backgroundColor,
           lockoutTestTheme().colorScheme.errorContainer,
-          reason: 'it must look different from a clean import');
-    });
+          reason: 'it must look different from a clean import',
+        );
+      },
+    );
 
     // The test below replaces the seam; this one proves production holds the
     // real read, the way `widget_test.dart` pins `calendarDay`.
     test('the theme read production uses is the stored one', () {
-      expect(ThemeController.readStoredChoice,
-          same(ThemeController.defaultReadStoredChoice));
+      expect(
+        ThemeController.readStoredChoice,
+        same(ThemeController.defaultReadStoredChoice),
+      );
     });
 
     testWidgets(
-        'a throw in the theme re-read says the fields could not be read back',
-        (tester) async {
-      // `reloaded` started `true` and was falsified only by the INNER catch
-      // around `_loadSettings()`. `ThemeController.load()` runs AHEAD of it
-      // and is the tail's first await, so a throw there jumped straight to
-      // the outer catch with `_loadSettings()` never called at all: the
-      // toast read "Import complete. N rows restored." while every field on
-      // screen — height, age, target weight, the calorie target, the
-      // reminder switches — still held its pre-import value. The one
-      // sentence that would have warned the user is the one the flag
-      // suppressed.
-      //
-      // `ThemeController.readStoredChoice` is the seam that class documents
-      // for exactly this (restored below).
-      final realRead = ThemeController.readStoredChoice;
-      addTearDown(() => ThemeController.readStoredChoice = realRead);
-      ThemeController.readStoredChoice =
-          () => throw StateError('the theme read failed');
+      'a throw in the theme re-read says the fields could not be read back',
+      (tester) async {
+        // `reloaded` started `true` and was falsified only by the INNER catch
+        // around `_loadSettings()`. `ThemeController.load()` runs AHEAD of it
+        // and is the tail's first await, so a throw there jumped straight to
+        // the outer catch with `_loadSettings()` never called at all: the
+        // toast read "Import complete. N rows restored." while every field on
+        // screen — height, age, target weight, the calorie target, the
+        // reminder switches — still held its pre-import value. The one
+        // sentence that would have warned the user is the one the flag
+        // suppressed.
+        //
+        // `ThemeController.readStoredChoice` is the seam that class documents
+        // for exactly this (restored below).
+        final realRead = ThemeController.readStoredChoice;
+        addTearDown(() => ThemeController.readStoredChoice = realRead);
+        ThemeController.readStoredChoice = () =>
+            throw StateError('the theme read failed');
 
-      // A clean payload, so "could not be read back" can only have come
-      // from the failed re-read and not from a coerced cell.
-      final imported = await runImport(tester, backupJson(81.25));
+        // A clean payload, so "could not be read back" can only have come
+        // from the failed re-read and not from a coerced cell.
+        final imported = await runImport(tester, backupJson(81.25));
 
-      expect(tester.takeException(), isNull,
-          reason: 'an unguarded await here is an unhandled async error');
-      expect(imported.callbacks, 1,
-          reason: 'the rows did land, so the host still has to re-read');
-      expect(find.textContaining('Import complete'), findsOneWidget,
-          reason: 'the restore applied and the user must be told so');
-      expect(find.textContaining('could not be read back'), findsOneWidget,
-          reason: 'the screen is showing pre-import values, so reporting a '
-              'clean read-back is a false report of what is on screen');
-      expect(imported.toast.backgroundColor,
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: 'an unguarded await here is an unhandled async error',
+        );
+        expect(
+          imported.callbacks,
+          1,
+          reason: 'the rows did land, so the host still has to re-read',
+        );
+        expect(
+          find.textContaining('Import complete'),
+          findsOneWidget,
+          reason: 'the restore applied and the user must be told so',
+        );
+        expect(
+          find.textContaining('could not be read back'),
+          findsOneWidget,
+          reason:
+              'the screen is showing pre-import values, so reporting a '
+              'clean read-back is a false report of what is on screen',
+        );
+        expect(
+          imported.toast.backgroundColor,
           lockoutTestTheme().colorScheme.errorContainer,
-          reason: 'it must look different from a clean import');
-    });
+          reason: 'it must look different from a clean import',
+        );
+      },
+    );
 
-    testWidgets('a theme reload failure does not blame the backup file',
-        (tester) async {
+    testWidgets('a theme reload failure does not blame the backup file', (
+      tester,
+    ) async {
       // The file restored fine; it was the re-read that failed. Telling the
       // user to check the file sends them after the wrong suspect.
       final realRead = ThemeController.readStoredChoice;
       addTearDown(() => ThemeController.readStoredChoice = realRead);
-      ThemeController.readStoredChoice =
-          () => throw StateError('the theme read failed');
+      ThemeController.readStoredChoice = () =>
+          throw StateError('the theme read failed');
 
       await runImport(tester, backupJson(81.25));
 
       expect(find.textContaining('could not be read back'), findsOneWidget);
-      expect(find.textContaining('Check the backup file'), findsNothing,
-          reason: 'nothing in the file was rewritten, so it is not the cause');
+      expect(
+        find.textContaining('Check the backup file'),
+        findsNothing,
+        reason: 'nothing in the file was rewritten, so it is not the cause',
+      );
     });
 
-    testWidgets('a failed re-read after a rewritten cell still names the file',
-        (tester) async {
-      // Characterisation: here the file really is a suspect, because the
-      // restore had to rewrite a value it could not read.
-      final realRead = ThemeController.readStoredChoice;
-      addTearDown(() => ThemeController.readStoredChoice = realRead);
-      ThemeController.readStoredChoice =
-          () => throw StateError('the theme read failed');
+    testWidgets(
+      'a failed re-read after a rewritten cell still names the file',
+      (tester) async {
+        // Characterisation: here the file really is a suspect, because the
+        // restore had to rewrite a value it could not read.
+        final realRead = ThemeController.readStoredChoice;
+        addTearDown(() => ThemeController.readStoredChoice = realRead);
+        ThemeController.readStoredChoice = () =>
+            throw StateError('the theme read failed');
 
-      await runImport(tester, backupJson('heavy'));
+        await runImport(tester, backupJson('heavy'));
 
-      expect(find.textContaining('Check the backup file'), findsOneWidget);
-    });
+        expect(find.textContaining('Check the backup file'), findsOneWidget);
+      },
+    );
 
     testWidgets('a warning toast stays 8 seconds', (tester) async {
       // A worst-case import toast runs to ~180 characters; the 4-second
       // default is unreadable at large text scales.
       final realRead = ThemeController.readStoredChoice;
       addTearDown(() => ThemeController.readStoredChoice = realRead);
-      ThemeController.readStoredChoice =
-          () => throw StateError('the theme read failed');
+      ThemeController.readStoredChoice = () =>
+          throw StateError('the theme read failed');
 
       final imported = await runImport(tester, backupJson(81.25));
 
@@ -866,16 +1007,27 @@ void main() {
       final clear = body.indexOf('importInFlight.value = false', closed);
 
       expect(raise, isNonNegative);
-      expect(opened, greaterThan(raise),
-          reason: 'the lock is raised, then the call that can throw must be '
-              'entered through a try');
-      expect(call, greaterThan(opened),
-          reason: 'the import call must be inside that try, not before it');
+      expect(
+        opened,
+        greaterThan(raise),
+        reason:
+            'the lock is raised, then the call that can throw must be '
+            'entered through a try',
+      );
+      expect(
+        call,
+        greaterThan(opened),
+        reason: 'the import call must be inside that try, not before it',
+      );
       expect(closed, greaterThan(call));
-      expect(clear, greaterThan(closed),
-          reason: 'a clear that sits after the call instead of in a finally '
-              'is skipped by a throw, and the nav bar stays locked for the '
-              'rest of the session');
+      expect(
+        clear,
+        greaterThan(closed),
+        reason:
+            'a clear that sits after the call instead of in a finally '
+            'is skipped by a throw, and the nav bar stays locked for the '
+            'rest of the session',
+      );
     });
   });
 
@@ -890,20 +1042,21 @@ void main() {
       await pumpSettings(tester);
 
       for (final heading in [
-        'Look and feel',
+        'Color & shape',
         'Units',
         'Training',
-        'Food',
-        'Notifications',
-        'Data',
+        'Profile & goals',
+        'Reminders',
+        'Your data',
         'About',
       ]) {
         expect(find.text(heading), findsOneWidget, reason: heading);
       }
     });
 
-    testWidgets('a section heading sits at 20 and its grouped list at 16',
-        (tester) async {
+    testWidgets('a section heading sits at 20 and its grouped list at 16', (
+      tester,
+    ) async {
       // House section 7, restated in `.spine/config.md`: screen margins are
       // 20 for text and headings and 16 for grouped lists and cards. The
       // scroll view used to pad itself by `screenPadding` and then let
@@ -914,26 +1067,28 @@ void main() {
       await pumpSettings(tester);
 
       expect(
-        tester.getTopLeft(find.text('Notifications')).dx,
+        tester.getTopLeft(find.text('Reminders')).dx,
         LockoutTheme.screenPadding,
         reason: 'a section heading is text, so it takes the 20dp margin',
       );
 
       final rows = find.ancestor(
-        of: find.text('Daily training nudge'),
+        of: find.text('Training reminder'),
         matching: find.byType(NvGroupedList),
       );
       expect(
         tester.getTopLeft(rows).dx,
         LockoutTheme.cardPadding,
-        reason: 'a grouped list takes the 16dp margin, so it sits slightly '
+        reason:
+            'a grouped list takes the 16dp margin, so it sits slightly '
             'wider than its own heading rather than inside a second copy of '
             'the screen margin',
       );
     });
 
-    testWidgets('a section extra takes the margin its own kind asks for',
-        (tester) async {
+    testWidgets('a section extra takes the margin its own kind asks for', (
+      tester,
+    ) async {
       // The half the assertion above could not reach. It pins the heading
       // and the `rows` group — the two children that were already right —
       // while `_section` handed everything in `extras` the grouped-list
@@ -956,7 +1111,8 @@ void main() {
       expect(
         tester.getTopLeft(find.widgetWithText(NvButton, 'Save height')).dx,
         LockoutTheme.screenPadding,
-        reason: 'and a save button, which is neither a card nor a grouped '
+        reason:
+            'and a save button, which is neither a card nor a grouped '
             'list',
       );
 
@@ -968,37 +1124,43 @@ void main() {
       // group three lines above it.
       expect(
         tester
-            .getTopLeft(find.ancestor(
-              of: find.text(ActivityLevel.sedentary.label),
-              matching: find.byType(NvGroupedList),
-            ))
+            .getTopLeft(
+              find.ancestor(
+                of: find.text(ActivityLevel.sedentary.label),
+                matching: find.byType(NvGroupedList),
+              ),
+            )
             .dx,
         LockoutTheme.cardPadding,
-        reason: 'an extra that is a grouped list keeps the grouped-list '
+        reason:
+            'an extra that is a grouped list keeps the grouped-list '
             'margin',
       );
       expect(
         tester.getTopLeft(find.text('Activity level')).dx,
         LockoutTheme.screenPadding,
-        reason: 'while the caption above it is text, exactly as the section '
+        reason:
+            'while the caption above it is text, exactly as the section '
             'heading above the first group is',
       );
     });
 
-    testWidgets('a section with no rows keeps the 12dp heading gap',
-        (tester) async {
-      // Look and feel has no grouped list, so nothing sits between the
+    testWidgets('a section with no rows keeps the 12dp heading gap', (
+      tester,
+    ) async {
+      // Appearance has no grouped list, so nothing sits between the
       // heading and its first extra but the heading gap. The 16dp that
       // separates a group from the extras below it is not owed here.
       await pumpSettings(tester);
 
-      final heading = tester.getRect(find.text('Look and feel'));
+      final heading = tester.getRect(find.text('Color & shape'));
       final first = tester.getRect(find.text('Applies instantly.'));
       expect(first.top - heading.bottom, closeTo(LockoutTheme.headingGap, 0.5));
     });
 
-    testWidgets('every card marked in a section extra takes the 16dp margin',
-        (tester) async {
+    testWidgets('every card marked in a section extra takes the 16dp margin', (
+      tester,
+    ) async {
       // The Activity level group is pinned above; the Food section's two
       // filled cards are the other `_CardMargin` call sites. Characterisation
       // of the marker working at each, so a refactor that wraps one of them
@@ -1012,19 +1174,21 @@ void main() {
       await seedCalculablePlan();
       await pumpSettings(tester);
 
-      Finder surface(Finder inside) => find
-          .ancestor(of: inside, matching: find.byType(Container))
-          .first;
+      Finder surface(Finder inside) =>
+          find.ancestor(of: inside, matching: find.byType(Container)).first;
 
-      expect(tester.getTopLeft(surface(find.text('Daily target'))).dx,
-          LockoutTheme.cardPadding,
-          reason: 'the calculated plan is a card');
       expect(
-          tester
-              .getTopLeft(surface(find.textContaining('Target eased to a safe')))
-              .dx,
-          LockoutTheme.cardPadding,
-          reason: 'and the warning stacked under it sits on the same margin');
+        tester.getTopLeft(surface(find.text('Daily target'))).dx,
+        LockoutTheme.cardPadding,
+        reason: 'the calculated plan is a card',
+      );
+      expect(
+        tester
+            .getTopLeft(surface(find.textContaining('Target eased to a safe')))
+            .dx,
+        LockoutTheme.cardPadding,
+        reason: 'and the warning stacked under it sits on the same margin',
+      );
     });
 
     testWidgets('a tappable row clears the 48dp touch target', (tester) async {
@@ -1034,15 +1198,21 @@ void main() {
       final semantics = tester.ensureSemantics();
       await pumpSettings(tester);
 
-      final switchTile = tester.getSize(find.widgetWithText(
-        NvSwitchRow,
-        'Enable nutrition tab',
-      ));
-      expect(switchTile.height, greaterThanOrEqualTo(LockoutTheme.minTouchTarget));
+      final switchTile = tester.getSize(
+        find.widgetWithText(NvSwitchRow, 'Enable nutrition tab'),
+      );
+      expect(
+        switchTile.height,
+        greaterThanOrEqualTo(LockoutTheme.minTouchTarget),
+      );
 
-      final importButton =
-          tester.getSize(find.byKey(const Key('importBackupButton')));
-      expect(importButton.height, greaterThanOrEqualTo(LockoutTheme.minTouchTarget));
+      final importButton = tester.getSize(
+        find.byKey(const Key('importBackupButton')),
+      );
+      expect(
+        importButton.height,
+        greaterThanOrEqualTo(LockoutTheme.minTouchTarget),
+      );
 
       // The training-days stepper now lives behind a sheet (section 8
       // prefers a sheet to a dialog for a choice); open it to reach its two
@@ -1055,14 +1225,26 @@ void main() {
       final decrementButton = tester.getSize(
         find.widgetWithIcon(NvIconButton, Icons.remove_circle_outline),
       );
-      expect(decrementButton.width, greaterThanOrEqualTo(LockoutTheme.minTouchTarget));
-      expect(decrementButton.height, greaterThanOrEqualTo(LockoutTheme.minTouchTarget));
+      expect(
+        decrementButton.width,
+        greaterThanOrEqualTo(LockoutTheme.minTouchTarget),
+      );
+      expect(
+        decrementButton.height,
+        greaterThanOrEqualTo(LockoutTheme.minTouchTarget),
+      );
 
       final incrementButton = tester.getSize(
         find.widgetWithIcon(NvIconButton, Icons.add_circle_outline),
       );
-      expect(incrementButton.width, greaterThanOrEqualTo(LockoutTheme.minTouchTarget));
-      expect(incrementButton.height, greaterThanOrEqualTo(LockoutTheme.minTouchTarget));
+      expect(
+        incrementButton.width,
+        greaterThanOrEqualTo(LockoutTheme.minTouchTarget),
+      );
+      expect(
+        incrementButton.height,
+        greaterThanOrEqualTo(LockoutTheme.minTouchTarget),
+      );
 
       // Both ends announce what they do. The framework `IconButton` pair
       // these replaced carried no tooltip and no label at all, so TalkBack
@@ -1078,71 +1260,82 @@ void main() {
 
       for (final accent in LockoutAccent.all) {
         final size = tester.getSize(find.bySemanticsLabel(accent.name));
-        expect(size.width, greaterThanOrEqualTo(LockoutTheme.minTouchTarget),
-            reason: accent.key);
-        expect(size.height, greaterThanOrEqualTo(LockoutTheme.minTouchTarget),
-            reason: accent.key);
+        expect(
+          size.width,
+          greaterThanOrEqualTo(LockoutTheme.minTouchTarget),
+          reason: accent.key,
+        );
+        expect(
+          size.height,
+          greaterThanOrEqualTo(LockoutTheme.minTouchTarget),
+          reason: accent.key,
+        );
       }
 
       semantics.dispose();
     });
 
     testWidgets(
-        'the destructive ink sits on the confirmation, not the trigger that '
-        'only offers it',
-        (tester) async {
-      // Every shipped appearance happens to set `danger` to the same value as
-      // `ColorScheme.error`, so a test against the shipped theme could not
-      // tell the two roles apart. This one overrides `danger` to a sentinel
-      // that no other role holds.
-      const sentinel = Color(0xFF00FF00);
-      final theme = LockoutTheme.build(
-        colors: darkAppearance.colors,
-        semantics:
-            darkAppearance.semantics.copyWith(danger: sentinel),
-      );
-      await pumpSettings(tester, theme: theme);
-      final colors = theme.colorScheme;
+      'the destructive ink sits on the confirmation, not the trigger that '
+      'only offers it',
+      (tester) async {
+        // Every shipped appearance happens to set `danger` to the same value as
+        // `ColorScheme.error`, so a test against the shipped theme could not
+        // tell the two roles apart. This one overrides `danger` to a sentinel
+        // that no other role holds.
+        const sentinel = Color(0xFF00FF00);
+        final theme = LockoutTheme.build(
+          colors: darkAppearance.colors,
+          semantics: darkAppearance.semantics.copyWith(danger: sentinel),
+        );
+        await pumpSettings(tester, theme: theme);
+        final colors = theme.colorScheme;
 
-      // The Import row only offers to replace every row on the device — it
-      // does not do it — so it carries `NvButtonVariant.outlined`'s neutral
-      // label, not `danger`. Per the design doc's button table, `outlined`
-      // is for "neutral alternatives" and `danger` is reserved for the
-      // control that actually fires ("Remove, Delete"): here, the dialog's
-      // confirm button.
-      final importLabel = tester.widget<Text>(
-        find.descendant(
-          of: find.byKey(const Key('importBackupButton')),
-          matching: find.text('Import backup JSON'),
-        ),
-      );
-      expect(
-        importLabel.style?.color,
-        isNot(sentinel),
-        reason: 'the trigger is a neutral alternative, not the destructive '
-            'action itself',
-      );
+        // The Import row only offers to replace every row on the device — it
+        // does not do it — so it carries `NvButtonVariant.outlined`'s neutral
+        // label, not `danger`. Per the design doc's button table, `outlined`
+        // is for "neutral alternatives" and `danger` is reserved for the
+        // control that actually fires ("Remove, Delete"): here, the dialog's
+        // confirm button.
+        final importLabel = tester.widget<Text>(
+          find.descendant(
+            of: find.byKey(const Key('importBackupButton')),
+            matching: find.text('Restore backup'),
+          ),
+        );
+        expect(
+          importLabel.style?.color,
+          isNot(sentinel),
+          reason:
+              'the trigger is a neutral alternative, not the destructive '
+              'action itself',
+        );
 
-      await tester.tap(find.byKey(const Key('importBackupButton')));
-      await settle(tester);
+        await tester.tap(find.byKey(const Key('importBackupButton')));
+        await settle(tester);
 
-      expect(find.text('Replace all data?'), findsOneWidget,
-          reason: 'the destructive action stays behind its confirmation');
+        expect(
+          find.text('Replace all data?'),
+          findsOneWidget,
+          reason: 'the destructive action stays behind its confirmation',
+        );
 
-      // `semantics.danger`, not `colorScheme.error`: this is a destructive
-      // confirmation, which is the role `LockoutSemantics` reserves `danger`
-      // for (today_tab's discard dialog and log_tab's DELETE ENTRY already
-      // read it that way).
-      final confirmLabel = tester.widget<Text>(find.text('Choose file'));
-      expect(confirmLabel.style?.color, sentinel);
-      expect(sentinel, isNot(colors.error));
-    });
+        // `semantics.danger`, not `colorScheme.error`: this is a destructive
+        // confirmation, which is the role `LockoutSemantics` reserves `danger`
+        // for (today_tab's discard dialog and log_tab's DELETE ENTRY already
+        // read it that way).
+        final confirmLabel = tester.widget<Text>(find.text('Choose file'));
+        expect(confirmLabel.style?.color, sentinel);
+        expect(sentinel, isNot(colors.error));
+      },
+    );
 
-    testWidgets('both appearance axes sit under a Look and feel caption',
-        (tester) async {
+    testWidgets('both appearance axes sit under a Appearance caption', (
+      tester,
+    ) async {
       final semantics = tester.ensureSemantics();
       await pumpSettings(tester);
-      expect(find.text('Look and feel'), findsOneWidget);
+      expect(find.text('Color & shape'), findsOneWidget);
 
       // This would still pass with the whole picker deleted, unless it also
       // asserts the controls its own name promises are actually there —
@@ -1153,8 +1346,11 @@ void main() {
       }
       expect(find.text('Accent'), findsOneWidget);
       for (final accent in LockoutAccent.all) {
-        expect(find.bySemanticsLabel(accent.name), findsOneWidget,
-            reason: accent.key);
+        expect(
+          find.bySemanticsLabel(accent.name),
+          findsOneWidget,
+          reason: accent.key,
+        );
       }
 
       semantics.dispose();
@@ -1162,33 +1358,41 @@ void main() {
   });
 
   group('settings sections as grouped lists', () {
-    testWidgets('every settings section is a grouped list, not a card',
-        (tester) async {
+    testWidgets('every settings section is a grouped list, not a card', (
+      tester,
+    ) async {
       await tester.pumpWidget(hostedProfileTab());
       await settle(tester);
 
       expect(find.byType(NvGroupedList), findsWidgets);
-      expect(find.byType(LockoutCard), findsNothing,
-          reason: 'grouped lists replace the stack of uniform cards');
+      expect(
+        find.byType(LockoutCard),
+        findsNothing,
+        reason: 'grouped lists replace the stack of uniform cards',
+      );
     });
 
     testWidgets('a section caption is sentence case', (tester) async {
       await tester.pumpWidget(hostedProfileTab());
       await settle(tester);
 
-      expect(find.text('Look and feel'), findsOneWidget);
+      expect(find.text('Color & shape'), findsOneWidget);
       expect(find.text('LOOK AND FEEL'), findsNothing);
     });
 
-    testWidgets('no caption inside a section outranks the section heading',
-        (tester) async {
+    testWidgets('no caption inside a section outranks the section heading', (
+      tester,
+    ) async {
       await pumpSettings(tester);
       final theme = Theme.of(tester.element(find.text('Training')));
       final heading = tester.widget<Text>(find.text('Training')).style!;
       for (final caption in ['Accent', 'Activity level']) {
         final style = tester.widget<Text>(find.text(caption)).style!;
-        expect(style.fontSize! <= heading.fontSize!, isTrue,
-            reason: '"$caption" is larger than its section heading');
+        expect(
+          style.fontSize! <= heading.fontSize!,
+          isTrue,
+          reason: '"$caption" is larger than its section heading',
+        );
         expect(style, theme.textTheme.titleSmall);
       }
       expect(heading, theme.textTheme.titleMedium);
@@ -1204,56 +1408,65 @@ void main() {
     /// database — so adjusting the stepper or the activity radio and then
     /// switching tabs silently reverted the change with no feedback.
     testWidgets(
-        'the training-days stepper and activity radio survive the reload '
-        'MainScreen triggers on every tab switch', (tester) async {
-      final key = GlobalKey<ProfileTabState>();
-      tester.view.physicalSize = const Size(800, 6000);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
+      'the training-days stepper and activity radio survive the reload '
+      'MainScreen triggers on every tab switch',
+      (tester) async {
+        final key = GlobalKey<ProfileTabState>();
+        tester.view.physicalSize = const Size(800, 6000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
 
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: lockoutTestTheme(),
-          home: ProfileTab(key: key, onSettingsUpdated: () {}),
-        ),
-      );
-      await settle(tester);
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: lockoutTestTheme(),
+            home: ProfileTab(key: key, onSettingsUpdated: () {}),
+          ),
+        );
+        await settle(tester);
 
-      // Default is 4; the stepper now lives behind a sheet (section 8
-      // prefers a sheet to a dialog for a choice).
-      expect(find.text('4'), findsOneWidget);
-      await tester.tap(find.text('Days per week'));
-      await settle(tester);
-      await tester.tap(find.byIcon(Icons.add_circle_outline));
-      await settle(tester);
+        // Default is 4; the stepper now lives behind a sheet (section 8
+        // prefers a sheet to a dialog for a choice).
+        expect(find.text('4'), findsOneWidget);
+        await tester.tap(find.text('Days per week'));
+        await settle(tester);
+        await tester.tap(find.byIcon(Icons.add_circle_outline));
+        await settle(tester);
 
-      // Dismiss the sheet by tapping its scrim.
-      await tester.tapAt(const Offset(10, 10));
-      await settle(tester);
-      expect(find.text('5'), findsOneWidget);
+        // Dismiss the sheet by tapping its scrim.
+        await tester.tapAt(const Offset(10, 10));
+        await settle(tester);
+        expect(find.text('5'), findsOneWidget);
 
-      // Default activity is Moderately active; choose a different one.
-      await tester.tap(find.text(ActivityLevel.high.label));
-      await settle(tester);
+        // Default activity is Moderately active; choose a different one.
+        await tester.tap(find.text(ActivityLevel.high.label));
+        await settle(tester);
 
-      // The tab switch itself: MainScreen calls this on every tab change.
-      await key.currentState!.reload();
-      await settle(tester);
+        // The tab switch itself: MainScreen calls this on every tab change.
+        await key.currentState!.reload();
+        await settle(tester);
 
-      expect(find.text('5'), findsOneWidget,
-          reason: 'the stepper reverted to the database value on reload');
-      expect(
-        await DatabaseService.instance
-            .getSetting('training_days_per_week', defaultValue: ''),
-        '5',
-      );
-      expect(
-        await DatabaseService.instance
-            .getSetting('activity_level', defaultValue: ''),
-        ActivityLevel.high.name,
-      );
-    });
+        expect(
+          find.text('5'),
+          findsOneWidget,
+          reason: 'the stepper reverted to the database value on reload',
+        );
+        expect(
+          await DatabaseService.instance.getSetting(
+            'training_days_per_week',
+            defaultValue: '',
+          ),
+          '5',
+        );
+        expect(
+          await DatabaseService.instance.getSetting(
+            'activity_level',
+            defaultValue: '',
+          ),
+          ActivityLevel.high.name,
+        );
+      },
+    );
   });
 
   group('activity radio refreshes the displayed plan without a reload', () {
@@ -1265,51 +1478,54 @@ void main() {
     /// kept showing the pre-tap figure until something reloaded it: a
     /// same-screen contradiction.
     testWidgets(
-        'tapping a different activity radio updates "Daily target" in place',
-        (tester) async {
-      await seedCalculablePlan();
-      var updated = false;
-      tester.view.physicalSize = const Size(800, 6000);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
+      'tapping a different activity radio updates "Daily target" in place',
+      (tester) async {
+        await seedCalculablePlan();
+        var updated = false;
+        tester.view.physicalSize = const Size(800, 6000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
 
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: lockoutTestTheme(),
-          home: SettingsScreen(onSettingsUpdated: () => updated = true),
-        ),
-      );
-      await settle(tester);
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: lockoutTestTheme(),
+            home: SettingsScreen(onSettingsUpdated: () => updated = true),
+          ),
+        );
+        await settle(tester);
 
-      // The one Text in the tree of the shape "<int> kcal" is the headline
-      // figure inside the "Daily target" container; `_calorieCtrl`'s field
-      // is labelled "Daily calorie target (kcal)" and never matches this.
-      final kcalFinder = find.byWidgetPredicate(
-        (w) => w is Text && RegExp(r'^\d+ kcal$').hasMatch(w.data ?? ''),
-      );
-      expect(kcalFinder, findsOneWidget);
-      final before = tester.widget<Text>(kcalFinder).data!;
+        // The one Text in the tree of the shape "<int> kcal" is the headline
+        // figure inside the "Daily target" container; `_calorieCtrl`'s field
+        // is labelled "Daily calorie target (kcal)" and never matches this.
+        final kcalFinder = find.byWidgetPredicate(
+          (w) => w is Text && RegExp(r'^\d+ kcal$').hasMatch(w.data ?? ''),
+        );
+        expect(kcalFinder, findsOneWidget);
+        final before = tester.widget<Text>(kcalFinder).data!;
 
-      // Default activity is Moderately active; choose a different one.
-      await tester.tap(find.text(ActivityLevel.high.label));
-      await settle(tester);
+        // Default activity is Moderately active; choose a different one.
+        await tester.tap(find.text(ActivityLevel.high.label));
+        await settle(tester);
 
-      final after = tester.widget<Text>(kcalFinder).data!;
-      expect(
-        after,
-        isNot(before),
-        reason: 'the "Daily target" figure did not follow the new activity '
-            'multiplier without a reload',
-      );
-      expect(
-        updated,
-        isFalse,
-        reason: '_setActivity must not call onSettingsUpdated: that chain '
-            'reloads every text controller from the database and would '
-            'clobber unsaved typing in another card',
-      );
-    });
+        final after = tester.widget<Text>(kcalFinder).data!;
+        expect(
+          after,
+          isNot(before),
+          reason:
+              'the "Daily target" figure did not follow the new activity '
+              'multiplier without a reload',
+        );
+        expect(
+          updated,
+          isFalse,
+          reason:
+              '_setActivity must not call onSettingsUpdated: that chain '
+              'reloads every text controller from the database and would '
+              'clobber unsaved typing in another card',
+        );
+      },
+    );
   });
 
   group('a save in one card does not discard typing in another', () {
@@ -1321,7 +1537,8 @@ void main() {
     /// top of whatever the user was typing. Wired here exactly as
     /// `MainScreen` wires it, because the defect is in the wiring.
     Future<GlobalKey<ProfileTabState>> pumpHostedProfile(
-        WidgetTester tester) async {
+      WidgetTester tester,
+    ) async {
       final key = GlobalKey<ProfileTabState>();
       tester.view.physicalSize = const Size(800, 6000);
       tester.view.devicePixelRatio = 1.0;
@@ -1341,8 +1558,7 @@ void main() {
       return key;
     }
 
-    Future<void> type(
-        WidgetTester tester, String label, String text) async {
+    Future<void> type(WidgetTester tester, String label, String text) async {
       await tester.enterText(
         find.descendant(
           of: find.widgetWithText(NvTextField, label),
@@ -1353,8 +1569,9 @@ void main() {
       await tester.pump();
     }
 
-    testWidgets('unsaved typing survives the save of another card',
-        (tester) async {
+    testWidgets('unsaved typing survives the save of another card', (
+      tester,
+    ) async {
       await pumpHostedProfile(tester);
 
       await type(tester, 'Age', '41');
@@ -1364,9 +1581,13 @@ void main() {
       await tester.tap(find.text('Save height'));
       await settle(tester);
 
-      expect(fieldText(tester, 'Age'), '41',
-          reason: 'saving the height card re-read every field from the '
-              'database and dropped what the user was typing');
+      expect(
+        fieldText(tester, 'Age'),
+        '41',
+        reason:
+            'saving the height card re-read every field from the '
+            'database and dropped what the user was typing',
+      );
       expect(fieldText(tester, 'Timeframe (weeks)'), '9');
 
       // Flush the toast's auto-dismiss Timer before teardown.
@@ -1396,43 +1617,53 @@ void main() {
     // reminder toggles, the activity radio and the days stepper are safe for
     // a different reason — each persists the instant it changes — so they
     // are deliberately not in this list.
-    testWidgets('an unsaved switch survives the save of another card',
-        (tester) async {
+    testWidgets('an unsaved switch survives the save of another card', (
+      tester,
+    ) async {
       await pumpHostedProfile(tester);
 
       final toggle = find.widgetWithText(NvSwitchRow, 'Enable nutrition tab');
       expect(tester.widget<NvSwitchRow>(toggle).value, isTrue);
 
-      await tester.tap(find.descendant(of: toggle, matching: find.byType(Switch)));
+      await tester.tap(
+        find.descendant(of: toggle, matching: find.byType(Switch)),
+      );
       await settle(tester);
       expect(tester.widget<NvSwitchRow>(toggle).value, isFalse);
 
       await tester.tap(find.text('Save height'));
       await settle(tester);
 
-      expect(tester.widget<NvSwitchRow>(toggle).value, isFalse,
-          reason: 'saving the height card re-read food_tab_enabled and threw '
-              'away a toggle the user had not saved yet');
+      expect(
+        tester.widget<NvSwitchRow>(toggle).value,
+        isFalse,
+        reason:
+            'saving the height card re-read food_tab_enabled and threw '
+            'away a toggle the user had not saved yet',
+      );
 
       await tester.pump(const Duration(seconds: 6));
     });
 
-    testWidgets('a switch the user has not touched still follows the database',
-        (tester) async {
-      final key = await pumpHostedProfile(tester);
+    testWidgets(
+      'a switch the user has not touched still follows the database',
+      (tester) async {
+        final key = await pumpHostedProfile(tester);
 
-      await DatabaseService.instance.saveSetting('food_tab_enabled', 'false');
-      await key.currentState!.reload();
-      await settle(tester);
+        await DatabaseService.instance.saveSetting('food_tab_enabled', 'false');
+        await key.currentState!.reload();
+        await settle(tester);
 
-      expect(
-        tester
-            .widget<NvSwitchRow>(
-                find.widgetWithText(NvSwitchRow, 'Enable nutrition tab'))
-            .value,
-        isFalse,
-      );
-    });
+        expect(
+          tester
+              .widget<NvSwitchRow>(
+                find.widgetWithText(NvSwitchRow, 'Enable nutrition tab'),
+              )
+              .value,
+          isFalse,
+        );
+      },
+    );
 
     /// The sex control's current selection, read off the widget it was
     /// handed to rather than off whichever label looks highlighted.
@@ -1467,10 +1698,14 @@ void main() {
       await tab.currentState!.reload();
       await settle(tester);
 
-      expect(fieldText(tester, 'Height (cm)'), '150',
-          reason: 'the save left the baseline on the value loaded before '
-              'it, so the field read as unsaved typing forever after and '
-              'stopped following the database');
+      expect(
+        fieldText(tester, 'Height (cm)'),
+        '150',
+        reason:
+            'the save left the baseline on the value loaded before '
+            'it, so the field read as unsaved typing forever after and '
+            'stopped following the database',
+      );
 
       await tester.pump(const Duration(seconds: 6));
     });
@@ -1493,9 +1728,13 @@ void main() {
       await tab.currentState!.reload();
       await settle(tester);
 
-      expect(fieldText(tester, 'Height (cm)'), '150',
-          reason: 'two taps on the unit control, with nothing typed, left '
-              'the height field pinned to its old value');
+      expect(
+        fieldText(tester, 'Height (cm)'),
+        '150',
+        reason:
+            'two taps on the unit control, with nothing typed, left '
+            'the height field pinned to its old value',
+      );
     });
 
     testWidgets('a height left over from a unit switch is not written back '
@@ -1515,10 +1754,13 @@ void main() {
       await settle(tester);
 
       expect(
-        await DatabaseService.instance
-            .getSetting('height_cm', defaultValue: ''),
+        await DatabaseService.instance.getSetting(
+          'height_cm',
+          defaultValue: '',
+        ),
         '150.00',
-        reason: 'a field nobody edited overwrote the imported height with '
+        reason:
+            'a field nobody edited overwrote the imported height with '
             'the value it was still showing',
       );
 
@@ -1571,8 +1813,9 @@ void main() {
     // set by one widget, written by a button somewhere else — and had no
     // test at all, in either direction.
 
-    testWidgets('an unsaved sex choice survives the save of another card',
-        (tester) async {
+    testWidgets('an unsaved sex choice survives the save of another card', (
+      tester,
+    ) async {
       await pumpHostedProfile(tester);
       expect(selectedSex(tester), Sex.male);
 
@@ -1583,15 +1826,20 @@ void main() {
       await tester.tap(find.text('Save height'));
       await settle(tester);
 
-      expect(selectedSex(tester), Sex.female,
-          reason: 'saving the height card re-read sex and threw away a '
-              'choice the user had not saved yet');
+      expect(
+        selectedSex(tester),
+        Sex.female,
+        reason:
+            'saving the height card re-read sex and threw away a '
+            'choice the user had not saved yet',
+      );
 
       await tester.pump(const Duration(seconds: 6));
     });
 
-    testWidgets('a sex the user has not touched still follows the database',
-        (tester) async {
+    testWidgets('a sex the user has not touched still follows the database', (
+      tester,
+    ) async {
       final tab = await pumpHostedProfile(tester);
 
       await DatabaseService.instance.saveSetting('sex', 'female');
@@ -1601,8 +1849,9 @@ void main() {
       expect(selectedSex(tester), Sex.female);
     });
 
-    testWidgets('an unsaved height unit survives the save of another card',
-        (tester) async {
+    testWidgets('an unsaved height unit survives the save of another card', (
+      tester,
+    ) async {
       await pumpHostedProfile(tester);
 
       await tester.tap(find.text('Feet / inches'));
@@ -1613,9 +1862,13 @@ void main() {
       await tester.tap(find.text('Save food settings'));
       await settle(tester);
 
-      expect(find.widgetWithText(NvTextField, 'Height (ft)'), findsOneWidget,
-          reason: 'saving the food card re-read height_unit and dropped the '
-              'unit the user had just chosen');
+      expect(
+        find.widgetWithText(NvTextField, 'Height (ft)'),
+        findsOneWidget,
+        reason:
+            'saving the food card re-read height_unit and dropped the '
+            'unit the user had just chosen',
+      );
 
       await tester.pump(const Duration(seconds: 6));
     });
@@ -1647,9 +1900,13 @@ void main() {
       await tab.currentState!.reload();
       await settle(tester);
 
-      expect(find.widgetWithText(NvTextField, 'Height (cm)'), findsOneWidget,
-          reason: 'the unit was saved, so it is no longer an unsaved choice '
-              'and must follow an import like every other field');
+      expect(
+        find.widgetWithText(NvTextField, 'Height (cm)'),
+        findsOneWidget,
+        reason:
+            'the unit was saved, so it is no longer an unsaved choice '
+            'and must follow an import like every other field',
+      );
 
       await tester.pump(const Duration(seconds: 6));
     });
@@ -1672,8 +1929,9 @@ void main() {
       await tester.pump(const Duration(seconds: 12));
     });
 
-    testWidgets('a sex saved by Calculate my target follows a later import',
-        (tester) async {
+    testWidgets('a sex saved by Calculate my target follows a later import', (
+      tester,
+    ) async {
       final tab = await pumpHostedProfile(tester);
 
       await tester.tap(find.text('Female'));
@@ -1697,8 +1955,9 @@ void main() {
     // docs/spine/qa/2026-10-11/03-profile-scroll1.png they read as peers of
     // that row, separated only by a "Selected" badge. The sex control was
     // two buttons with no subject at all.
-    testWidgets('the activity choice and the sex choice are both named',
-        (tester) async {
+    testWidgets('the activity choice and the sex choice are both named', (
+      tester,
+    ) async {
       await pumpSettings(tester);
 
       expect(find.text('Activity level'), findsOneWidget);
@@ -1706,18 +1965,21 @@ void main() {
 
       // A caption is only a caption if it sits with what it names: above the
       // control, and below whatever it does not name.
-      final activityCaption =
-          tester.getBottomLeft(find.text('Activity level')).dy;
+      final activityCaption = tester
+          .getBottomLeft(find.text('Activity level'))
+          .dy;
       expect(
         activityCaption,
         greaterThan(tester.getBottomLeft(find.text('Days per week')).dy),
-        reason: 'the caption must not read as part of the stepper row above '
+        reason:
+            'the caption must not read as part of the stepper row above '
             'it',
       );
       expect(
         activityCaption,
         lessThanOrEqualTo(
-            tester.getTopLeft(find.text(ActivityLevel.values.first.label)).dy),
+          tester.getTopLeft(find.text(ActivityLevel.values.first.label)).dy,
+        ),
         reason: 'the caption must sit above the options it names',
       );
 
@@ -1739,26 +2001,34 @@ void main() {
     /// switch, the test-notification button and the clamp warning all
     /// rendered. The M3 rewrite dropped every one of those assertions, so
     /// none of that newly-rewritten subtree — the `_remindersEnabled == true`
-    /// branch of `_buildNotificationsCard`, and `plan.warning`'s container in
+    /// branch of `_buildRemindersCard`, and `plan.warning`'s container in
     /// `_buildFoodCard` — was ever built by any test. Rendered at 360dp so
     /// this also stands in for finding 5's overflow guard on that branch.
     testWidgets(
-        'reminder time, streak warning, test notification and the rate-cap '
-        'warning all render together', (tester) async {
-      await seedCalculablePlan();
-      await DatabaseService.instance.saveSetting('reminders_enabled', 'true');
+      'reminder time, streak warning, test notification and the rate-cap '
+      'warning all render together',
+      (tester) async {
+        await seedCalculablePlan();
+        await DatabaseService.instance.saveSetting('reminders_enabled', 'true');
 
-      await pumpSettingsNarrow(tester);
+        await pumpSettingsNarrow(tester);
 
-      expect(find.text('Reminder time'), findsOneWidget);
-      expect(find.text('Send test notification'), findsOneWidget);
-      expect(find.text('Streak warning at 21:00'), findsOneWidget);
-      expect(find.text('Daily target'), findsOneWidget);
-      expect(find.textContaining('Target eased to a safe rate'), findsOneWidget);
+        expect(find.text('Reminder time'), findsOneWidget);
+        expect(find.text('Send test notification'), findsOneWidget);
+        expect(find.text('Streak warning at 21:00'), findsOneWidget);
+        expect(find.text('Daily target'), findsOneWidget);
+        expect(
+          find.textContaining('Target eased to a safe rate'),
+          findsOneWidget,
+        );
 
-      expect(tester.takeException(), isNull,
-          reason: 'no widget in this branch may overflow at 360dp');
-    });
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: 'no widget in this branch may overflow at 360dp',
+        );
+      },
+    );
   });
 }
 

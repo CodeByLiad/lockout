@@ -137,7 +137,8 @@ String blankComments(String source) {
 /// The offset just past the literal opening at [start].
 int _endOfStringLiteral(String source, int start) {
   final quote = source[start];
-  final isRaw = start > 0 && (source[start - 1] == 'r' || source[start - 1] == 'R');
+  final isRaw =
+      start > 0 && (source[start - 1] == 'r' || source[start - 1] == 'R');
   final tripled = quote + quote + quote;
   final delimiter = source.startsWith(tripled, start) ? tripled : quote;
   var i = start + delimiter.length;
@@ -166,8 +167,11 @@ int _endOfStringLiteral(String source, int start) {
 /// colour of its own and reads everything from [LockoutPalette].
 @immutable
 class TestAppearance {
-  const TestAppearance(this.brightness, this.accent,
-      [this.style = LockoutSchemeStyle.tonal]);
+  const TestAppearance(
+    this.brightness,
+    this.accent, [
+    this.style = LockoutSchemeStyle.tonal,
+  ]);
 
   final Brightness brightness;
   final LockoutAccent accent;
@@ -190,8 +194,10 @@ const darkAppearance = TestAppearance(Brightness.dark, LockoutAccent.fallback);
 
 /// Its light counterpart, for the tests that prove a value came from the
 /// theme by watching it change across two of them.
-const lightAppearance =
-    TestAppearance(Brightness.light, LockoutAccent.fallback);
+const lightAppearance = TestAppearance(
+  Brightness.light,
+  LockoutAccent.fallback,
+);
 
 /// Every appearance the app can produce: both brightnesses crossed with
 /// every accent and every scheme style, 2 x 5 x 3. The replacement for the
@@ -267,14 +273,12 @@ class FakeWebViewPlatform extends WebViewPlatform {
   @override
   PlatformNavigationDelegate createPlatformNavigationDelegate(
     PlatformNavigationDelegateCreationParams params,
-  ) =>
-      FakeNavigationDelegate(params);
+  ) => FakeNavigationDelegate(params);
 
   @override
   PlatformWebViewWidget createPlatformWebViewWidget(
     PlatformWebViewWidgetCreationParams params,
-  ) =>
-      FakeWebViewWidget(params);
+  ) => FakeWebViewWidget(params);
 }
 
 /// Records what `ExerciseVideoScreen` tells its `WebViewController` instead

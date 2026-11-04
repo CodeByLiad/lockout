@@ -2,14 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lockout/widgets/house/nv_button.dart';
 import 'package:lockout/widgets/house/nv_cards.dart';
-import 'package:lockout/widgets/house/nv_empty_state.dart';
+import 'package:lockout/widgets/legacy/nv_empty_state.dart';
 
 import 'test_helpers.dart';
 
 Widget _wrap(Widget child) => MaterialApp(
-      theme: lockoutTestTheme(),
-      home: Scaffold(body: child),
-    );
+  theme: lockoutTestTheme(),
+  home: Scaffold(body: child),
+);
 
 void main() {
   group('info card', () {
@@ -19,8 +19,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final colors =
-          Theme.of(tester.element(find.byType(NvInfoCard))).colorScheme;
+      final colors = Theme.of(
+        tester.element(find.byType(NvInfoCard)),
+      ).colorScheme;
       final container = tester.widget<Container>(
         find
             .descendant(
@@ -61,18 +62,21 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final colors =
-          Theme.of(tester.element(find.byType(NvTbaCard))).colorScheme;
-      final painter = tester
-          .widget<CustomPaint>(
-            find
-                .descendant(
-                  of: find.byType(NvTbaCard),
-                  matching: find.byType(CustomPaint),
-                )
-                .first,
-          )
-          .painter! as DashedBorderPainter;
+      final colors = Theme.of(
+        tester.element(find.byType(NvTbaCard)),
+      ).colorScheme;
+      final painter =
+          tester
+                  .widget<CustomPaint>(
+                    find
+                        .descendant(
+                          of: find.byType(NvTbaCard),
+                          matching: find.byType(CustomPaint),
+                        )
+                        .first,
+                  )
+                  .painter!
+              as DashedBorderPainter;
 
       expect(painter.color, colors.outlineVariant);
       expect(painter.strokeWidth, 2);
@@ -80,8 +84,9 @@ void main() {
   });
 
   group('empty state', () {
-    testWidgets('it offers a headline, a sentence and one button',
-        (tester) async {
+    testWidgets('it offers a headline, a sentence and one button', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _wrap(
           NvEmptyState(
@@ -99,8 +104,9 @@ void main() {
       expect(find.byType(NvButton), findsOneWidget);
     });
 
-    testWidgets('it is a surfaceContainer block with 32dp corners',
-        (tester) async {
+    testWidgets('it is a surfaceContainer block with 32dp corners', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _wrap(
           NvEmptyState(
@@ -113,8 +119,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final colors =
-          Theme.of(tester.element(find.byType(NvEmptyState))).colorScheme;
+      final colors = Theme.of(
+        tester.element(find.byType(NvEmptyState)),
+      ).colorScheme;
       final container = tester.widget<Container>(
         find
             .descendant(
@@ -129,8 +136,9 @@ void main() {
       expect((decoration.borderRadius! as BorderRadius).topLeft.x, 32);
     });
 
-    testWidgets('the button does the thing the sentence asked for',
-        (tester) async {
+    testWidgets('the button does the thing the sentence asked for', (
+      tester,
+    ) async {
       var acted = 0;
       await tester.pumpWidget(
         _wrap(

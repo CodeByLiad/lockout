@@ -1,130 +1,159 @@
-# LOCKOUT
+# Lockout
 
-An offline-first strength training tracker for Android, built with Flutter.
+An offline strength training tracker for Android, rebuilt with Material 3 Expressive.
 
-Routines, workout logs, nutrition and body metrics live in a local SQLite database on your device. No account, no analytics, no ads, no server. The network is used for exactly one thing: streaming exercise form videos from YouTube when you tap **Watch**.
+Plan your training, log sets, track food and follow your progress. Your routines,
+workouts, meals, measurements and settings stay in a local SQLite database.
+No account, ads, analytics or server.
 
-Interface follows the Nuvetrix App Design System — Material 3 Expressive, shape as a state, spring motion and Bricolage Grotesque/Figtree/JetBrains Mono bundled with the app — with a brightness and an accent the user picks independently.
+**[Download the latest APK](https://github.com/CodeByLiad/lockout/releases/latest)** ·
+[All releases](https://github.com/CodeByLiad/lockout/releases) · [License](LICENSE)
 
----
+## Screenshots
+
+Real captures from the Android app. Android's status and system navigation bars
+are cropped out; the app's own navigation remains. Data shown is from a local
+QA profile. These are screenshots, not generated design concepts.
+
+| Today | Training | Live workout | Food |
+|:---:|:---:|:---:|:---:|
+| <img src="docs/screenshots/today.png" width="240" alt="Today with recovery guidance, food and weight actions"> | <img src="docs/screenshots/training.png" width="240" alt="Training plans and weekly schedule"> | <img src="docs/screenshots/workout.png" width="240" alt="Workout with editable weight and reps"> | <img src="docs/screenshots/food.png" width="240" alt="Food diary and nutrition totals"> |
+
+| Progress | Appearance | Today in dark mode | Training in dark mode |
+|:---:|:---:|:---:|:---:|
+| <img src="docs/screenshots/progress.png" width="240" alt="Weekly workout chart with all seven days"> | <img src="docs/screenshots/appearance.png" width="240" alt="Appearance with a live component preview"> | <img src="docs/screenshots/today-dark.png" width="240" alt="Today in the dark generated scheme"> | <img src="docs/screenshots/training-dark.png" width="240" alt="Training in the dark generated scheme"> |
+
+## What's new in v1.3.0
+
+- A whole-app Expressive rebuild: Today, Training, Progress and optional Food destinations, with focused settings and editors.
+- Seed-generated color throughout. Choose light, dark or system brightness, one of five accents, and a tonal, vibrant or expressive scheme style.
+- Distinct Material icon shapes, animated press/focus states, connected lists and filled inputs. Reduced-motion preferences are respected.
+- Focused workouts with editable sets, automatic rest, minimize/resume, finish review and a saved summary. Only completed sets are archived.
+- Clear setup, empty-plan, recovery-day and scheduled-training states. Custom routines always have a path to add their first day and exercise.
+- Real period-based Progress charts, date-preserving food entry and kg/lb body inputs and displays.
+- Labels grow for larger text instead of scaling down. Device checks include 360dp width at 1.5× text.
 
 ## Features
 
-### Routines
-- Build a training week and pin each day to a weekday, or run a rotating cycle that advances one slot per calendar day.
-- Four starter splits — Push/Pull/Legs, Upper/Lower, Full Body 3x, 5-Day Body Part — each arriving pre-loaded with warm-ups, numbered exercises and a conditioning finisher.
-- Every day carries a focus subtitle, an optional caution note, and can be marked as an explicit rest day.
-- Tap any exercise to edit sets, rep range, working weight, rest interval and cues.
+### Plan and train
 
-### Exercise catalog
-- **175 exercises** across 13 muscle groups, searchable by name, muscle or equipment.
-- Each resolves to a YouTube search biased toward 3D / animated form demonstrations, opened in an in-app WebView. Queries are used instead of hardcoded video IDs so links never rot; pin a specific URL per exercise if you prefer.
-- Anything missing can be added as a custom exercise.
+Build a weekday schedule or rotating training cycle. Start from Push/Pull/Legs,
+Upper/Lower, Full Body or a five-day body-part split, or create a custom routine.
+Configure warm-ups, exercises, sets, rep ranges, working weights, rest intervals,
+cues, finishers and explicit rest days.
 
-### Live sessions
-- Today's workout is resolved from the active routine — no manual selection.
-- Per-set weight and rep steppers, a running volume total, session elapsed timer, and a rest timer that starts automatically when a set is logged.
-- The header shows your last performance for that exercise, pulled from history.
-- Finishing archives the session and every completed set. Nothing is written for sets you did not do.
+Search the bundled exercise catalog by name, muscle or equipment. Add multiple
+exercises to a day or create your own. Tap **Watch** for a form demonstration.
 
-### Nutrition
-- **431 foods** across 28 categories — Western, Italian, Chinese, Japanese, Korean, Thai & SE Asian, Mexican, Middle Eastern, Mediterranean, South Asian, Bengali, and the usual building blocks.
-- Every entry lists the ingredients its figures assume, so you can see what you are agreeing to before logging it. Search matches ingredients too.
-- Serving-size stepper scales macros; every field stays editable, because a catalog figure is a starting point rather than a fact.
-- Entries group under Breakfast / Lunch / Dinner / Snacks with per-meal subtotals.
+Today resolves the active plan's next action. Enter weight and reps directly,
+mark sets complete, check previous performance and use the automatic rest timer.
+Minimize a workout to visit another destination and resume without losing the
+session. Review completed work before saving.
 
-### Body and goals
-- BMI computed from weight and the height stored in Settings, with the arithmetic shown on screen. Waist is tracked separately and plays no part in it.
-- Daily calorie target is **calculated, not guessed**: Mifflin–St Jeor BMR → activity multiplier → TDEE → the deficit or surplus your goal and timeframe require. Macros follow (protein prioritised in a deficit, fat at 25% of intake, carbs take the remainder).
-- Safety rails: pace is capped at 1%/week loss and 0.5%/week gain, intake never drops below 1500 kcal (male) or 1200 kcal (female). When a goal is clamped the app says so and gives a realistic timeframe instead of silently rewriting it.
-- Recommends a training split from your goal direction and available days, with the reasoning shown, and can create it in one tap.
+### Food, body and progress
 
-### Accountability
-- Daily training reminder at a time you choose, naming the day and exercise count actually scheduled.
-- Optional 21:00 streak warning that reads your real streak.
-- Permission is requested before the toggle flips — deny it and the switch refuses rather than claiming reminders are on.
-- Scheduled inexactly on purpose: exact alarms require the restricted `SCHEDULE_EXACT_ALARM` grant, which a training nudge does not justify.
+Log meals from the bundled food catalog or enter custom food. Adjust portions
+and review calories and macros by date. Edit without creating a duplicate and
+undo deletion.
 
-### Backup
-- Export writes all ten tables — routines, days, warm-ups, exercises, finishers, sessions, sets, meals, body entries and settings — to a single JSON file.
-- Import validates the entire document before writing a single row, then restores inside one transaction. A malformed file leaves your data untouched.
+Track weight and waist, review measurement history and set a body goal. BMI
+shows its calculation using stored height and weight. Calorie and macro targets
+use BMR/TDEE and goal-planning calculations, with explanations and pace limits.
+Display units convert at the input and presentation boundaries; weights remain
+stored in kilograms.
 
-### Themes
-Lockout follows the Nuvetrix App Design System, vendored at `docs/design/nuvetrix-app-design-system.md`. Appearance has two independent axes, applied instantly and persisted:
+Review workout history, completed sets, volume and time. Week, month and all-time
+charts aggregate real local workouts. Missing data is explained rather than
+filled with sample activity.
 
-| Brightness | Accent |
+### Personalize and protect your data
+
+Choose **Rep lime, Violet, Teal, Coral or Steel**, independently of brightness
+and scheme style. The accent generates primary, secondary, tertiary and surface
+roles in both light and dark modes. Expressive style keeps primary on the chosen
+accent hue. There is no wallpaper-derived color.
+
+Bricolage Grotesque, Figtree and JetBrains Mono are bundled for offline use.
+Training reminders and optional streak warnings are scheduled locally, after
+notification permission is granted.
+
+Export your data to a JSON backup. Import validates the entire document before
+restoring it in a transaction; malformed input leaves existing data untouched.
+Database upgrades migrate in place.
+
+## Privacy and permissions
+
+The tracker works offline, with no background network requests. Exercise videos
+and the About source-code link are explicit external actions; videos need
+internet access. Backups leave the app only when you export/share them.
+
+| Permission | Purpose |
 |---|---|
-| System | Rep lime (default) |
-| Light | Violet, Teal |
-| Dark | Coral, Steel |
-
-Rep lime `#C2EE7B` is Lockout's registered identity accent. The accent is for emphasis, so in light mode it fills hero cards, the FAB and badges while filled buttons stay the house indigo; in dark mode it carries `primary` as well.
-
-Every foreground role is contrast-checked against the surface it sits on, across all ten brightness-and-accent combinations, and each brightness carries an eight-colour category ramp plus semantic success, warning, danger and rest-day tones. The six colour schemes earlier versions shipped, and the palette keys before them, both migrate onto the nearest accent at their original brightness — so an existing install never wakes up light after choosing dark.
-
-There is no wallpaper-derived (Material You) colour. The house system reserves colour identity for the app, so that every Nuvetrix app looks like one family.
-
-Typefaces are bundled rather than downloaded, so the app renders correctly with no network: Bricolage Grotesque for display, Figtree for body text, and JetBrains Mono for figures that must line up in a column.
-
-`test/expressive_contract_test.dart` asserts the app against the vendored house document — palette hexes, the type scale, the corner scale and the signature hero outline — so drift from the family standard fails a test rather than a review.
-
----
+| `INTERNET` | Exercise videos requested by tapping Watch |
+| `POST_NOTIFICATIONS` | Optional local training reminders |
+| `RECEIVE_BOOT_COMPLETED` | Re-arm local reminders after a restart |
 
 ## Build
 
-Requires the Flutter SDK (Dart `^3.11.4`) and the Android SDK.
+### Updating an existing installation
 
-```bash
+Recent locally distributed builds can update in place. The published v1.1.0 APK
+uses a different signing certificate from this build, so Android will reject an
+in-place update from that release. **Do not uninstall before exporting a backup.**
+Keep the exported JSON outside the app and confirm the file exists before
+removing the old installation. Uninstalling removes its local data. Install the
+new APK, then import your backup. A fresh installation needs no migration.
+
+### Build from source
+
+Validated with Flutter 3.47.2 / Dart 3.13.2 and the Android SDK.
+
+```sh
 flutter pub get
-flutter run                    # debug on a connected device or emulator
-flutter build apk --release    # release APK
+flutter run
+flutter build apk --release
 ```
 
-The release APK lands at `build/app/outputs/flutter-apk/app-release.apk`. Prebuilt APKs are published on the [Releases](../../releases) page.
+The APK is written to `build/app/outputs/flutter-apk/app-release.apk`.
+Prebuilt APKs are attached to [GitHub releases](https://github.com/CodeByLiad/lockout/releases).
+This project's Windows setup uses `C:\src\flutter\bin\flutter.bat` by absolute path.
 
-`flutter_local_notifications` requires core library desugaring, already configured in `android/app/build.gradle.kts`.
+## Tests and verification
 
----
+Run tests serially because database suites share one SQLite file:
 
-## Tests
-
-```bash
-flutter test
+```sh
+flutter test --concurrency=1
+flutter analyze
 ```
 
-880+ tests covering unit conversion and BMI, BMR/TDEE and goal clamping, streak edge cases, weekday resolution, catalog integrity and cuisine balance, WCAG contrast across all ten brightness-and-accent combinations, the Material 3 Expressive theme and its widgets, the lobed `CookieBorder` geometry, the two-axis theme migration, and a full backup export/import round-trip against a real SQLite database via `sqflite_common_ffi` — including six classes of malformed input that must be rejected without touching existing data.
+The overhaul passed **937 tests**, including backup round trips, migrations,
+storage, units, theme persistence, contrast, navigation and new screen flows.
+Analysis has no errors or warnings; two pre-existing test information notices
+remain. Release-version checks also run before publication.
 
----
+Native emulator checks cover representative light/dark flows, keyboards and
+360dp width with enlarged text. All seven independent finish-review findings
+were resolved. This does not certify every state on every device or a TalkBack
+listening session. See the [verification record](docs/spine/qa/overhaul/verification.md).
 
 ## Architecture
 
-```
+```text
 lib/
-├── data/           # Static catalogs: exercises, foods, routine templates
-├── models/         # Entities and their SQLite row mapping
-├── screens/        # One file per tab, plus settings and the video view
-├── services/       # Database, scheduling, nutrition/training planners, backup, notifications
-├── theme/          # Palette, accents, motion, shape and the Material 3 Expressive theme
-└── widgets/        # Shared components
+├── data/           # Bundled exercise, food and routine catalogs
+├── models/         # Entities and SQLite row mapping
+├── screens/        # Task destinations and focused routes
+├── services/       # Local storage, scheduling, goals, units, backup and reminders
+├── theme/          # Generated schemes, typography, shapes and motion
+└── widgets/house/  # Nv component catalog used by rebuilt screens
 ```
 
-Colour, type and shape resolve through `Theme.of(context)`, `ColorScheme` and the `LockoutSemantics` theme extension rather than through compile-time constants, so a scheme change repaints the whole app without touching call sites. Literal colours live only in `lib/theme/palette.dart` and `lib/theme/accents.dart`, and a test fails the build if one appears anywhere else.
-
-The database migrates in place across schema versions; existing installs keep their data.
-
----
-
-## Permissions
-
-| Permission | Why |
-|---|---|
-| `INTERNET` | Streaming exercise form videos when you tap Watch. Nothing else. |
-| `POST_NOTIFICATIONS` | Local training reminders, scheduled on-device from local data. |
-| `RECEIVE_BOOT_COMPLETED` | Re-arming those reminders after a restart. |
-
-No data leaves the device. Backups are shared only when you explicitly export one.
-
----
+Color, type, shape and motion resolve through the current theme and Nv catalog.
+The [house design system](docs/design/nuvetrix-app-design-system.md) remains the
+base contract, with approved deviations in the
+[overhaul specification](docs/spine/specs/2026-11-03-whole-app-overhaul-proposal.md).
+[DESIGN.md](DESIGN.md) documents the implemented native system.
 
 ## License
 

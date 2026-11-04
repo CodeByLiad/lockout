@@ -51,10 +51,7 @@ Future<T?> showNvSheet<T>({
 ///
 /// The message repeats the action's name — "Session saved" after Save — so
 /// the confirmation says what happened rather than that something did.
-void showNvSnackbar({
-  required BuildContext context,
-  required String message,
-}) {
+void showNvSnackbar({required BuildContext context, required String message}) {
   final theme = Theme.of(context);
 
   ScaffoldMessenger.of(context).showSnackBar(

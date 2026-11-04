@@ -1,21 +1,23 @@
 import 'package:flutter/material.dart';
+import '../services/display_units.dart';
+
 import '../data/exercise_library.dart';
 import '../data/routine_templates.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
 import '../services/numeric_guard.dart';
 import '../services/routine_factory.dart';
-import '../services/routine_focus.dart';
 import '../services/schedule_service.dart';
-import '../theme/lockout_semantics.dart';
 import '../theme/lockout_theme.dart';
-import '../widgets/day_block.dart';
-import '../widgets/lockout_card.dart';
-import '../widgets/lockout_field.dart';
-import '../widgets/today_day_card.dart';
-import '../widgets/week_day_row.dart';
-import '../widgets/exercise_picker.dart';
-import '../widgets/sheet_scaffold.dart';
+import '../widgets/house/nv_exercise_picker.dart';
+import '../widgets/house/nv_expressive.dart';
+import '../widgets/house/nv_grouped_list.dart';
+import '../widgets/house/nv_button.dart';
+import '../widgets/house/nv_dialog.dart';
+import '../widgets/house/nv_sheet.dart';
+import '../widgets/house/nv_segmented_button.dart';
+import '../widgets/house/nv_switch.dart';
+import '../theme/lockout_shapes.dart';
 import 'exercise_video_screen.dart';
 
 /// Runs a nested sheet/pick action that resolves whether it changed
@@ -28,6 +30,9 @@ typedef RefreshAfter = Future<void> Function(Future<bool?> Function() action);
 String _newId() => DateTime.now().microsecondsSinceEpoch.toString();
 
 class RoutinesTab extends StatefulWidget {
+  final VoidCallback? onOpenSettings;
+  final ValueChanged<ScheduledDay>? onStartDay;
+
   /// Starts today's scheduled session from the featured-day card.
   ///
   /// `MainScreen` wires this to the Home tab's own session starter, so the
@@ -39,7 +44,12 @@ class RoutinesTab extends StatefulWidget {
   // Non-const constructor: see "Why some constructors in this app are
   // not const" at the top of lib/widgets/day_block.dart.
   // ignore: prefer_const_constructors_in_immutables
-  RoutinesTab({super.key, this.onStartToday});
+  RoutinesTab({
+    super.key,
+    this.onStartToday,
+    this.onOpenSettings,
+    this.onStartDay,
+  });
 
   @override
   State<RoutinesTab> createState() => RoutinesTabState();
@@ -73,19 +83,21 @@ class RoutinesTabState extends State<RoutinesTab> {
     final finishers = <String, List<FinisherItem>>{};
 
     for (final r in routines) {
-      final dayList =
-          (await db.getDaysForRoutine(r.id)).map(TrainingDay.fromMap).toList();
+      final dayList = (await db.getDaysForRoutine(
+        r.id,
+      )).map(TrainingDay.fromMap).toList();
       days[r.id] = dayList;
 
       for (final d in dayList) {
-        exercises[d.id] = (await db.getExercisesForDay(d.id))
-            .map(ExerciseDef.fromMap)
-            .toList();
-        warmups[d.id] =
-            (await db.getWarmupsForDay(d.id)).map(WarmupItem.fromMap).toList();
-        finishers[d.id] = (await db.getFinishersForDay(d.id))
-            .map(FinisherItem.fromMap)
-            .toList();
+        exercises[d.id] = (await db.getExercisesForDay(
+          d.id,
+        )).map(ExerciseDef.fromMap).toList();
+        warmups[d.id] = (await db.getWarmupsForDay(
+          d.id,
+        )).map(WarmupItem.fromMap).toList();
+        finishers[d.id] = (await db.getFinishersForDay(
+          d.id,
+        )).map(FinisherItem.fromMap).toList();
       }
     }
 
@@ -123,9 +135,6 @@ class RoutinesTabState extends State<RoutinesTab> {
   /// A [TrainingDay] loaded from the DB never carries its exercises inline —
   /// they live in [_dayExercises], loaded separately. Hydrate a copy so
   /// [dayRowSummary] and [DayRow] see the real count.
-  TrainingDay _hydrated(TrainingDay day) =>
-      day.copyWith(exercises: _dayExercises[day.id] ?? []);
-
   // --- CREATE ROUTINE ---
 
   /// Opens the create-routine form. `_CreateRoutineForm` owns its own
@@ -133,9 +142,9 @@ class RoutinesTabState extends State<RoutinesTab> {
   /// than hoisting, is what keeps typed state alive across a non-dismissing
   /// drag without also reintroducing a use-after-dispose).
   Future<void> _openCreateRoutineSheet() async {
-    final saved = await showLockoutSheet<bool>(
+    final saved = await showNvEditor<bool>(
       context: context,
-      title: 'CREATE NEW ROUTINE',
+      title: 'Create routine',
       builder: (ctx) => _CreateRoutineForm(),
     );
     if (saved == true && mounted) await reload();
@@ -148,9 +157,9 @@ class RoutinesTabState extends State<RoutinesTab> {
   /// detail sheet, on an edit) can tell a save apart from a dismiss.
   Future<bool?> _openDayFormSheet(String routineId, {TrainingDay? existing}) {
     final dayCount = (_routineDays[routineId] ?? []).length;
-    return showLockoutSheet<bool>(
+    return showNvEditor<bool>(
       context: context,
-      title: existing == null ? 'ADD TRAINING DAY' : 'EDIT DAY',
+      title: existing == null ? 'Add training day' : 'Edit day',
       builder: (ctx) => _DayForm(
         routineId: routineId,
         existing: existing,
@@ -168,14 +177,11 @@ class RoutinesTabState extends State<RoutinesTab> {
     required bool isWarmup,
     required int index,
   }) {
-    return showLockoutSheet<bool>(
+    return showNvEditor<bool>(
       context: context,
-      title: isWarmup ? 'ADD WARM-UP ITEM' : 'ADD FINISHER ITEM',
-      builder: (ctx) => _SubItemForm(
-        dayId: dayId,
-        isWarmup: isWarmup,
-        index: index,
-      ),
+      title: isWarmup ? 'Add warm-up' : 'Add finisher',
+      builder: (ctx) =>
+          _SubItemForm(dayId: dayId, isWarmup: isWarmup, index: index),
     );
   }
 
@@ -184,74 +190,59 @@ class RoutinesTabState extends State<RoutinesTab> {
   /// Resolves `true` only if an exercise was added; `null`/`false` for a
   /// cancelled pick or a dismissed sheet.
   Future<bool?> _addExerciseToDay(String dayId) async {
-    final picked = await showExercisePicker(context);
-    if (picked == null || !mounted) return null;
-
-    final existing = _dayExercises[dayId] ?? [];
-    return _openExerciseSheet(
-      ExerciseDef(
-        id: _newId(),
-        dayId: dayId,
-        name: picked.name,
-        targetSets: picked.sets,
-        targetRepsMin: picked.repsMin,
-        targetRepsMax: picked.repsMax,
-        muscleGroup: picked.muscleGroup,
-        orderIndex: existing.length,
-      ),
-      isNew: true,
-    );
+    final picked = await showExercisesPicker(context);
+    if (picked == null || picked.isEmpty || !mounted) return null;
+    final start = (_dayExercises[dayId] ?? []).length;
+    final batch = _newId();
+    try {
+      await DatabaseService.instance.insertExercises([
+        for (var i = 0; i < picked.length; i++)
+          ExerciseDef(
+            id: '$batch-$i',
+            dayId: dayId,
+            name: picked[i].name,
+            targetSets: picked[i].sets,
+            targetRepsMin: picked[i].repsMin,
+            targetRepsMax: picked[i].repsMax,
+            muscleGroup: picked[i].muscleGroup,
+            orderIndex: start + i,
+          ).toMap(),
+      ]);
+      return true;
+    } catch (_) {
+      if (mounted) {
+        showNvSnackbar(
+          context: context,
+          message: 'Exercises not added. Please try again.',
+        );
+      }
+      return false;
+    }
   }
 
   /// Resolves `true` if the exercise was saved or removed — either way the
   /// caller's list is stale and must refresh.
   Future<bool?> _openExerciseSheet(ExerciseDef ex, {bool isNew = false}) {
-    return showLockoutSheet<bool>(
+    return showNvEditor<bool>(
       context: context,
-      title: isNew ? 'ADD EXERCISE' : 'EDIT EXERCISE',
-      builder: (ctx) => _ExerciseForm(
-        ex: ex,
-        isNew: isNew,
-        onWatch: _openVideo,
-      ),
+      title: isNew ? 'Add exercise' : 'Edit exercise',
+      builder: (ctx) =>
+          _ExerciseForm(ex: ex, isNew: isNew, onWatch: _openVideo),
     );
   }
 
   Future<void> _confirmDeleteRoutine(Routine routine) async {
-    final semantics = LockoutSemantics.of(context);
-    final ok = await showDialog<bool>(
+    final confirmed = await showNvDestructiveDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete routine?'),
-        content: Text(
-          '"${routine.name}" and all of its training days and exercises will be '
-          'removed. Past workout history is kept.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            // `semantics.danger`, not `colorScheme.error` — deleting a
-            // routine is a destructive confirmation, which is the role
-            // `LockoutSemantics` reserves `danger` for; `error` is what the
-            // framework also paints on an invalid form field (see that
-            // class's doc, and today_tab's discard dialog for the same
-            // rule).
-            style: TextButton.styleFrom(foregroundColor: semantics.danger),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+      title: 'Delete routine?',
+      body:
+          '"${routine.name}" and its planned days and exercises will be removed. Completed workouts stay in your history.',
+      confirmLabel: 'Delete',
+      cancelLabel: 'Keep routine',
     );
-
-    if (ok == true) {
-      await DatabaseService.instance.deleteRoutine(routine.id);
-      if (!mounted) return;
-      await _loadAllRoutinesData();
-    }
+    if (!confirmed || !mounted) return;
+    await DatabaseService.instance.deleteRoutine(routine.id);
+    if (mounted) await reload();
   }
 
   Future<void> _setActive(Routine routine) async {
@@ -267,21 +258,16 @@ class RoutinesTabState extends State<RoutinesTab> {
   /// The routine list was three levels of bordered box deep; a sheet gives
   /// the detail the whole screen and leaves the week scannable behind it.
   Future<void> _openDaySheet(Routine routine, TrainingDay day) async {
-    await showLockoutSheet<void>(
+    await showNvEditor<void>(
       context: context,
-      title: '${day.tag} - ${day.name}',
+      title: '${_dayLabel(day.tag)} · ${day.name}',
       builder: (ctx) => StatefulBuilder(
         builder: (context, setSheet) {
           final exercises = _dayExercises[day.id] ?? [];
           final warmups = _dayWarmups[day.id] ?? [];
           final finishers = _dayFinishers[day.id] ?? [];
-          final semantics = LockoutSemantics.of(context);
-          final colours = DayColours.assign(
-            _routineDays[routine.id] ?? [],
-            semantics,
-          );
-          final accent = colours[day.id] ?? semantics.restDay;
-          final onAccent = DayColours.onColorFor(accent);
+          final accent = Theme.of(context).colorScheme.primaryContainer;
+          final onAccent = Theme.of(context).colorScheme.onPrimaryContainer;
           return _buildDayDetail(
             ctx,
             setSheet,
@@ -316,574 +302,456 @@ class RoutinesTabState extends State<RoutinesTab> {
     Color accent,
     Color onAccent,
   ) {
-    // Runs a nested sheet/pick action, then refreshes the outer state and
-    // this sheet's own content only if something actually changed — the
-    // sheet route is a separate subtree from RoutinesTabState, so a reload
-    // there does not repaint content already on screen here.
-    Future<void> refreshAfter(Future<bool?> Function() action) async {
+    Future<void> refresh(Future<bool?> Function() action) async {
       final changed = await action();
       if (changed != true || !mounted) return;
-      await _loadAllRoutinesData();
+      await reload();
       if (sheetCtx.mounted) setSheet(() {});
     }
 
-    final theme = Theme.of(sheetCtx);
-    final colors = theme.colorScheme;
-    final semantics = LockoutSemantics.of(sheetCtx);
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
+    Widget extras(
+      String title,
+      List<(String, String, VoidCallback)> items,
+      VoidCallback add,
+    ) => Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // v1 showed the day's focus (muscle groups) on the card's summary
-        // row; `DayRow`'s signature is fixed and has no slot for it, so it
-        // surfaces here instead — read-only, the edit form is where it's set.
-        if (day.focus.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(bottom: LockoutTheme.spaceSm),
-            child: Text(day.focus, style: theme.textTheme.bodySmall),
-          ),
-        if (day.note.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(bottom: LockoutTheme.spaceMd),
-            child: LockoutCard(
-              color: colors.tertiaryContainer,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Read first',
-                    style: theme.textTheme.labelSmall
-                        ?.copyWith(color: colors.onTertiaryContainer),
+        NvHeading(title),
+        if (items.isNotEmpty)
+          NvGroupedList(
+            children: [
+              for (final item in items)
+                NvListItem(
+                  title: item.$1,
+                  supporting: item.$2,
+                  leading: const NvIconBadge(
+                    icon: Icons.self_improvement_rounded,
+                    shape: LockoutShape.arch,
+                    tone: NvTone.tertiary,
                   ),
-                  const SizedBox(height: LockoutTheme.spaceXs),
-                  Text(
-                    day.note,
-                    style: theme.textTheme.bodyMedium
-                        ?.copyWith(color: colors.onTertiaryContainer),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-        if (day.isRestDay)
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              vertical: LockoutTheme.spaceMd,
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.bedtime_outlined, color: colors.onSurfaceVariant),
-                const SizedBox(width: LockoutTheme.spaceSm),
-                Expanded(
-                  child: Text(
-                    'Recovery is part of the plan.',
-                    style: theme.textTheme.bodyMedium
-                        ?.copyWith(color: colors.onSurfaceVariant),
+                  trailing: NvShapeButton(
+                    icon: Icons.close_rounded,
+                    label: 'Remove ${item.$1}',
+                    onPressed: item.$3,
                   ),
                 ),
-              ],
-            ),
-          )
-        else ...[
-          // Every section is built the same way: heading, rows, labelled
-          // add link. The heading never carries its own `+` and the link is
-          // never swapped out once the section fills up, so the control the
-          // user just pressed is still where they left it.
-          // --- Warm-up ---
-          SectionHeading(
-            title: 'Warm-Up',
-            amount: warmups.isEmpty ? '' : '~6-8 min',
-          ),
-          ...warmups.asMap().entries.map((e) => SubItemRow(
-                name: e.value.name,
-                amt: e.value.amt,
-                onRemove: () async {
-                  await DatabaseService.instance.deleteWarmup(e.value.id);
-                  if (!mounted) return;
-                  await _loadAllRoutinesData();
-                  if (sheetCtx.mounted) setSheet(() {});
-                },
-              )),
-          AddLink(
-            label: '+ ADD WARM-UP',
-            onTap: () => refreshAfter(() => _openSubItemSheet(
-                dayId: day.id, isWarmup: true, index: warmups.length)),
-          ),
-
-          // --- Exercises ---
-          SectionHeading(
-            title: 'Exercises',
-            amount: exercises.isEmpty ? '' : '${exercises.length}',
-          ),
-          ...exercises.asMap().entries.map(
-                (e) => _buildExerciseRow(
-                    e.key + 1, e.value, accent, onAccent, refreshAfter, theme),
-              ),
-          AddLink(
-            label: '+ ADD EXERCISE',
-            onTap: () => refreshAfter(() => _addExerciseToDay(day.id)),
-          ),
-
-          // --- Finisher ---
-          SectionHeading(
-            title: 'Conditioning Finisher',
-            amount: finishers.isEmpty ? '' : 'x3 rounds',
-          ),
-          ...finishers.asMap().entries.map((e) => SubItemRow(
-                name: e.value.name,
-                amt: e.value.amt,
-                onRemove: () async {
-                  await DatabaseService.instance.deleteFinisher(e.value.id);
-                  if (!mounted) return;
-                  await _loadAllRoutinesData();
-                  if (sheetCtx.mounted) setSheet(() {});
-                },
-              )),
-          AddLink(
-            label: '+ ADD FINISHER',
-            onTap: () => refreshAfter(() => _openSubItemSheet(
-                dayId: day.id, isWarmup: false, index: finishers.length)),
-          ),
-        ],
-
-        // --- Day actions ---
-        Padding(
-          padding: const EdgeInsets.only(top: LockoutTheme.spaceSm),
-          child: Row(
-            children: [
-              TextButton.icon(
-                onPressed: () async {
-                  final saved =
-                      await _openDayFormSheet(routine.id, existing: day);
-                  if (saved != true || !mounted) return;
-                  await _loadAllRoutinesData();
-                  if (sheetCtx.mounted) Navigator.of(sheetCtx).maybePop();
-                },
-                icon: const Icon(Icons.edit_outlined, size: 18),
-                label: const Text('Edit day'),
-              ),
-              const SizedBox(width: LockoutTheme.spaceSm),
-              TextButton.icon(
-                onPressed: () async {
-                  await DatabaseService.instance.deleteDay(day.id);
-                  if (!mounted) return;
-                  await _loadAllRoutinesData();
-                  if (sheetCtx.mounted) Navigator.of(sheetCtx).maybePop();
-                },
-                // `semantics.danger`, not `colors.error` — this deletes a
-                // day outright, and the trigger has to match the role the
-                // confirmation it belongs to already uses. `error` is the
-                // invalid-form-field role; `ThemeController._harmonised`
-                // pins it to the wallpaper's red under a dynamic scheme
-                // while `danger` comes from the authored fallback, so the
-                // two drift apart and one screen ends up painting the same
-                // class of action in two colours.
-                style: TextButton.styleFrom(foregroundColor: semantics.danger),
-                icon: const Icon(Icons.close, size: 18),
-                label: const Text('Delete day'),
-              ),
             ],
           ),
+        const SizedBox(height: 8),
+        NvButton(
+          variant: NvButtonVariant.tonal,
+          label: 'Add ${title == 'Warm-up' ? 'warm-up' : 'finisher'}',
+          icon: Icons.add_rounded,
+          onPressed: add,
         ),
+      ],
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (day.focus.isNotEmpty)
+          Text(day.focus, style: Theme.of(sheetCtx).textTheme.titleMedium),
+        if (day.note.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          NvSurface(tone: NvTone.tertiary, child: Text(day.note)),
+        ],
+        if (day.isRestDay)
+          const NvEmpty(
+            title: 'Recovery is part of the plan',
+            message:
+                'Take the day to recover. Your next session will be ready when you are.',
+            icon: Icons.bedtime_outlined,
+          )
+        else ...[
+          extras(
+            'Warm-up',
+            warmups
+                .map(
+                  (w) => (
+                    w.name,
+                    w.amt,
+                    () async {
+                      await DatabaseService.instance.deleteWarmup(w.id);
+                      await reload();
+                      if (sheetCtx.mounted) setSheet(() {});
+                    },
+                  ),
+                )
+                .toList(),
+            () => refresh(
+              () => _openSubItemSheet(
+                dayId: day.id,
+                isWarmup: true,
+                index: warmups.length,
+              ),
+            ),
+          ),
+          NvHeading('Exercises', action: Text('${exercises.length}')),
+          if (exercises.isEmpty)
+            const Text('Add an exercise to build this session.'),
+          NvGroupedList(
+            children: [
+              for (var i = 0; i < exercises.length; i++)
+                NvListItem(
+                  leading: NvIconBadge(
+                    icon: Icons.fitness_center_rounded,
+                    shape: LockoutShape.values[[8, 11, 7, 14, 4][i % 5]],
+                    tone: NvTone.values[i % 3],
+                  ),
+                  title: exercises[i].name,
+                  supporting: exercises[i].targetLabel,
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => refresh(() => _openExerciseSheet(exercises[i])),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          NvButton(
+            variant: NvButtonVariant.tonal,
+            label: 'Add exercise',
+            icon: Icons.add_rounded,
+            onPressed: () => refresh(() => _addExerciseToDay(day.id)),
+          ),
+          extras(
+            'Finisher',
+            finishers
+                .map(
+                  (w) => (
+                    w.name,
+                    w.amt,
+                    () async {
+                      await DatabaseService.instance.deleteFinisher(w.id);
+                      await reload();
+                      if (sheetCtx.mounted) setSheet(() {});
+                    },
+                  ),
+                )
+                .toList(),
+            () => refresh(
+              () => _openSubItemSheet(
+                dayId: day.id,
+                isWarmup: false,
+                index: finishers.length,
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(height: 28),
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            NvButton(
+              variant: NvButtonVariant.tonal,
+              label: 'Edit day',
+              icon: Icons.edit_outlined,
+              onPressed: () async {
+                final saved = await _openDayFormSheet(
+                  routine.id,
+                  existing: day,
+                );
+                if (saved != true || !mounted) return;
+                await reload();
+                if (sheetCtx.mounted) Navigator.of(sheetCtx).pop();
+              },
+            ),
+            NvButton(
+              variant: NvButtonVariant.danger,
+              label: 'Delete day',
+              onPressed: () async {
+                final confirmed = await showNvDestructiveDialog(
+                  context: sheetCtx,
+                  title: 'Delete this day?',
+                  body:
+                      'This removes the day and its planned exercises. Completed workouts stay in your history.',
+                  confirmLabel: 'Delete',
+                  cancelLabel: 'Keep day',
+                );
+                if (!confirmed || !mounted) return;
+                await DatabaseService.instance.deleteDay(day.id);
+                await reload();
+                if (sheetCtx.mounted) Navigator.of(sheetCtx).pop();
+              },
+            ),
+          ],
+        ),
+        if (!day.isRestDay &&
+            exercises.isNotEmpty &&
+            widget.onStartDay != null) ...[
+          const SizedBox(height: 20),
+          NvButton(
+            variant: NvButtonVariant.filled,
+            label: 'Start workout',
+            icon: Icons.play_arrow_rounded,
+            large: true,
+            onPressed: () {
+              Navigator.of(sheetCtx).pop();
+              widget.onStartDay!(
+                ScheduledDay(routine: routine, day: day, exercises: exercises),
+              );
+            },
+          ),
+        ],
       ],
     );
   }
 
-  /// Number, name, then target and WATCH on a second line — a long name and a
-  /// target chip competing for one row forced three-line wraps.
-  /// One exercise line inside the day sheet.
-  ///
-  /// Deliberately a line, not a card. Each of the three sections used to
-  /// draw its rows differently — warm-ups and finishers as plain text, the
-  /// exercises as bordered, shadowed cards — so one sheet spoke three visual
-  /// languages for three lists of the same kind of thing, and the exercises
-  /// read as a wall of rectangles between them. Now every row in the sheet
-  /// is a name on the left, its prescription in mono on the right, and a
-  /// 40dp control at the end. Only the number chip and WATCH tell an
-  /// exercise apart, and those carry information the other rows do not have.
-  Widget _buildExerciseRow(
-    int number,
-    ExerciseDef ex,
-    Color accent,
-    Color onAccent,
-    RefreshAfter refreshAfter,
-    // The sheet's own theme, not the tab's — this row only ever renders
-    // inside the day sheet, whose context `_buildDayDetail` already resolves
-    // two frames up as `Theme.of(sheetCtx)`. Reading `Theme.of(context)` here
-    // (the tab's element) is harmless only while the sheet shares the tab's
-    // tree today; it stops being harmless the moment a sheet wraps its own
-    // `Theme`.
-    ThemeData theme,
-  ) {
-    return GestureDetector(
-      onTap: () => refreshAfter(() => _openExerciseSheet(ex)),
-      behavior: HitTestBehavior.opaque,
-      child: ConstrainedBox(
-        constraints:
-            const BoxConstraints(minHeight: LockoutTheme.minTouchTarget),
-        child: Row(
-          children: [
-            Container(
-              width: 24,
-              height: 24,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: accent,
-                shape: BoxShape.circle,
-              ),
-              child: Text(
-                '$number',
-                style: LockoutTheme.numeric(context, size: 11, color: onAccent),
-              ),
-            ),
-            const SizedBox(width: LockoutTheme.spaceSm),
-            Expanded(
-              child: Text(
-                ex.name,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodyMedium,
-              ),
-            ),
-            const SizedBox(width: LockoutTheme.spaceSm),
-            Text(
-              ex.targetWeightKg > 0
-                  ? '${ex.targetLabel} @ ${ex.targetWeightKg}kg'
-                  : ex.targetLabel,
-              style: theme.textTheme.labelSmall,
-            ),
-            // Sits where the remove glyph sits on a warm-up or finisher row,
-            // on the same 40dp box, so the right edge of the sheet is one
-            // column of controls rather than three.
-            GestureDetector(
-              onTap: () => _openVideo(ex.name, ex.videoUrl),
-              behavior: HitTestBehavior.opaque,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(
-                  minWidth: LockoutTheme.minTouchTarget,
-                  minHeight: LockoutTheme.minTouchTarget,
-                ),
-                child: Icon(
-                  Icons.play_circle_outline,
-                  size: 20,
-                  color: theme.colorScheme.primary,
+  Future<void> _openRoutine(Routine routine) async {
+    await showNvEditor<void>(
+      context: context,
+      title: routine.name,
+      builder: (ctx) => StatefulBuilder(
+        builder: (_, update) {
+          final days = _routineDays[routine.id] ?? [];
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              NvSurface(
+                tone: NvTone.primary,
+                child: Row(
+                  children: [
+                    const NvIconBadge(
+                      icon: Icons.fitness_center_rounded,
+                      shape: LockoutShape.flower,
+                      size: 64,
+                      tone: NvTone.surface,
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            routine.id == _activeRoutineId
+                                ? 'Active plan'
+                                : 'Training plan',
+                            style: Theme.of(ctx).textTheme.titleLarge,
+                          ),
+                          Text(
+                            '${days.length} ${days.length == 1 ? 'day' : 'days'} · ${routine.schedulingMode == SchedulingMode.weekday ? 'Weekly schedule' : 'Rotating cycle'}',
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
-          ],
-        ),
+              const NvHeading('Your week'),
+              if (days.isEmpty)
+                const Text('No days yet. Add your first training or rest day.'),
+              NvGroupedList(
+                children: [
+                  for (var i = 0; i < days.length; i++)
+                    NvListItem(
+                      leading: NvIconBadge(
+                        icon: days[i].isRestDay
+                            ? Icons.bedtime_outlined
+                            : Icons.fitness_center_rounded,
+                        shape: LockoutShape.values[[11, 8, 14, 6, 9][i % 5]],
+                        tone: NvTone.values[i % 3],
+                      ),
+                      title: days[i].name,
+                      supporting:
+                          '${_dayLabel(days[i].tag)} · ${(_dayExercises[days[i].id] ?? []).length} exercises',
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: () async {
+                        await _openDaySheet(routine, days[i]);
+                        if (ctx.mounted) update(() {});
+                      },
+                    ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              NvButton(
+                variant: NvButtonVariant.filled,
+                label: 'Add day',
+                icon: Icons.add_rounded,
+                onPressed: () async {
+                  final changed = await _openDayFormSheet(routine.id);
+                  if (changed == true) {
+                    await reload();
+                    if (ctx.mounted) update(() {});
+                  }
+                },
+              ),
+              const SizedBox(height: 12),
+              if (routine.id != _activeRoutineId)
+                NvButton(
+                  variant: NvButtonVariant.tonal,
+                  label: 'Use this plan',
+                  onPressed: () async {
+                    await _setActive(routine);
+                    if (ctx.mounted) update(() {});
+                  },
+                ),
+              const SizedBox(height: 16),
+              NvButton(
+                variant: NvButtonVariant.danger,
+                label: 'Delete routine',
+                onPressed: () async {
+                  await _confirmDeleteRoutine(routine);
+                  await reload();
+                  if (ctx.mounted &&
+                      !_routines.any((r) => r.id == routine.id)) {
+                    Navigator.of(ctx).pop();
+                  }
+                },
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 
-  // --- BUILD ---
+  String _dayLabel(String code) => code.isEmpty
+      ? 'Unscheduled'
+      : '${code[0]}${code.substring(1).toLowerCase()}';
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      // SafeArea(bottom: false): MainScreen dropped its global AppBar in the
-      // five-tab restructure, so each tab now owns its top inset. Without it
-      // the header paints under the status bar on an edge-to-edge window and
-      // swallows taps there. Bottom is left alone — BottomNav carries its own
-      // inset and content should scroll under it.
-      body: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.all(LockoutTheme.screenPadding),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Workout',
-                      style: Theme.of(context).textTheme.headlineMedium,
+    if (_isLoading) return const Center(child: CircularProgressIndicator());
+    final active = _routines.where((r) => r.id == _activeRoutineId).firstOrNull;
+    return NvPage(
+      title: 'Training',
+      actions: [
+        NvShapeButton(
+          key: const ValueKey('open-settings'),
+          icon: Icons.settings_outlined,
+          label: 'Settings',
+          onPressed: widget.onOpenSettings,
+        ),
+      ],
+      children: [
+        if (active != null)
+          NvSurface(
+            tone: NvTone.primary,
+            radius: 36,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        active.name,
+                        style: Theme.of(context).textTheme.headlineLarge,
+                      ),
                     ),
-                  ),
-                  // A tonal button rather than the old pill: the label and its
-                  // icon overflowed an 11dp-narrow Row on a 360dp window.
-                  FilledButton.tonalIcon(
-                    onPressed: _openCreateRoutineSheet,
-                    icon: const Icon(Icons.add),
-                    label: const Text('New'),
+                    const NvIconBadge(
+                      icon: Icons.fitness_center_rounded,
+                      shape: LockoutShape.flower,
+                      size: 72,
+                      tone: NvTone.surface,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  '${(_routineDays[active.id] ?? []).length} ${(_routineDays[active.id] ?? []).length == 1 ? 'day' : 'days'} in your plan',
+                ),
+                const SizedBox(height: 20),
+                if (active.schedulingMode == SchedulingMode.weekday)
+                  NvWeekStrip(
+                    dates: const {},
+                    plannedWeekdays: {
+                      for (final day
+                          in _routineDays[active.id] ?? <TrainingDay>[])
+                        if (!day.isRestDay)
+                          const [
+                                'mon',
+                                'tue',
+                                'wed',
+                                'thu',
+                                'fri',
+                                'sat',
+                                'sun',
+                              ].indexOf(day.tag.trim().toLowerCase()) +
+                              1,
+                    },
+                  )
+                else ...[
+                  const Text('Training cycle'),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final day
+                          in _routineDays[active.id] ?? <TrainingDay>[])
+                        Tooltip(
+                          message: day.name,
+                          child: NvSurface(
+                            padding: const EdgeInsets.all(LockoutTheme.spaceSm),
+                            tone: NvTone.secondary,
+                            child: Text(
+                              '${day.orderIndex + 1} · ${day.isRestDay ? 'Rest' : day.name}',
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ],
-              ),
-            const SizedBox(height: LockoutTheme.spaceMd),
-            Expanded(
-              child: _routines.isEmpty
-                  ? _buildEmptyState()
-                  : ListView.separated(
-                      itemCount: _routines.length,
-                      itemBuilder: (ctx, i) => _buildRoutineCard(_routines[i]),
-                      separatorBuilder: (ctx, i) =>
-                          const SizedBox(height: LockoutTheme.spaceMd),
-                    ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    final theme = Theme.of(context);
-    return Center(
-      child: LockoutCard(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.fitness_center,
-                size: 48, color: theme.colorScheme.onSurfaceVariant),
-            const SizedBox(height: LockoutTheme.spaceSm),
-            Text('No routines yet', style: theme.textTheme.titleMedium),
-            const SizedBox(height: LockoutTheme.spaceXs),
-            Text(
-              'Tap New and pick a starter split. Every day arrives with a '
-              'warm-up, numbered exercises and a conditioning finisher already '
-              'filled in.',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium,
+                const SizedBox(height: 20),
+                NvButton(
+                  variant: NvButtonVariant.filled,
+                  label: 'Open plan',
+                  onPressed: () => _openRoutine(active),
+                ),
+              ],
             ),
+          ),
+        if (_routines.isEmpty)
+          NvEmpty(
+            title: 'Build your training week',
+            message:
+                'Start with a ready-made split or create a routine of your own.',
+            action: 'Create routine',
+            onPressed: _openCreateRoutineSheet,
+          ),
+        const NvHeading('Your routines'),
+        NvGroupedList(
+          children: [
+            for (var i = 0; i < _routines.length; i++)
+              NvListItem(
+                leading: NvIconBadge(
+                  icon: Icons.fitness_center_rounded,
+                  shape: LockoutShape.values[[11, 8, 14, 6, 9][i % 5]],
+                  tone: NvTone.values[i % 3],
+                ),
+                title: _routines[i].name,
+                supporting: _routines[i].id == _activeRoutineId
+                    ? 'Active plan'
+                    : '${(_routineDays[_routines[i].id] ?? []).length} ${(_routineDays[_routines[i].id] ?? []).length == 1 ? 'day' : 'days'}',
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () => _openRoutine(_routines[i]),
+              ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildRoutineCard(Routine routine) {
-    final theme = Theme.of(context);
-    // Hoisted alongside `theme`, the same shape `_buildDayDetail` uses: a
-    // method that reads semantics more than once resolves it once at the top
-    // rather than again inside each callback. Both spellings were correct —
-    // the popup's `itemBuilder` runs against a mounted element — so this is
-    // consistency, not a fix.
-    final semantics = LockoutSemantics.of(context);
-    final days = _routineDays[routine.id] ?? [];
-    final isActive = routine.id == _activeRoutineId;
-    final todayCode = ScheduleService.weekdayCode(DateTime.now());
-
-    // Not elevated: the featured `TodayDayCard` inside is the card that
-    // leads on this screen (see `LockoutCard`'s own doc), so the container
-    // stays flat and lets that one lift.
-    return LockoutCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(routine.name, style: theme.textTheme.titleLarge),
-              ),
-              PopupMenuButton<String>(
-                onSelected: (v) {
-                  if (v == 'active') _setActive(routine);
-                  if (v == 'delete') _confirmDeleteRoutine(routine);
-                },
-                // v1 hid SET AS ACTIVE once the routine was already active;
-                // a fixed two-item menu can't express that, so filter here.
-                itemBuilder: (_) => [
-                  if (!isActive)
-                    const PopupMenuItem(
-                      value: 'active',
-                      child: Text('Set as active'),
-                    ),
-                  PopupMenuItem(
-                    value: 'delete',
-                    child: Text(
-                      'Delete',
-                      // Same rule as the delete confirmation this opens and
-                      // as "Delete day" in the day sheet: a destructive
-                      // trigger is `semantics.danger`. `colorScheme.error`
-                      // is the invalid-input role and can resolve to a
-                      // different red under a dynamic scheme.
-                      style: TextStyle(color: semantics.danger),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+        const SizedBox(height: 20),
+        if (_routines.isNotEmpty)
+          NvButton(
+            variant: NvButtonVariant.filled,
+            label: 'Create routine',
+            icon: Icons.add_rounded,
+            onPressed: _openCreateRoutineSheet,
           ),
-          const SizedBox(height: LockoutTheme.spaceSm),
-          Wrap(
-            spacing: LockoutTheme.spaceSm,
-            runSpacing: LockoutTheme.spaceSm,
-            children: [
-              _tag(routine.schedulingMode.name.toUpperCase()),
-              _tag('${days.length} DAYS'),
-              if (isActive) _tag('ACTIVE', filled: true),
-            ],
+        const NvHeading('Exercise library'),
+        NvListItem(
+          leading: const NvIconBadge(
+            icon: Icons.search_rounded,
+            shape: LockoutShape.arch,
+            tone: NvTone.secondary,
           ),
-          const Divider(),
-          // No week to open yet, so Add day sits on the card itself. It used
-          // to live only inside the week expander, which an empty routine
-          // never builds: a new custom routine could not get its first day.
-          if (days.isEmpty) ...[
-            Text(
-              'No training days yet. Add one to pin a workout to a weekday.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            _buildAddDayButton(routine),
-          ] else
-            // One colour assignment per routine: the uniqueness rule is only
-            // meaningful across the whole week, so it is computed once here
-            // and shared by the featured card and the collapsed rows.
-            ...(() {
-              final colours = DayColours.assign(days, semantics);
-              final focus = RoutineFocus.resolve(
-                routine: routine,
-                days: days,
-                now: DateTime.now(),
-                isActive: isActive,
-              );
-
-              return [
-                if (focus != null) ...[
-                  if (focus.day == null)
-                    _buildNothingScheduledCard(focus.kind)
-                  else
-                    _buildFeaturedDay(routine, focus, colours),
-                  const SizedBox(height: LockoutTheme.spaceMd),
-                ],
-                _buildWeekExpander(routine, days, colours, todayCode, isActive),
-              ];
-            })(),
-        ],
-      ),
-    );
-  }
-
-  /// The featured day: the one the routine is actually on right now.
-  Widget _buildFeaturedDay(
-    Routine routine,
-    RoutineFocusResult focus,
-    Map<String, Color> colours,
-  ) {
-    final day = focus.day!;
-    final hydrated = _hydrated(day);
-    // A rest day has nothing to start, and neither does a day whose exercises
-    // have not been added yet — offering START SESSION there would open a
-    // session with zero exercises.
-    final startable = !hydrated.isRestDay && hydrated.exercises.isNotEmpty;
-
-    return TodayDayCard(
-      day: hydrated,
-      accent: colours[day.id] ?? LockoutSemantics.of(context).restDay,
-      summary: dayRowSummary(hydrated),
-      kind: focus.kind,
-      onTap: () => _openDaySheet(routine, day),
-      onStart: startable ? widget.onStartToday : null,
-    );
-  }
-
-  /// Shown when the routine is the active one but has nothing scheduled right
-  /// now — a gap in the week, or a rotation that has not started yet.
-  Widget _buildNothingScheduledCard(FeaturedDayKind kind) {
-    final theme = Theme.of(context);
-
-    return LockoutCard(
-      color: theme.colorScheme.surfaceContainerHigh,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            kind == FeaturedDayKind.today ? 'TODAY' : 'NEXT',
-            style: theme.textTheme.labelSmall,
-          ),
-          const SizedBox(height: LockoutTheme.spaceXs),
-          Text('Nothing scheduled today', style: theme.textTheme.titleLarge),
-          const SizedBox(height: LockoutTheme.spaceXs),
-          Text(
-            'Open the week to add a day, or train off-plan.',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// The rest of the week, collapsed by default.
-  ///
-  /// The expansion state is deliberately NOT persisted: reopening the tab
-  /// returns to the focused view, which is the entire point of featuring one
-  /// day. `+ Add day` lives inside, so building a routine means opening the
-  /// week rather than the week being permanently open for the sake of one
-  /// button.
-  Widget _buildWeekExpander(
-    Routine routine,
-    List<TrainingDay> days,
-    Map<String, Color> colours,
-    String todayCode,
-    bool isActive,
-  ) {
-    final theme = Theme.of(context);
-    final shape = RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(LockoutTheme.radiusField),
-    );
-
-    return ExpansionTile(
-      shape: shape,
-      collapsedShape: shape,
-      tilePadding: const EdgeInsets.symmetric(
-        horizontal: LockoutTheme.spaceSm,
-      ),
-      childrenPadding: const EdgeInsets.only(bottom: LockoutTheme.spaceSm),
-      title: Text(
-        'Full week (${days.length})',
-        style: theme.textTheme.titleSmall,
-      ),
-      children: [
-        for (final d in days)
-          WeekDayRow(
-            day: _hydrated(d),
-            accent: colours[d.id] ?? LockoutSemantics.of(context).restDay,
-            summary: dayRowSummary(_hydrated(d)),
-            isToday: isActive &&
-                routine.schedulingMode == SchedulingMode.weekday &&
-                d.tag.trim().toUpperCase() == todayCode,
-            onTap: () => _openDaySheet(routine, d),
-          ),
-        _buildAddDayButton(routine),
+          title: 'Explore exercises',
+          supporting: 'Search by name, muscle or equipment',
+          trailing: const Icon(Icons.chevron_right_rounded),
+          onTap: () async {
+            final picked = await showExercisePicker(context);
+            if (picked != null && mounted) _openVideo(picked.name, '');
+          },
+        ),
       ],
-    );
-  }
-
-  Widget _buildAddDayButton(Routine routine) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: TextButton.icon(
-        onPressed: () async {
-          final saved = await _openDayFormSheet(routine.id);
-          if (saved == true && mounted) await reload();
-        },
-        icon: const Icon(Icons.add),
-        label: const Text('Add day'),
-      ),
-    );
-  }
-
-  /// A day tag/status chip. Outline by default; filled only for the
-  /// currently-active routine's ACTIVE badge, so the header reads calmer.
-  Widget _tag(String label, {bool filled = false}) {
-    final colors = Theme.of(context).colorScheme;
-    return Chip(
-      label: Text(label),
-      backgroundColor: filled ? colors.primaryContainer : null,
-      labelStyle: filled
-          ? TextStyle(color: colors.onPrimaryContainer)
-          : null,
-      side: filled ? BorderSide.none : null,
     );
   }
 }
@@ -891,7 +759,7 @@ class RoutinesTabState extends State<RoutinesTab> {
 // --- FORM WIDGETS ---
 //
 // Each of the four sheet forms below is its own `StatefulWidget` rather than
-// a builder function fed hoisted controllers/locals. `showLockoutSheet`'s
+// a builder function fed hoisted controllers/locals. `showNvEditor`'s
 // `builder` is re-invoked on every rebuild of the sheet's own drag-handling
 // state (`_BottomSheetState._handleDragStart`/`_handleDragEnd`, both call
 // `setState`), but re-invoking a builder only recreates the `Widget`
@@ -900,7 +768,7 @@ class RoutinesTabState extends State<RoutinesTab> {
 // `StatefulBuilder`'s closure state used to. The difference is disposal:
 // `State.dispose()` runs when the widget is actually removed from the tree,
 // which for a modal route is when its exit animation finishes — not when
-// `showLockoutSheet`'s returned Future completes, which fires when the pop
+// `showNvEditor`'s returned Future completes, which fires when the pop
 // *starts* (`Route.didPop` -> `didComplete`), roughly 200ms earlier while
 // the sheet is still mounted and rebuilding. Disposing controllers in a
 // `finally` around that `await` (the previous fix wave's approach) tore them
@@ -931,6 +799,8 @@ class _CreateRoutineFormState extends State<_CreateRoutineForm> {
   // filled in. Nothing is ticked until the user picks, and SAVE waits.
   RoutineTemplate? _template;
   var _showTemplateError = false;
+  var _showNameError = false;
+  var _saving = false;
 
   @override
   void dispose() {
@@ -942,129 +812,135 @@ class _CreateRoutineFormState extends State<_CreateRoutineForm> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Column(
-      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        LockoutField(
-          label: 'Routine name',
-          controller: _nameCtrl,
-          hint: 'e.g. Push / Pull / Legs',
-        ),
-        const SizedBox(height: LockoutTheme.spaceMd),
-        Text('Scheduling mode', style: theme.textTheme.labelMedium),
-        const SizedBox(height: LockoutTheme.spaceSm),
-        SizedBox(
-          width: double.infinity,
-          child: SegmentedButton<SchedulingMode>(
-            segments: const [
-              ButtonSegment(
-                value: SchedulingMode.weekday,
-                label: Text('Weekday'),
-              ),
-              ButtonSegment(
-                value: SchedulingMode.rotating,
-                label: Text('Rotating'),
-              ),
-            ],
-            selected: {_mode},
-            showSelectedIcon: false,
-            onSelectionChanged: (s) => setState(() => _mode = s.first),
-          ),
-        ),
-        const SizedBox(height: LockoutTheme.spaceSm),
         Text(
-          _mode == SchedulingMode.weekday
-              ? 'Each day is pinned to a weekday. Today\'s workout is whichever day matches today.'
-              : 'Days cycle in order, one per calendar day, ignoring weekdays.',
-          style: theme.textTheme.bodySmall,
+          'Choose your starting point',
+          style: theme.textTheme.headlineSmall,
         ),
-        const SizedBox(height: LockoutTheme.spaceLg),
-        Text('Start from', style: theme.textTheme.labelMedium),
-        const SizedBox(height: LockoutTheme.spaceXs),
-        Text(
-          _showTemplateError
-              ? 'Pick a starter split, or Blank Routine to add your own days.'
-              : 'A starter split arrives with warm-ups, numbered exercises '
-                  'and a finisher already filled in.',
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: _showTemplateError ? theme.colorScheme.error : null,
-          ),
-        ),
-        const SizedBox(height: LockoutTheme.spaceSm),
-        ...RoutineTemplate.all.map((t) {
-          final selected = t.key == _template?.key;
-          return Padding(
-            padding: const EdgeInsets.only(bottom: LockoutTheme.spaceSm),
-            child: InkWell(
-              onTap: () => setState(() {
-                _template = t;
-                _showTemplateError = false;
-              }),
-              borderRadius: BorderRadius.circular(LockoutTheme.radiusField),
-              // Ink, not Container: Container's opaque BoxDecoration paints
-              // over the InkWell's splash (which draws on the ancestor
-              // Material), so a selected tile — the one with a fill — gave no
-              // press feedback while an unselected one still did. Ink paints
-              // its decoration onto that same ancestor Material, underneath
-              // any splash, instead of into a new layer on top of it.
-              child: Ink(
-                padding: const EdgeInsets.all(LockoutTheme.spaceMd),
-                decoration: BoxDecoration(
-                  color: selected ? theme.colorScheme.secondaryContainer : null,
-                  borderRadius:
-                      BorderRadius.circular(LockoutTheme.radiusField),
-                  border: Border.all(
-                    color: selected
-                        ? theme.colorScheme.primary
-                        : theme.colorScheme.outlineVariant,
-                    width: selected ? 2 : 1,
+        const SizedBox(height: 16),
+        for (var i = 0; i < RoutineTemplate.all.length; i++) ...[
+          NvSurface(
+            key: ValueKey('routine-template-${RoutineTemplate.all[i].key}'),
+            tone: _template?.key == RoutineTemplate.all[i].key
+                ? NvTone.primary
+                : NvTone.values[(i + 1) % 3],
+            selected: _template?.key == RoutineTemplate.all[i].key,
+            onPressed: () => setState(() {
+              _template = RoutineTemplate.all[i];
+              _showTemplateError = false;
+            }),
+            child: Row(
+              children: [
+                NvIconBadge(
+                  icon: i == 0
+                      ? Icons.edit_outlined
+                      : Icons.fitness_center_rounded,
+                  shape: LockoutShape.values[[14, 11, 8, 6, 9][i % 5]],
+                  tone: NvTone.surface,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        i == 0 ? 'Custom routine' : RoutineTemplate.all[i].name,
+                        style: theme.textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        RoutineTemplate.all[i].blurb,
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                    ],
                   ),
                 ),
-                child: Row(
-                  children: [
-                    Icon(
-                      selected
-                          ? Icons.check_box
-                          : Icons.check_box_outline_blank,
-                      color: selected ? theme.colorScheme.primary : null,
-                    ),
-                    const SizedBox(width: LockoutTheme.spaceSm),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(t.name, style: theme.textTheme.titleSmall),
-                          const SizedBox(height: LockoutTheme.spaceXs),
-                          Text(t.blurb, style: theme.textTheme.bodySmall),
-                        ],
-                      ),
-                    ),
-                  ],
+                const SizedBox(width: 8),
+                Icon(
+                  _template?.key == RoutineTemplate.all[i].key
+                      ? Icons.check_circle_rounded
+                      : Icons.radio_button_unchecked,
                 ),
-              ),
+              ],
             ),
-          );
-        }),
-        const SizedBox(height: LockoutTheme.spaceSm),
-        FilledButton(onPressed: () async {
-            final template = _template;
-            if (template == null) {
-              setState(() => _showTemplateError = true);
-              return;
-            }
-            final typed = _nameCtrl.text.trim();
-            final name =
-                typed.isNotEmpty ? typed : (template.key == 'blank' ? '' : template.name);
-            if (name.isEmpty) return;
-
-            await RoutineFactory.createFromTemplate(
-              name: name,
-              mode: _mode,
-              template: template,
-            );
-            if (!context.mounted) return;
-            Navigator.pop(context, true);
-          }, child: Text('Save routine')),
+          ),
+          const SizedBox(height: 6),
+        ],
+        if (_showTemplateError)
+          Text(
+            'Choose a starter plan or a custom routine.',
+            style: TextStyle(color: theme.colorScheme.error),
+          ),
+        const SizedBox(height: 20),
+        NvField(
+          label: 'Routine name',
+          controller: _nameCtrl,
+          hint: 'Name your plan',
+        ),
+        if (_showNameError)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              'Enter a routine name',
+              style: TextStyle(color: theme.colorScheme.error),
+            ),
+          ),
+        const NvHeading('Scheduling'),
+        NvSegmentedButton<SchedulingMode>(
+          segments: const [
+            NvSegment(value: SchedulingMode.weekday, label: 'Weekdays'),
+            NvSegment(value: SchedulingMode.rotating, label: 'Rotating'),
+          ],
+          selected: _mode,
+          onChanged: (v) => setState(() => _mode = v),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          _mode == SchedulingMode.weekday
+              ? 'Train on specific weekdays.'
+              : 'Days cycle in order, one per calendar day.',
+        ),
+        const SizedBox(height: 24),
+        NvButton(
+          variant: NvButtonVariant.filled,
+          label: _saving ? 'Creating…' : 'Save routine',
+          onPressed: _saving
+              ? null
+              : () async {
+                  final template = _template;
+                  if (template == null) {
+                    setState(() => _showTemplateError = true);
+                    return;
+                  }
+                  final name = _nameCtrl.text.trim().isNotEmpty
+                      ? _nameCtrl.text.trim()
+                      : template.key == 'blank'
+                      ? ''
+                      : template.name;
+                  if (name.isEmpty) {
+                    setState(() => _showNameError = true);
+                    return;
+                  }
+                  setState(() => _saving = true);
+                  try {
+                    await RoutineFactory.createFromTemplate(
+                      name: name,
+                      mode: _mode,
+                      template: template,
+                    );
+                    if (context.mounted) Navigator.pop(context, true);
+                  } catch (_) {
+                    if (context.mounted) {
+                      setState(() => _saving = false);
+                      showNvSnackbar(
+                        context: context,
+                        message: 'Routine not saved. Please try again.',
+                      );
+                    }
+                  }
+                },
+        ),
       ],
     );
   }
@@ -1128,61 +1004,64 @@ class _DayFormState extends State<_DayForm> {
           children: ScheduleService.weekdayPickerOrder.map((d) {
             final selected = _tag == d;
             return ChoiceChip(
-              label: Text(d),
+              label: Text('${d[0]}${d.substring(1).toLowerCase()}'),
               selected: selected,
               onSelected: (_) => setState(() => _tag = d),
             );
           }).toList(),
         ),
         const SizedBox(height: LockoutTheme.spaceMd),
-        LockoutField(
-          label: 'Day name',
-          controller: _nameCtrl,
-          hint: 'e.g. Push',
-        ),
+        NvField(label: 'Day name', controller: _nameCtrl, hint: 'e.g. Push'),
         const SizedBox(height: LockoutTheme.spaceMd),
-        LockoutField(
+        NvField(
           label: 'Focus (muscle groups)',
           controller: _focusCtrl,
           hint: 'e.g. Chest - Shoulders - Triceps',
         ),
         const SizedBox(height: LockoutTheme.spaceMd),
-        LockoutField(
-          label: 'Day note (optional)',
-          controller: _noteCtrl,
-        ),
+        NvField(label: 'Day note (optional)', controller: _noteCtrl),
         // Guidance the user needs before typing, not a hint hidden inside
         // the field until focus — `LockoutField` has no `helperText` slot
         // (out of scope for this file), so this stands in for one.
         const SizedBox(height: LockoutTheme.spaceXs),
-        Text('Injury cautions, tempo rules...', style: theme.textTheme.bodySmall),
+        Text(
+          'Injury cautions, tempo rules...',
+          style: theme.textTheme.bodySmall,
+        ),
         const SizedBox(height: LockoutTheme.spaceSm),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Mark as rest day'),
+        NvSwitchRow(
+          title: 'Mark as rest day',
           value: _isRest,
           onChanged: (v) => setState(() => _isRest = v),
         ),
         const SizedBox(height: LockoutTheme.spaceSm),
-        FilledButton(onPressed: () async {
-            if (_nameCtrl.text.trim().isEmpty) return;
-            await DatabaseService.instance.insertDay(TrainingDay(
-              id: existing?.id ?? _newId(),
-              routineId: widget.routineId,
-              name: _nameCtrl.text.trim(),
-              tag: _tag,
-              orderIndex: existing?.orderIndex ?? widget.dayCount,
-              focus: _focusCtrl.text.trim(),
-              note: _noteCtrl.text.trim(),
-              isRestDay: _isRest,
-            ).toMap());
+        NvSaveButton(
+          onSave: () async {
+            if (_nameCtrl.text.trim().isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Enter a name before saving')),
+              );
+              return;
+            }
+            await DatabaseService.instance.insertDay(
+              TrainingDay(
+                id: existing?.id ?? _newId(),
+                routineId: widget.routineId,
+                name: _nameCtrl.text.trim(),
+                tag: _tag,
+                orderIndex: existing?.orderIndex ?? widget.dayCount,
+                focus: _focusCtrl.text.trim(),
+                note: _noteCtrl.text.trim(),
+                isRestDay: _isRest,
+              ).toMap(),
+            );
             if (!context.mounted) return;
             Navigator.pop(context, true);
           },
           // 'Create day', not 'Add day': the week expander's own action is
           // already called Add day, and two controls with the same words
           // one tap apart is ambiguous.
-          child: Text(widget.existing == null ? 'Create day' : 'Save day'),
+          label: widget.existing == null ? 'Create day' : 'Save day',
         ),
       ],
     );
@@ -1221,41 +1100,48 @@ class _SubItemFormState extends State<_SubItemForm> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        LockoutField(
+        NvField(
           label: 'Movement',
           controller: _nameCtrl,
           hint: widget.isWarmup ? 'e.g. Arm circles' : 'e.g. Push-ups',
         ),
         const SizedBox(height: LockoutTheme.spaceMd),
-        LockoutField(
+        NvField(
           label: 'Amount',
           controller: _amtCtrl,
           hint: widget.isWarmup ? 'e.g. 3-4 min' : 'e.g. 12-15 reps',
         ),
         const SizedBox(height: LockoutTheme.spaceSm),
-        FilledButton(onPressed: () async {
+        NvSaveButton(
+          onSave: () async {
             if (_nameCtrl.text.trim().isEmpty) return;
             final db = DatabaseService.instance;
             if (widget.isWarmup) {
-              await db.insertWarmup(WarmupItem(
-                id: _newId(),
-                dayId: widget.dayId,
-                name: _nameCtrl.text.trim(),
-                amt: _amtCtrl.text.trim(),
-                orderIndex: widget.index,
-              ).toMap());
+              await db.insertWarmup(
+                WarmupItem(
+                  id: _newId(),
+                  dayId: widget.dayId,
+                  name: _nameCtrl.text.trim(),
+                  amt: _amtCtrl.text.trim(),
+                  orderIndex: widget.index,
+                ).toMap(),
+              );
             } else {
-              await db.insertFinisher(FinisherItem(
-                id: _newId(),
-                dayId: widget.dayId,
-                name: _nameCtrl.text.trim(),
-                amt: _amtCtrl.text.trim(),
-                orderIndex: widget.index,
-              ).toMap());
+              await db.insertFinisher(
+                FinisherItem(
+                  id: _newId(),
+                  dayId: widget.dayId,
+                  name: _nameCtrl.text.trim(),
+                  amt: _amtCtrl.text.trim(),
+                  orderIndex: widget.index,
+                ).toMap(),
+              );
             }
             if (!context.mounted) return;
             Navigator.pop(context, true);
-          }, child: Text('Add')),
+          },
+          label: 'Add',
+        ),
       ],
     );
   }
@@ -1293,7 +1179,9 @@ class _ExerciseFormState extends State<_ExerciseForm> {
     _repsMinCtrl = TextEditingController(text: ex.targetRepsMin.toString());
     _repsMaxCtrl = TextEditingController(text: ex.targetRepsMax.toString());
     _weightCtrl = TextEditingController(
-      text: ex.targetWeightKg == 0 ? '' : ex.targetWeightKg.toString(),
+      text: ex.targetWeightKg == 0
+          ? ''
+          : DisplayUnits.value(ex.targetWeightKg).toString(),
     );
     _restCtrl = TextEditingController(text: ex.restDefaultS.toString());
     _noteCtrl = TextEditingController(text: ex.note);
@@ -1346,13 +1234,13 @@ class _ExerciseFormState extends State<_ExerciseForm> {
                 ],
               ),
             ),
-            FilledButton.tonalIcon(
+            NvButton(
+              variant: NvButtonVariant.tonal,
               onPressed: () {
-                Navigator.pop(context);
                 widget.onWatch(ex.name, _videoCtrl.text.trim());
               },
-              icon: const Icon(Icons.play_arrow),
-              label: const Text('Watch'),
+              icon: Icons.play_arrow_rounded,
+              label: 'Watch form',
             ),
           ],
         ),
@@ -1360,7 +1248,7 @@ class _ExerciseFormState extends State<_ExerciseForm> {
         Row(
           children: [
             Expanded(
-              child: LockoutField(
+              child: NvField(
                 label: 'Sets',
                 controller: _setsCtrl,
                 keyboardType: TextInputType.number,
@@ -1368,7 +1256,7 @@ class _ExerciseFormState extends State<_ExerciseForm> {
             ),
             const SizedBox(width: LockoutTheme.spaceSm),
             Expanded(
-              child: LockoutField(
+              child: NvField(
                 label: 'Min reps',
                 controller: _repsMinCtrl,
                 keyboardType: TextInputType.number,
@@ -1376,7 +1264,7 @@ class _ExerciseFormState extends State<_ExerciseForm> {
             ),
             const SizedBox(width: LockoutTheme.spaceSm),
             Expanded(
-              child: LockoutField(
+              child: NvField(
                 label: 'Max reps',
                 controller: _repsMaxCtrl,
                 keyboardType: TextInputType.number,
@@ -1388,8 +1276,8 @@ class _ExerciseFormState extends State<_ExerciseForm> {
         Row(
           children: [
             Expanded(
-              child: LockoutField(
-                label: 'Weight (kg)',
+              child: NvField(
+                label: 'Weight (${DisplayUnits.unit})',
                 controller: _weightCtrl,
                 hint: '0',
                 keyboardType: TextInputType.number,
@@ -1397,7 +1285,7 @@ class _ExerciseFormState extends State<_ExerciseForm> {
             ),
             const SizedBox(width: LockoutTheme.spaceSm),
             Expanded(
-              child: LockoutField(
+              child: NvField(
                 label: 'Rest (sec)',
                 controller: _restCtrl,
                 keyboardType: TextInputType.number,
@@ -1406,20 +1294,14 @@ class _ExerciseFormState extends State<_ExerciseForm> {
           ],
         ),
         const SizedBox(height: LockoutTheme.spaceMd),
-        LockoutField(
-          label: 'Note',
-          controller: _noteCtrl,
-        ),
+        NvField(label: 'Note', controller: _noteCtrl),
         // Guidance the user needs before typing, not a hint hidden inside
         // the field until focus — `LockoutField` has no `helperText` slot
         // (out of scope for this file), so this stands in for one.
         const SizedBox(height: LockoutTheme.spaceXs),
         Text('Cues, injury notes, tempo...', style: theme.textTheme.bodySmall),
         const SizedBox(height: LockoutTheme.spaceMd),
-        LockoutField(
-          label: 'Pinned video URL (optional)',
-          controller: _videoCtrl,
-        ),
+        NvField(label: 'Pinned video URL (optional)', controller: _videoCtrl),
         const SizedBox(height: LockoutTheme.spaceXs),
         Text(
           'Empty video URL means Watch opens a YouTube search for a 3D / '
@@ -1427,47 +1309,74 @@ class _ExerciseFormState extends State<_ExerciseForm> {
           style: theme.textTheme.bodySmall,
         ),
         const SizedBox(height: LockoutTheme.spaceMd),
-        FilledButton(onPressed: () async {
-            final minReps =
-                int.tryParse(_repsMinCtrl.text) ?? ex.targetRepsMin;
-            var maxReps =
-                int.tryParse(_repsMaxCtrl.text) ?? ex.targetRepsMax;
+        NvSaveButton(
+          onSave: () async {
+            final targetSets = int.tryParse(_setsCtrl.text);
+            final minReps = int.tryParse(_repsMinCtrl.text);
+            final parsedMax = int.tryParse(_repsMaxCtrl.text);
+            final rest = int.tryParse(_restCtrl.text);
+            if (targetSets == null ||
+                targetSets < 1 ||
+                minReps == null ||
+                minReps < 1 ||
+                parsedMax == null ||
+                parsedMax < minReps ||
+                rest == null ||
+                rest < 0) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'Use positive sets and reps, a valid rep range, and a non-negative rest time.',
+                  ),
+                ),
+              );
+              return;
+            }
+            var maxReps = int.tryParse(_repsMaxCtrl.text) ?? ex.targetRepsMax;
             if (maxReps < minReps) maxReps = minReps;
 
             await DatabaseService.instance.insertExercise(
-              ex.copyWith(
-                targetSets: int.tryParse(_setsCtrl.text) ?? ex.targetSets,
-                targetRepsMin: minReps,
-                targetRepsMax: maxReps,
-                // `double.tryParse` accepts 'Infinity' and 'NaN', and this
-                // field has no `inputFormatters`. A non-finite target weight
-                // is copied into every live set the exercise starts,
-                // multiplied into the session's `total_volume_kg`, and
-                // persisted — after which LOG's `toInt()` throws on every
-                // launch and the archive row that would let the user delete
-                // the session is the thing that fails to paint.
-                // `NumericGuard.sanitiseKg` is the same guard Settings and
-                // BODY's measurement form already apply.
-                targetWeightKg: NumericGuard.sanitiseKg(_weightCtrl.text),
-                restDefaultS:
-                    int.tryParse(_restCtrl.text) ?? ex.restDefaultS,
-                note: _noteCtrl.text.trim(),
-                videoUrl: _videoCtrl.text.trim(),
-                muscleGroup: group,
-              ).toMap(),
+              ex
+                  .copyWith(
+                    targetSets: targetSets,
+                    targetRepsMin: minReps,
+                    targetRepsMax: maxReps,
+                    // `double.tryParse` accepts 'Infinity' and 'NaN', and this
+                    // field has no `inputFormatters`. A non-finite target weight
+                    // is copied into every live set the exercise starts,
+                    // multiplied into the session's `total_volume_kg`, and
+                    // persisted — after which LOG's `toInt()` throws on every
+                    // launch and the archive row that would let the user delete
+                    // the session is the thing that fails to paint.
+                    // `NumericGuard.sanitiseKg` is the same guard Settings and
+                    // BODY's measurement form already apply.
+                    targetWeightKg: DisplayUnits.toKg(
+                      NumericGuard.sanitiseKg(_weightCtrl.text),
+                    ),
+                    restDefaultS:
+                        int.tryParse(_restCtrl.text) ?? ex.restDefaultS,
+                    note: _noteCtrl.text.trim(),
+                    videoUrl: _videoCtrl.text.trim(),
+                    muscleGroup: group,
+                  )
+                  .toMap(),
             );
             if (!context.mounted) return;
             Navigator.pop(context, true);
           },
-          child: Text(widget.isNew ? 'Add to day' : 'Save changes'),
+          label: widget.isNew ? 'Add to day' : 'Save changes',
         ),
         if (!widget.isNew) ...[
           const SizedBox(height: LockoutTheme.spaceSm),
-          FilledButton.tonal(onPressed: () async {
+          NvSaveButton(
+            variant: NvButtonVariant.danger,
+            onSave: () async {
               await DatabaseService.instance.deleteExercise(ex.id);
               if (!context.mounted) return;
               Navigator.pop(context, true);
-            }, child: Text('Remove exercise')),
+            },
+            label: 'Remove exercise',
+          ),
         ],
       ],
     );

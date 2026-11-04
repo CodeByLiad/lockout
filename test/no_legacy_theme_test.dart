@@ -30,7 +30,8 @@ List<File> _dartFiles(String root) {
   expect(
     files,
     isNotEmpty,
-    reason: 'no .dart file was found under $root/, so this scan saw nothing '
+    reason:
+        'no .dart file was found under $root/, so this scan saw nothing '
         'and would pass having proved nothing',
   );
 
@@ -84,7 +85,8 @@ void main() {
     expect(
       offenders,
       isEmpty,
-      reason: 'colour belongs in a ColorScheme or LockoutSemantics, not in a '
+      reason:
+          'colour belongs in a ColorScheme or LockoutSemantics, not in a '
           'widget',
     );
   });
@@ -130,7 +132,8 @@ void main() {
     expect(
       offenders,
       isEmpty,
-      reason: 'padding comes from a LockoutTheme token — screenPadding (20), '
+      reason:
+          'padding comes from a LockoutTheme token — screenPadding (20), '
           'cardPadding (16) or the 8dp spaceXs..spaceXl scale — never from a '
           'number typed at the call site',
     );
@@ -175,7 +178,8 @@ void main() {
         expect(
           source,
           contains(allowed),
-          reason: '$path no longer contains "$allowed"; drop it from '
+          reason:
+              '$path no longer contains "$allowed"; drop it from '
               '_allowedJinatraText',
         );
         source = source.replaceAll(allowed, '');
@@ -187,7 +191,8 @@ void main() {
     expect(
       unvisited,
       isEmpty,
-      reason: 'the scan never reached these allowlisted paths, so their '
+      reason:
+          'the scan never reached these allowlisted paths, so their '
           'entries no longer guard anything; move or drop them in '
           '_allowedJinatraText',
     );
@@ -195,7 +200,8 @@ void main() {
     expect(
       offenders,
       isEmpty,
-      reason: 'the Jinatra theme layer is deleted; colour, type and shape '
+      reason:
+          'the Jinatra theme layer is deleted; colour, type and shape '
           'resolve through Theme.of(context), ColorScheme and '
           'LockoutSemantics',
     );
@@ -217,7 +223,8 @@ void main() {
     expect(
       offenders,
       isEmpty,
-      reason: 'a file named for the deleted theme layer is back under lib/; '
+      reason:
+          'a file named for the deleted theme layer is back under lib/; '
           'renaming its symbols does not make it a new layer',
     );
   });
@@ -227,14 +234,17 @@ void main() {
     // `theme_controller.dart`'s migration doc explains where the map came
     // from, and naming the dead file is not importing it.
     final offenders = _dartFiles('lib')
-        .where((f) => blankComments(f.readAsStringSync()).contains('schemes.dart'))
+        .where(
+          (f) => blankComments(f.readAsStringSync()).contains('schemes.dart'),
+        )
         .map(_rel)
         .toList();
 
     expect(
       offenders,
       isEmpty,
-      reason: 'the named-scheme model is gone; an appearance is a brightness '
+      reason:
+          'the named-scheme model is gone; an appearance is a brightness '
           'and an accent, resolved through LockoutPalette',
     );
   });
@@ -242,14 +252,19 @@ void main() {
   test('no source file reaches for dynamic colour', () {
     final offenders = _dartFiles('lib')
         .map((f) => (f, blankComments(f.readAsStringSync())))
-        .where((pair) =>
-            pair.$2.contains('dynamic_color') ||
-            pair.$2.contains('DynamicColorBuilder'))
+        .where(
+          (pair) =>
+              pair.$2.contains('dynamic_color') ||
+              pair.$2.contains('DynamicColorBuilder'),
+        )
         .map((pair) => _rel(pair.$1))
         .toList();
 
-    expect(offenders, isEmpty,
-        reason: 'the house document forbids dynamic colour (section 2)');
+    expect(
+      offenders,
+      isEmpty,
+      reason: 'the house document forbids dynamic colour (section 2)',
+    );
   });
 
   test('the manifest no longer depends on dynamic_color', () {
@@ -257,8 +272,11 @@ void main() {
     // declared and merely unused, which is how a removed feature creeps
     // back: the package is there, so reaching for it costs nothing.
     final pubspec = File('pubspec.yaml');
-    expect(pubspec.existsSync(), isTrue,
-        reason: 'pubspec.yaml was not found, so this check proves nothing');
+    expect(
+      pubspec.existsSync(),
+      isTrue,
+      reason: 'pubspec.yaml was not found, so this check proves nothing',
+    );
 
     // `#` comments are dropped first: the manifest carries a note saying
     // why the package is absent, and a note is not a dependency.
@@ -274,13 +292,15 @@ void main() {
     expect(
       File('lib/theme/palette.dart').existsSync(),
       isTrue,
-      reason: 'lib/theme/palette.dart was not found, so the absence check '
+      reason:
+          'lib/theme/palette.dart was not found, so the absence check '
           'below proves nothing about where the theme layer lives',
     );
     expect(
       File('lib/theme/schemes.dart').existsSync(),
       isFalse,
-      reason: 'lib/theme/schemes.dart is dead; reaching for it is how the '
+      reason:
+          'lib/theme/schemes.dart is dead; reaching for it is how the '
           'redesign rots back',
     );
   });
@@ -292,7 +312,8 @@ void main() {
     expect(
       File('lib/theme/lockout_theme.dart').existsSync(),
       isTrue,
-      reason: 'lib/theme/lockout_theme.dart was not found, so the absence '
+      reason:
+          'lib/theme/lockout_theme.dart was not found, so the absence '
           'checks below prove nothing about where the theme layer lives',
     );
 

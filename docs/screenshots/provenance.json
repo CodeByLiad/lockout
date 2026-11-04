@@ -1,0 +1,119 @@
+{
+  "kind": "Actual installed Android app captures, not generated mockups",
+  "device": "lockout_qa API 36 emulator, 411dp, text scale 1.0",
+  "transformation": "Exact pixel crop only. Android status bar and system gesture-navigation bar removed. App navigation retained. No content retouched.",
+  "screens": [
+    {
+      "file": "today.png",
+      "source": ".impeccable/review/final/today-light.png",
+      "sourceSize": [
+        1080,
+        2400
+      ],
+      "cropBox": [
+        0,
+        126,
+        1080,
+        2337
+      ]
+    },
+    {
+      "file": "training.png",
+      "source": ".impeccable/review/final/training-light.png",
+      "sourceSize": [
+        1080,
+        2400
+      ],
+      "cropBox": [
+        0,
+        126,
+        1080,
+        2337
+      ]
+    },
+    {
+      "file": "workout.png",
+      "source": ".impeccable/review/final/workout-light.png",
+      "sourceSize": [
+        1080,
+        2400
+      ],
+      "cropBox": [
+        0,
+        126,
+        1080,
+        2337
+      ]
+    },
+    {
+      "file": "food.png",
+      "source": ".impeccable/review/final/food-light.png",
+      "sourceSize": [
+        1080,
+        2400
+      ],
+      "cropBox": [
+        0,
+        126,
+        1080,
+        2337
+      ]
+    },
+    {
+      "file": "progress.png",
+      "source": ".impeccable/review/final/progress-week-final.png",
+      "sourceSize": [
+        1080,
+        2400
+      ],
+      "cropBox": [
+        0,
+        126,
+        1080,
+        2337
+      ]
+    },
+    {
+      "file": "appearance.png",
+      "source": ".impeccable/review/final/appearance-top-light.png",
+      "sourceSize": [
+        1080,
+        2400
+      ],
+      "cropBox": [
+        0,
+        126,
+        1080,
+        2337
+      ]
+    },
+    {
+      "file": "today-dark.png",
+      "source": ".impeccable/review/final/today-dark.png",
+      "sourceSize": [
+        1080,
+        2400
+      ],
+      "cropBox": [
+        0,
+        126,
+        1080,
+        2337
+      ]
+    },
+    {
+      "file": "training-dark.png",
+      "source": ".impeccable/review/final/training-dark.png",
+      "sourceSize": [
+        1080,
+        2400
+      ],
+      "cropBox": [
+        0,
+        126,
+        1080,
+        2337
+      ]
+    }
+  ]
+}

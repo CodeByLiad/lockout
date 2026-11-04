@@ -1,0 +1,822 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-04T06:08:11.850Z",
+  "title": "Design System: Lockout",
+  "extensions": {
+    "platform": {
+      "runtime": "Flutter 3.47.2 / Dart 3.13.2",
+      "target": "Native Android",
+      "lengthUnit": "Flutter logical pixels (dp); portable frontmatter px denotes the same numeric native token.",
+      "sourceOfTruth": "Native Dart theme and Nv catalog, not CSS.",
+      "componentRepresentation": "Native role and state mappings. HTML/CSS snippets are intentionally omitted because this project does not ship web components."
+    },
+    "colorMeta": {
+      "rep-lime": {
+        "role": "seed",
+        "displayName": "Rep lime",
+        "canonical": "#C2EE7B"
+      },
+      "lime-ink": {
+        "role": "onHeroFill",
+        "displayName": "Rep lime ink",
+        "canonical": "#1F2E00"
+      },
+      "violet": {
+        "role": "seed",
+        "displayName": "Violet",
+        "canonical": "#B9A8FF"
+      },
+      "violet-ink": {
+        "role": "onHeroFill",
+        "displayName": "Violet ink",
+        "canonical": "#21105E"
+      },
+      "teal": {
+        "role": "seed",
+        "displayName": "Teal",
+        "canonical": "#6ED6C4"
+      },
+      "teal-ink": {
+        "role": "onHeroFill",
+        "displayName": "Teal ink",
+        "canonical": "#00382F"
+      },
+      "coral": {
+        "role": "seed",
+        "displayName": "Coral",
+        "canonical": "#FF9E8A"
+      },
+      "coral-ink": {
+        "role": "onHeroFill",
+        "displayName": "Coral ink",
+        "canonical": "#4A0E00"
+      },
+      "steel": {
+        "role": "seed",
+        "displayName": "Steel",
+        "canonical": "#A9B4C6"
+      },
+      "steel-ink": {
+        "role": "onHeroFill",
+        "displayName": "Steel ink",
+        "canonical": "#1B2430"
+      },
+      "success-light": {
+        "role": "success",
+        "displayName": "Light completion green",
+        "canonical": "#1E6E47"
+      },
+      "success-container-light": {
+        "role": "successContainer",
+        "displayName": "Light completion container",
+        "canonical": "#CDEFD9"
+      },
+      "success-dark": {
+        "role": "success",
+        "displayName": "Dark completion green",
+        "canonical": "#7ED3A4"
+      },
+      "success-container-dark": {
+        "role": "successContainer",
+        "displayName": "Dark completion container",
+        "canonical": "#0F3D27"
+      },
+      "warning-light": {
+        "role": "warning",
+        "displayName": "Light warning amber",
+        "canonical": "#8A5A00"
+      },
+      "warning-dark": {
+        "role": "warning",
+        "displayName": "Dark warning amber",
+        "canonical": "#E8C06A"
+      }
+    },
+    "generatedColorScheme": {
+      "source": "lib/theme/palette.dart",
+      "generator": "ColorScheme.fromSeed",
+      "inputs": {
+        "brightness": [
+          "system",
+          "light",
+          "dark"
+        ],
+        "accent": [
+          "lime",
+          "violet",
+          "teal",
+          "coral",
+          "steel"
+        ],
+        "style": [
+          "tonal",
+          "vibrant",
+          "expressive"
+        ]
+      },
+      "defaults": {
+        "brightness": "system",
+        "accent": "lime",
+        "style": "tonal"
+      },
+      "styleVariants": {
+        "tonal": "DynamicSchemeVariant.tonalSpot",
+        "vibrant": "DynamicSchemeVariant.vibrant",
+        "expressive": "DynamicSchemeVariant.expressive"
+      },
+      "expressiveOverride": {
+        "roles": [
+          "primary",
+          "onPrimary",
+          "primaryContainer",
+          "onPrimaryContainer",
+          "inversePrimary"
+        ],
+        "source": "Same seed and brightness, tonalSpot variant",
+        "unchanged": "Secondary, tertiary, surfaces and remaining generated roles retain expressive variant output."
+      },
+      "surfaceTint": "transparent",
+      "persistence": "brightness|accent|style; legacy keys migrate in ThemeController._resolve.",
+      "roleMap": {
+        "scaffold": "surface",
+        "body": "onSurface",
+        "supporting": "onSurfaceVariant",
+        "primaryAction": [
+          "primary",
+          "onPrimary"
+        ],
+        "primaryTask": [
+          "primaryContainer",
+          "onPrimaryContainer"
+        ],
+        "secondaryTask": [
+          "secondaryContainer",
+          "onSecondaryContainer"
+        ],
+        "tertiaryTask": [
+          "tertiaryContainer",
+          "onTertiaryContainer"
+        ],
+        "depthLadder": [
+          "surfaceContainerLow",
+          "surfaceContainer",
+          "surfaceContainerHigh",
+          "surfaceContainerHighest"
+        ],
+        "borders": [
+          "outline",
+          "outlineVariant"
+        ],
+        "danger": "error",
+        "restDay": "onSurfaceVariant",
+        "semanticHero": [
+          "chosen accent.accent",
+          "chosen accent.ink"
+        ],
+        "chartLine": "chosen accent.accent"
+      },
+      "rampPolicy": "Generated role values and tonal ramps are resolved at runtime. No frozen generated-role hex or synthetic ramp is asserted by this extraction."
+    },
+    "categoricalColors": {
+      "source": "lib/theme/palette.dart",
+      "kind": "Eight distinct category hues, not a tonal ramp.",
+      "light": [
+        "#365E27",
+        "#1D5C78",
+        "#6B3F8C",
+        "#8C4A1F",
+        "#0C5B4E",
+        "#7A2F55",
+        "#3E4A6B",
+        "#6B5C0F"
+      ],
+      "dark": [
+        "#B5DE94",
+        "#8FD0EC",
+        "#D3B2F0",
+        "#F0B48C",
+        "#7FD9C8",
+        "#F0A3C4",
+        "#AEB8DE",
+        "#DECE8F"
+      ]
+    },
+    "typographyMeta": {
+      "display-large": {
+        "displayName": "display large",
+        "purpose": "Display, heading or major title in the native TextTheme.",
+        "source": "lib/theme/lockout_theme.dart"
+      },
+      "display-medium": {
+        "displayName": "display medium",
+        "purpose": "Display, heading or major title in the native TextTheme.",
+        "source": "lib/theme/lockout_theme.dart"
+      },
+      "display-small": {
+        "displayName": "display small",
+        "purpose": "Display, heading or major title in the native TextTheme.",
+        "source": "lib/theme/lockout_theme.dart"
+      },
+      "headline-large": {
+        "displayName": "headline large",
+        "purpose": "Display, heading or major title in the native TextTheme.",
+        "source": "lib/theme/lockout_theme.dart"
+      },
+      "headline-medium": {
+        "displayName": "headline medium",
+        "purpose": "Display, heading or major title in the native TextTheme.",
+        "source": "lib/theme/lockout_theme.dart"
+      },
+      "headline-small": {
+        "displayName": "headline small",
+        "purpose": "Display, heading or major title in the native TextTheme.",
+        "source": "lib/theme/lockout_theme.dart"
+      },
+      "title-large": {
+        "displayName": "title large",
+        "purpose": "Display, heading or major title in the native TextTheme.",
+        "source": "lib/theme/lockout_theme.dart"
+      },
+      "title-medium": {
+        "displayName": "title medium",
+        "purpose": "Readable native UI copy, labels and supporting text.",
+        "source": "lib/theme/lockout_theme.dart"
+      },
+      "title-small": {
+        "displayName": "title small",
+        "purpose": "Readable native UI copy, labels and supporting text.",
+        "source": "lib/theme/lockout_theme.dart"
+      },
+      "body-large": {
+        "displayName": "body large",
+        "purpose": "Readable native UI copy, labels and supporting text.",
+        "source": "lib/theme/lockout_theme.dart"
+      },
+      "body-medium": {
+        "displayName": "body medium",
+        "purpose": "Readable native UI copy, labels and supporting text.",
+        "source": "lib/theme/lockout_theme.dart"
+      },
+      "body-small": {
+        "displayName": "body small",
+        "purpose": "Readable native UI copy, labels and supporting text.",
+        "source": "lib/theme/lockout_theme.dart"
+      },
+      "label-large": {
+        "displayName": "label large",
+        "purpose": "Readable native UI copy, labels and supporting text.",
+        "source": "lib/theme/lockout_theme.dart"
+      },
+      "label-medium": {
+        "displayName": "label medium",
+        "purpose": "Readable native UI copy, labels and supporting text.",
+        "source": "lib/theme/lockout_theme.dart"
+      },
+      "label-small": {
+        "displayName": "label small",
+        "purpose": "Readable native UI copy, labels and supporting text.",
+        "source": "lib/theme/lockout_theme.dart"
+      },
+      "countdown": {
+        "displayName": "countdown",
+        "purpose": "At most one hero number per screen.",
+        "source": "lib/theme/lockout_theme.dart"
+      },
+      "numeric-table": {
+        "displayName": "numeric table",
+        "purpose": "Columnar sets, repetitions, weight and log values; explicit table leading only.",
+        "source": "lib/theme/lockout_theme.dart"
+      }
+    },
+    "fontAssets": {
+      "source": "assets/fonts/",
+      "networkFonts": false,
+      "staticWeights": {
+        "BricolageGrotesque": [
+          500,
+          700,
+          800
+        ],
+        "Figtree": [
+          400,
+          500,
+          600,
+          700
+        ],
+        "JetBrainsMono": [
+          400,
+          700
+        ]
+      }
+    },
+    "elevation": {
+      "unit": "Native Material elevation",
+      "appBar": 0,
+      "scrolledUnderAppBar": 0,
+      "themeCardDefault": 1,
+      "themeDialog": 6,
+      "themeBottomSheet": 6,
+      "activeNvSurface": "Tonal fill; no custom box shadow.",
+      "activeNvInfoCard": "Tonal fill; no custom box shadow.",
+      "surfaceTintOverlay": false
+    },
+    "motion": [
+      {
+        "name": "spring-fast",
+        "value": "250ms cubic-bezier(0.2, 1.35, 0.3, 1)",
+        "purpose": "Press morph, selection and switch thumb.",
+        "native": "LockoutMotion.springFast",
+        "reducedMotion": "Duration.zero"
+      },
+      {
+        "name": "spring-default",
+        "value": "450ms cubic-bezier(0.2, 1.35, 0.3, 1)",
+        "purpose": "Navigation indicator, transitions and expands.",
+        "native": "LockoutMotion.springDefault",
+        "reducedMotion": "Duration.zero"
+      },
+      {
+        "name": "effects",
+        "value": "200ms ease-out",
+        "purpose": "Color and opacity; no overshoot.",
+        "native": "LockoutMotion.effects",
+        "reducedMotion": "Duration.zero"
+      },
+      {
+        "name": "ambient-drift",
+        "value": "2400ms linear",
+        "purpose": "Only the wavy progress indicator's continuous drift.",
+        "native": "LockoutMotion.ambientDrift",
+        "reducedMotion": "Stop the ticker; never use zero as a repeat period."
+      }
+    ],
+    "nativeGeometry": {
+      "buttonPressScale": 0.97,
+      "minTouchTargetDp": 48,
+      "largeButtonMinHeightDp": 60,
+      "themeControlHeightDp": 52,
+      "legacyThemeNavHeightDp": 80,
+      "activeNavMinimumHeightDp": 64,
+      "statTileHeightDp": 80,
+      "legacyHeroCornerDp": {
+        "topLeft": 36,
+        "topRight": 36,
+        "bottomRight": 36,
+        "bottomLeft": 12
+      },
+      "legacyHeroStatus": "Compatibility token; D16 replaces the universal fixed hero in active rebuilt compositions.",
+      "shapeImportBoundary": "Only lib/theme/lockout_shapes.dart imports material_new_shapes."
+    },
+    "adaptation": {
+      "webBreakpoints": [],
+      "normalPhoneEvidenceDp": 411,
+      "requiredStressCase": {
+        "widthDp": 360,
+        "textScale": 1.5
+      },
+      "segmentedStackCondition": "segments.length >= 3 && textScaler.scale(15) > 20",
+      "buttons": "Flexible text; min-height target; wrap labels and grow.",
+      "navigation": "Two-line labels, content-grown minimum height and bottom safe area.",
+      "scrolling": "Safe-area-aware pages; 128dp bottom allowance when both nav and FAB are present."
+    },
+    "nativeDataPatterns": {
+      "today": {
+        "source": "lib/screens/today_tab.dart",
+        "surface": "NvSurface, NvTone.primary, contextual 36dp rest radius",
+        "states": {
+          "noRoutine": {
+            "title": "Train on your terms",
+            "primaryAction": "Create routine"
+          },
+          "activeEmptyRoutine": {
+            "title": "Build your training week",
+            "supporting": "Add the first training or rest day to the named active routine.",
+            "primaryAction": "Open plan"
+          },
+          "recovery": {
+            "condition": "Active routine has days, but today has no scheduled day or is an explicit rest day.",
+            "title": "Recovery day",
+            "primaryAction": "View training plan"
+          },
+          "scheduledTraining": {
+            "title": "Actual scheduled day name",
+            "supporting": "Actual exercise and target-set counts",
+            "primaryAction": "Start workout only for a non-rest day with exercises; otherwise Add exercises."
+          },
+          "liveSession": {
+            "primaryAction": "Resume workout"
+          }
+        },
+        "alternativeAction": "Start a custom workout; resume the existing live session if present.",
+        "startupGuard": "Scheduled startup independently rejects missing day, explicit rest day or empty exercises. Stale exercises on a rest day cannot start scheduled training.",
+        "dataIntegrity": "Weekday gaps are recovery, not missing-routine setup. Presentation does not reset or rewrite plan data."
+      },
+      "training": "Real weekday strip or named rotating cycle; planned is distinct from completed.",
+      "activityChart": "Actual sessions aggregated for selected Week / Month / All time; zero-data message. Width is max(available width, bucket count * textScaler.scale(12) * 3): week fits an ordinary phone; enlarged labels or more buckets may scroll horizontally.",
+      "finishReview": "Opening review snapshots completion time. Save persists the displayed duration and completion date despite waiting or crossing midnight. Keep training continues the session; reopening review takes a fresh snapshot.",
+      "measurements": "Actual finite values; trend requires at least two measurements.",
+      "units": "Convert input/display values; preserve kilogram storage.",
+      "appearance": "Live preview, named accents, descriptive style rows; immediate three-axis controller."
+    },
+    "authority": {
+      "immutableHouse": "docs/design/nuvetrix-app-design-system.md",
+      "wholeAppSpec": "docs/spine/specs/2026-11-03-whole-app-overhaul-proposal.md",
+      "deviations": {
+        "D15": "Four task destinations and focused settings; supersedes old D7.",
+        "D16": "Generated role-colored task surfaces replace fixed signature hero throughout rebuilt screens.",
+        "D17": "Full-page editors and filled shape-changing fields.",
+        "D18": "Navigation and controls may grow for accessibility.",
+        "D19": "Explicit user-triggered About source-code link."
+      },
+      "approvedConcepts": "docs/design/overhaul-preview/; forty separate concepts approved 2026-11-03.",
+      "legacyComponents": "NvHeroCard, NvIconTile and NvEmptyState retained under lib/widgets/legacy; no active screen consumers."
+    },
+    "verification": {
+      "sourceInspectedOn": "2026-11-04",
+      "review": ".impeccable/review/finish-final-disposition.md",
+      "historicalReviews": [
+        ".impeccable/review/finish-review.md",
+        ".impeccable/review/finish-confirmation.md"
+      ],
+      "disposition": "Ship within the reviewed scope. All seven original findings are closed.",
+      "qaReport": "docs/spine/qa/overhaul/verification.md",
+      "screenshots": ".impeccable/review/ (first round); .impeccable/review/final/ (fresh confirmation captures)",
+      "sourceCorrectionsRecorded": [
+        "Adaptive NvButton labels",
+        "Appearance live preview, named accents, descriptive styles",
+        "Actual weekday/cycle Training strip",
+        "Selected-period NvActivityChart aggregation",
+        "NvPressState leading badge propagation",
+        "Sentence-case and singular count copy",
+        "Distinct Today no-routine, empty-routine, weekday-gap/explicit-rest recovery and scheduled-training states",
+        "Scheduled-session guard rejects explicit rest despite stale exercise records",
+        "Activity chart uses available width and label-scale-proportional bucket minimum",
+        "Finish review Save preserves displayed completion duration and date; Keep training continues"
+      ],
+      "serialSuite": {
+        "status": "Complete final serial suite passed.",
+        "passed": 937,
+        "log": ".spine/overhaul-final-tests.log",
+        "latestTargetedTestsPassed": 3
+      },
+      "analysis": {
+        "warnings": 0,
+        "errors": 0,
+        "preExistingTestInfoNotices": 2,
+        "log": ".spine/overhaul-final-analysis.log"
+      },
+      "releaseArtifact": {
+        "built": true,
+        "bytes": 57051572,
+        "sha256": "5BE97C81CCC79971CF07EB96744AB63AE0DA98BC3418B353969FB8DB33DE22DD",
+        "installation": "Installed with replacement successfully on lockout_qa after emulator cold boot; existing data preserved.",
+        "package": "com.jinatra.lockout"
+      },
+      "runtime": {
+        "log": ".spine/overhaul-final-runtime.log",
+        "observed": "Captured log contains Flutter engine initialization and no exceptions."
+      },
+      "confirmedNativeCaptures": [
+        "Named styles and live Appearance preview",
+        "Actual Training schedule strip",
+        "Range-specific Progress charts",
+        "Filled workout inputs and a single Add exercise action",
+        "Singular finish and saved-session copy",
+        "Earlier phone-360-large and measurement-keyboard-360-large captures inspected",
+        "Final week chart at 411dp shows all seven weekdays",
+        "Final week chart at 360dp/1.5x text reveals weekend labels through horizontal drag"
+      ],
+      "finalConfirmationCaptures": "Final reviewer independently inspected progress-week-final.png, progress-week-360-large-final.png and progress-week-360-large-scrolled-final.png under .impeccable/review/final/. Finding 5 closed; other six findings retain their prior confirmation. Display settings restored after the pass.",
+      "limits": [
+        "Representative native API 36 emulator scope; not all forty approved screen/state concepts were independently visually reviewed.",
+        "No physical hardware, tablet, TalkBack listening, measured contrast matrix or independent motion-quality certification.",
+        "Artifact installation/hash provenance and unchanged-screen confirmation supplied by root; the final reviewer performed a bounded chart finding check.",
+        "This documentation task ran no tests or builds."
+      ]
+    }
+  },
+  "components": [
+    {
+      "name": "Filled button",
+      "kind": "button",
+      "refersTo": "button-filled",
+      "description": "Primary action outside the exact-accent hero.",
+      "native": {
+        "widget": "NvButton",
+        "variant": "filled",
+        "source": "lib/widgets/house/nv_button.dart",
+        "roles": {
+          "background": "ColorScheme.primary",
+          "foreground": "ColorScheme.onPrimary"
+        }
+      }
+    },
+    {
+      "name": "Tonal button",
+      "kind": "button",
+      "refersTo": "button-tonal",
+      "description": "Secondary action with generated container color.",
+      "native": {
+        "widget": "NvButton",
+        "variant": "tonal",
+        "source": "lib/widgets/house/nv_button.dart",
+        "roles": {
+          "background": "ColorScheme.secondaryContainer",
+          "foreground": "ColorScheme.onSecondaryContainer"
+        }
+      }
+    },
+    {
+      "name": "Outlined button",
+      "kind": "button",
+      "refersTo": "button-outlined",
+      "description": "Secondary action with an outline and no painted fill.",
+      "native": {
+        "widget": "NvButton",
+        "variant": "outlined",
+        "source": "lib/widgets/house/nv_button.dart",
+        "roles": {
+          "background": null,
+          "foreground": "ColorScheme.onSurface",
+          "border": "ColorScheme.outline"
+        }
+      }
+    },
+    {
+      "name": "Text button",
+      "kind": "button",
+      "refersTo": "button-text",
+      "description": "Low-emphasis action.",
+      "native": {
+        "widget": "NvButton",
+        "variant": "text",
+        "source": "lib/widgets/house/nv_button.dart",
+        "roles": {
+          "background": null,
+          "foreground": "ColorScheme.primary"
+        }
+      }
+    },
+    {
+      "name": "Danger button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Explicit destructive action using semantic danger.",
+      "native": {
+        "widget": "NvButton",
+        "variant": "danger",
+        "source": "lib/widgets/house/nv_button.dart",
+        "roles": {
+          "background": null,
+          "foreground": "LockoutSemantics.danger",
+          "border": "ColorScheme.outlineVariant"
+        }
+      }
+    },
+    {
+      "name": "Accent hero button",
+      "kind": "button",
+      "refersTo": "button-accent-lime",
+      "description": "Inverted seed and ink pair for an exact-accent semantic hero; frontmatter specimen records Rep lime only.",
+      "native": {
+        "widget": "NvButton",
+        "variant": "accent",
+        "source": "lib/widgets/house/nv_button.dart",
+        "roles": {
+          "background": "LockoutSemantics.onHeroFill",
+          "foreground": "LockoutSemantics.heroFill"
+        },
+        "restriction": "Only on heroFill; not the ordinary filled-action palette."
+      }
+    },
+    {
+      "name": "Filled field",
+      "kind": "input",
+      "refersTo": "field",
+      "description": "Focused-page and compact set-entry native input.",
+      "native": {
+        "widget": "NvField",
+        "source": "lib/widgets/house/nv_expressive.dart",
+        "roles": {
+          "background": "ColorScheme.surfaceContainerHigh",
+          "focus": "ColorScheme.primary",
+          "error": "ColorScheme.error"
+        },
+        "states": {
+          "restRadiusDp": 16,
+          "focusRadiusDp": 24,
+          "focusStrokeDp": 2,
+          "errorStrokeDp": 1,
+          "focusedErrorStrokeDp": 2
+        },
+        "paddingDp": {
+          "normal": {
+            "horizontal": 20,
+            "vertical": 20
+          },
+          "compact": {
+            "horizontal": 10,
+            "vertical": 12
+          }
+        },
+        "errorMaxLines": 6
+      }
+    },
+    {
+      "name": "Task surface",
+      "kind": "card",
+      "refersTo": "surface",
+      "description": "Role-colored rounded content container; optional press and selection.",
+      "native": {
+        "widget": "NvSurface",
+        "source": "lib/widgets/house/nv_expressive.dart",
+        "roles": {
+          "primary": [
+            "primaryContainer",
+            "onPrimaryContainer"
+          ],
+          "secondary": [
+            "secondaryContainer",
+            "onSecondaryContainer"
+          ],
+          "tertiary": [
+            "tertiaryContainer",
+            "onTertiaryContainer"
+          ],
+          "surface": [
+            "surfaceContainerLow",
+            "onSurface"
+          ]
+        },
+        "states": {
+          "restRadiusDp": 28,
+          "contextualRestRadiiDp": [
+            32,
+            36
+          ],
+          "pressedOrSelectedRadiusDp": 16,
+          "focusedOutlineRole": "ColorScheme.primary",
+          "focusedOutlineDp": 2
+        },
+        "pressPropagation": "NvPressState passes pointer/focus to shaped descendants."
+      }
+    },
+    {
+      "name": "Connected row",
+      "kind": "card",
+      "refersTo": "grouped-row",
+      "description": "Adaptive list row within a connected native group.",
+      "native": {
+        "widget": "NvGroupedList / NvListItem",
+        "source": "lib/widgets/house/nv_grouped_list.dart",
+        "roles": {
+          "background": "ColorScheme.surfaceContainer",
+          "title": "ColorScheme.onSurface",
+          "supporting": "ColorScheme.onSurfaceVariant"
+        },
+        "minimumHeightDp": 72,
+        "states": {
+          "restRadiusDp": 8,
+          "pressedOrFocusedRadiusDp": 20,
+          "groupOuterRadiusDp": 26,
+          "gapDp": 3
+        },
+        "pressPropagation": "Leading NvIconBadge inherits row pointer/focus state through NvPressState."
+      }
+    },
+    {
+      "name": "Expressive navigation",
+      "kind": "nav",
+      "refersTo": "navigation",
+      "description": "Today, Training, Progress and optional Food; Settings is a focused route.",
+      "native": {
+        "widget": "NvNavigationBar",
+        "source": "lib/widgets/house/nv_navigation_bar.dart",
+        "roles": {
+          "background": "ColorScheme.surfaceContainer",
+          "indicator": "ColorScheme.secondaryContainer",
+          "selectedIcon": "ColorScheme.onSecondaryContainer",
+          "selectedLabel": "ColorScheme.onSurface",
+          "inactive": "ColorScheme.onSurfaceVariant",
+          "focus": "ColorScheme.primary"
+        },
+        "minimumHeightDp": 64,
+        "indicatorDp": {
+          "width": 56,
+          "height": 32
+        },
+        "safeArea": true,
+        "labelMaxLines": 2,
+        "states": {
+          "selected": "Filled icon, heavy label, sliding pill.",
+          "pressedIndicatorWidthMultiplier": 0.85,
+          "focusOutlineDp": 2
+        },
+        "semantics": [
+          "button",
+          "selected",
+          "label",
+          "onTap",
+          "tooltip",
+          "keyboard action"
+        ]
+      }
+    },
+    {
+      "name": "Segment selection",
+      "kind": "chip",
+      "description": "Native single-choice options with adaptive vertical layout.",
+      "native": {
+        "widget": "NvSegmentedButton",
+        "source": "lib/widgets/house/nv_segmented_button.dart",
+        "roles": {
+          "selected": [
+            "ColorScheme.secondaryContainer",
+            "ColorScheme.onSecondaryContainer"
+          ],
+          "unselected": [
+            "ColorScheme.surfaceContainer",
+            "ColorScheme.onSurfaceVariant"
+          ]
+        },
+        "minimumHeightDp": 48,
+        "states": {
+          "restInnerRadiusDp": 8,
+          "restEndRadiusDp": 22,
+          "selectedRadiusDp": 999,
+          "activeInnerAndEndRadiusDp": 16,
+          "verticalRestRadiusDp": 12,
+          "verticalActiveRadiusDp": 24,
+          "focusOutlineDp": 2
+        },
+        "adaptation": "Stack when at least three segments and textScaler.scale(15) > 20."
+      }
+    },
+    {
+      "name": "Shaped icon badge",
+      "kind": "custom",
+      "description": "Assigned Material silhouette morphs toward a circle on parent or own press.",
+      "native": {
+        "widget": "NvIconBadge / NvShapeButton",
+        "source": "lib/widgets/house/nv_expressive.dart",
+        "shapeSource": "lib/theme/lockout_shapes.dart",
+        "defaultSizeDp": 48,
+        "iconSizeMultiplier": 0.48,
+        "states": {
+          "rest": "Assigned LockoutShape",
+          "active": "LockoutShape.circle",
+          "motion": "LockoutMotion.springFast"
+        },
+        "contentRestriction": "Only icon containers use irregular shapes; text and images retain rounded rectangles."
+      }
+    }
+  ],
+  "narrative": {
+    "northStar": "Material 3 Expressive",
+    "overview": "Lockout's built visual system is native Flutter Material 3 Expressive: confident display type, spacious task containers, distinct shaped icon badges and connected rows. The user's chosen accent generates the entire light or dark scheme. Primary, secondary and tertiary containers give different tasks visible character while keeping content readable in rounded rectangles.\n\nThe approved forty screen/state concepts establish the composition direction. Their illustrative figures and calendar defects are not product data. This document records the current implementation, rather than proposing a new identity or a web theme. The house system remains immutable; the whole-app deviations govern where it differs.",
+    "keyCharacteristics": [
+      "User-generated color across surfaces and controls.",
+      "Bundled expressive display type with readable body text.",
+      "Shape changes communicate press, selection and focus.",
+      "Real local records determine summaries, schedules and charts."
+    ],
+    "rules": [
+      {
+        "name": "Chosen seed",
+        "body": "Generate the whole scheme from the user's accent, brightness and style; resolve color through the current theme.",
+        "section": "colors"
+      },
+      {
+        "name": "Sentence case",
+        "body": "Use sentence case for app-authored text; preserve user-entered names and normalize stored weekday tags only for presentation.",
+        "section": "typography"
+      },
+      {
+        "name": "Shape is a state",
+        "body": "Interactive surfaces carry distinct rest and active shapes; irregular geometry belongs to icon containers, never to text or images.",
+        "section": "shapes"
+      },
+      {
+        "name": "Truthful visualization",
+        "body": "Show actual records for the selected period and describe missing data instead of inventing sample activity.",
+        "section": "components"
+      }
+    ],
+    "dos": [
+      "Do compose rebuilt screens from the Nv house catalog and current theme.",
+      "Do use the five chosen seeds and the three persisted scheme styles.",
+      "Do allow labels and control heights to grow at large text sizes, with touch targets at least 48dp.",
+      "Do propagate a containing row's press/focus state to its shaped icon badge.",
+      "Do preserve local data, kilogram storage and conversions at the display/input boundary.",
+      "Do confirm native appearance with fresh device captures after implementation changes."
+    ],
+    "donts": [
+      "Don't freeze generated primary, secondary, tertiary or surface roles into a replacement palette.",
+      "Don't add wallpaper colors, downloaded fonts, decorative stock imagery or background networking.",
+      "Don't clip real content into a Material icon silhouette.",
+      "Don't import compatibility-only legacy widgets into rebuilt screens.",
+      "Don't treat approved concept arithmetic or stale captures as proof of the shipped behavior.",
+      "Don't mark the finish review passed while its confirmation captures are pending."
+    ]
+  }
+}

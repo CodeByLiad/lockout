@@ -77,7 +77,7 @@ class BackupService {
       'app': appTag,
       'schemaVersion': schemaVersion,
       'exportedAt': DateTime.now().toIso8601String(),
-      'appVersion': '1.2.1',
+      'appVersion': '1.3.0',
       'data': data,
     });
   }

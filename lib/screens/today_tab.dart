@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../services/display_units.dart';
 
 import 'progress_tab.dart' show ProgressSegment;
 import '../theme/lockout_shapes.dart';
-import '../theme/lockout_motion.dart';
 import '../theme/lockout_semantics.dart';
 import '../theme/lockout_theme.dart';
 import '../models/models.dart';
@@ -12,18 +12,15 @@ import '../services/energy_estimator.dart';
 import '../services/goal_service.dart';
 import '../services/numeric_guard.dart';
 import '../services/schedule_service.dart';
-import '../widgets/exercise_picker.dart';
+import '../widgets/house/nv_exercise_picker.dart';
+import '../widgets/house/nv_set_row.dart';
 import '../widgets/house/nv_button.dart';
+import '../widgets/house/nv_expressive.dart';
 import '../widgets/house/nv_cards.dart';
-import '../widgets/house/nv_empty_state.dart';
 import '../widgets/house/nv_grouped_list.dart';
-import '../widgets/house/nv_hero_card.dart';
-import '../widgets/house/nv_icon_tile.dart';
 import '../widgets/house/nv_dialog.dart';
 import '../widgets/house/nv_sheet.dart';
-import '../widgets/house/nv_status_badge.dart';
 import '../widgets/house/nv_wavy_progress.dart';
-import '../widgets/sparkline.dart';
 import 'exercise_video_screen.dart';
 
 /// One set inside a running session.
@@ -143,6 +140,9 @@ class TodayTab extends StatefulWidget {
   /// Whether the Food tab is currently reachable. When false, the hub must
   /// not offer a tap target that silently does nothing.
   final bool foodTabEnabled;
+  final VoidCallback? onOpenSettings;
+  final ValueChanged<bool>? onSessionChanged;
+  final bool presentSessionAsRoute;
 
   /// The wall clock every live-session reading goes through.
   ///
@@ -162,6 +162,9 @@ class TodayTab extends StatefulWidget {
     super.key,
     this.onNavigate,
     this.foodTabEnabled = true,
+    this.onOpenSettings,
+    this.onSessionChanged,
+    this.presentSessionAsRoute = false,
     this.clock = DateTime.now,
   });
 
@@ -170,7 +173,63 @@ class TodayTab extends StatefulWidget {
 }
 
 class TodayTabState extends State<TodayTab> {
+  final _sessionRevision = ValueNotifier<int>(0);
+  Route<void>? _workoutRoute;
+  bool _openingSession = false;
+
+  @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    if (_workoutRoute != null || _restSheetOpen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _sessionRevision.value++;
+      });
+    }
+  }
+
+  Future<void> resumeSession() async {
+    if (!_sessionActive || !mounted || _workoutRoute != null) return;
+    final route = MaterialPageRoute<void>(
+      builder: (routeContext) => ValueListenableBuilder<int>(
+        valueListenable: _sessionRevision,
+        builder: (_, revision, child) => Scaffold(
+          body: SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+              child: _buildActiveSession(),
+            ),
+          ),
+          bottomNavigationBar: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_restRunning) _buildRestBar(),
+                Padding(
+                  padding: const EdgeInsets.all(LockoutTheme.cardPadding),
+                  child: _workoutActions(),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    _workoutRoute = route;
+    await Navigator.of(context).push(route);
+    _workoutRoute = null;
+    if (mounted) setState(() {});
+  }
+
   ScheduledDay? _scheduled;
+  Routine? _activeRoutine;
+  bool _planHasDays = false;
+  ScheduledDay? _sessionScheduled;
+  List<SessionLog> _recentSessions = [];
+  bool _sessionSaving = false;
+  bool _confirmingFinish = false;
+  bool _restSheetOpen = false;
   bool _isLoading = true;
 
   _TodaySummary _summary = const _TodaySummary(
@@ -215,6 +274,7 @@ class TodayTabState extends State<TodayTab> {
   @override
   void dispose() {
     _ticker?.cancel();
+    _sessionRevision.dispose();
     super.dispose();
   }
 
@@ -239,8 +299,17 @@ class TodayTabState extends State<TodayTab> {
 
   Future<void> _loadSchedule() async {
     final resolved = await ScheduleService.resolveToday();
+    final db = DatabaseService.instance;
+    final active = await db.getActiveRoutine();
+    final days = active == null
+        ? const []
+        : await db.getDaysForRoutine(active['id'] as String);
     if (!mounted) return;
-    setState(() => _scheduled = resolved);
+    setState(() {
+      _scheduled = resolved;
+      _activeRoutine = active == null ? null : Routine.fromMap(active);
+      _planHasDays = days.isNotEmpty;
+    });
   }
 
   /// Resolves everything the hub shows. Every value can legitimately be
@@ -269,6 +338,7 @@ class TodayTabState extends State<TodayTab> {
     final delta = GoalService.weightDeltaKg(snapshot.bodyLogs);
 
     final sessionRows = await db.getSessionLogsForDate(today);
+    final recentRows = await db.getSessionLogs();
     // Null means "no session logged today" — the honest NO SESSION YET case.
     // A session that *was* logged but couldn't be estimated (no bodyweight
     // on record) sums to 0.0, which is a real, different state: the row
@@ -282,6 +352,10 @@ class TodayTabState extends State<TodayTab> {
 
     if (!mounted) return;
     setState(() {
+      _recentSessions = recentRows
+          .map(SessionLog.fromMap)
+          .where((s) => s.status == 'completed')
+          .toList();
       _summary = _TodaySummary(
         kcalEaten: eaten,
         kcalTarget: snapshot.calorieTarget,
@@ -325,41 +399,76 @@ class TodayTabState extends State<TodayTab> {
   /// user is looking at, rather than sending them to Home to press a second
   /// button. `MainScreen` owns the wiring; this stays the only implementation.
   Future<void> startScheduledSession() => _startScheduledSession();
+  Future<void> startDay(ScheduledDay day) async {
+    if (_sessionActive) {
+      await resumeSession();
+      return;
+    }
+    _scheduled = day;
+    await _startScheduledSession();
+  }
 
   Future<void> _startScheduledSession() async {
+    if (_sessionActive) {
+      await resumeSession();
+      return;
+    }
     final sched = _scheduled;
-    if (sched == null) return;
+    if (sched == null || sched.day.isRestDay || sched.exercises.isEmpty) return;
 
     final live = <_LiveExercise>[];
     for (final ex in sched.exercises) {
-      live.add(_LiveExercise(
-        exerciseId: ex.id,
-        name: ex.name,
-        videoUrl: ex.videoUrl,
-        restSeconds: ex.restDefaultS,
-        targetLabel: ex.targetLabel,
-        sets: List.generate(
-          ex.targetSets,
-          (_) => _LiveSet(weightKg: ex.targetWeightKg, reps: ex.targetRepsMax),
+      live.add(
+        _LiveExercise(
+          exerciseId: ex.id,
+          name: ex.name,
+          videoUrl: ex.videoUrl,
+          restSeconds: ex.restDefaultS,
+          targetLabel: ex.targetLabel,
+          sets: List.generate(
+            ex.targetSets,
+            (_) =>
+                _LiveSet(weightKg: ex.targetWeightKg, reps: ex.targetRepsMax),
+          ),
         ),
-      ));
+      );
     }
 
-    await _beginSession('${sched.day.tag} - ${sched.day.name}', live);
+    await _beginSession(sched.day.name, live, origin: sched);
   }
 
   Future<void> _startCustomSession() async {
+    if (_sessionActive || _openingSession) {
+      await resumeSession();
+      return;
+    }
     await _beginSession('Custom session', []);
   }
 
-  Future<void> _beginSession(String title, List<_LiveExercise> exercises) async {
-    for (final e in exercises) {
-      e.lastPerformance = await _fetchLastPerformance(e.name);
+  Future<void> _beginSession(
+    String title,
+    List<_LiveExercise> exercises, {
+    ScheduledDay? origin,
+  }) async {
+    if (_openingSession || _sessionActive) return;
+    _openingSession = true;
+    try {
+      for (final e in exercises) {
+        e.lastPerformance = await _fetchLastPerformance(e.name);
+      }
+    } catch (_) {
+      // A missing history read must not prevent an offline workout.
+      for (final e in exercises) {
+        e.lastPerformance = 'Previous performance unavailable';
+      }
+    } finally {
+      _openingSession = false;
     }
     if (!mounted) return;
 
     setState(() {
       _sessionActive = true;
+      _sessionScheduled = origin;
       _sessionTitle = title;
       _liveExercises = exercises;
       _startedAt = _now();
@@ -370,10 +479,16 @@ class TodayTabState extends State<TodayTab> {
       _restRunning = false;
     });
     _startTicker();
+    widget.onSessionChanged?.call(true);
+    if (widget.presentSessionAsRoute) {
+      unawaited(resumeSession());
+    }
   }
 
   Future<String> _fetchLastPerformance(String exerciseName) async {
-    final rows = await DatabaseService.instance.getLastPerformance(exerciseName);
+    final rows = await DatabaseService.instance.getLastPerformance(
+      exerciseName,
+    );
     if (rows.isEmpty) return '';
     final sets = rows.map(SetLog.fromMap).toList();
     final reps = sets.map((s) => s.reps).join(',');
@@ -430,6 +545,7 @@ class TodayTabState extends State<TodayTab> {
       _restRunning = true;
       _syncRest();
     });
+    if (widget.presentSessionAsRoute) unawaited(_openRestTimer());
   }
 
   double get _sessionVolumeKg =>
@@ -441,9 +557,12 @@ class TodayTabState extends State<TodayTab> {
   int get _sessionTotalSets =>
       _liveExercises.fold(0, (sum, e) => sum + e.sets.length);
 
-  String get _elapsedLabel {
-    final m = (_elapsedSeconds ~/ 60).toString().padLeft(2, '0');
-    final s = (_elapsedSeconds % 60).toString().padLeft(2, '0');
+  String get _elapsedLabel => _clockLabel(_elapsedSeconds);
+
+  String _clockLabel(int seconds) {
+    final elapsed = seconds < 0 ? 0 : seconds;
+    final m = (elapsed ~/ 60).toString().padLeft(2, '0');
+    final s = (elapsed % 60).toString().padLeft(2, '0');
     return '$m:$s';
   }
 
@@ -470,7 +589,17 @@ class TodayTabState extends State<TodayTab> {
     setState(() => _liveExercises.add(live));
   }
 
-  Future<void> _finishSession() async {
+  Future<void> _finishSession({DateTime? completedAt}) async {
+    if (_sessionSaving) return;
+    setState(() => _sessionSaving = true);
+    try {
+      await _saveSession(completedAt: completedAt);
+    } finally {
+      if (mounted) setState(() => _sessionSaving = false);
+    }
+  }
+
+  Future<void> _saveSession({DateTime? completedAt}) async {
     if (_sessionCompletedSets == 0) {
       final discard = await _confirmDiscard();
       if (discard != true) return;
@@ -479,9 +608,11 @@ class TodayTabState extends State<TodayTab> {
     }
 
     final sessionId = DateTime.now().millisecondsSinceEpoch.toString();
-    final started = _startedAt ?? _now();
-    final duration = _now().difference(started).inSeconds;
-    final sched = _scheduled;
+    final ended = completedAt ?? _now();
+    final started = _startedAt ?? ended;
+    final elapsed = ended.difference(started).inSeconds;
+    final duration = elapsed < 0 ? 0 : elapsed;
+    final sched = _sessionScheduled;
 
     // Only completed sets are archived — an untouched set is not a data point.
     final sessionSets = <SetLog>[];
@@ -509,7 +640,8 @@ class TodayTabState extends State<TodayTab> {
     // Bodyweight for the estimate: what the user last logged, else their
     // stated target, else no estimate at all.
     final snapshot = await GoalService.instance.snapshot();
-    final bodyweightKg = snapshot.currentWeightKg ??
+    final bodyweightKg =
+        snapshot.currentWeightKg ??
         (snapshot.profile.isConfigured
             ? snapshot.profile.targetWeightKg
             : null);
@@ -524,7 +656,7 @@ class TodayTabState extends State<TodayTab> {
     final session = SessionLog(
       id: sessionId,
       dayName: _sessionTitle,
-      dateStr: ScheduleService.dateKey(DateTime.now()),
+      dateStr: ScheduleService.dateKey(ended),
       durationSeconds: duration,
       totalVolumeKg: _sessionVolumeKg,
       status: 'completed',
@@ -540,8 +672,10 @@ class TodayTabState extends State<TodayTab> {
     // detail-free entry. Same argument `deleteSessionLog` and
     // `restoreSessionLog` were given transactions for.
     try {
-      await DatabaseService.instance
-          .insertSessionWithSets(session.toMap(), setRows);
+      await DatabaseService.instance.insertSessionWithSets(
+        session.toMap(),
+        setRows,
+      );
     } catch (_) {
       // Nothing is cleared and the session stays live. This is the one
       // moment the whole workout exists only in this widget's state, so
@@ -555,7 +689,8 @@ class TodayTabState extends State<TodayTab> {
       if (!mounted) return;
       showNvSnackbar(
         context: context,
-        message: 'Session not saved — the write failed. Your sets are still '
+        message:
+            'Session not saved — the write failed. Your sets are still '
             'here; tap Finish to try again.',
       );
       return;
@@ -570,8 +705,78 @@ class TodayTabState extends State<TodayTab> {
     _endSessionState();
     showNvSnackbar(
       context: context,
-      message: 'Session saved — ${setRows.length} sets, '
+      message:
+          'Session saved — ${setRows.length} ${setRows.length == 1 ? 'set' : 'sets'}, '
           '${_fmtWeight(session.totalVolumeKg)} kg volume',
+    );
+    if (widget.presentSessionAsRoute) await _showSavedWorkout(session);
+  }
+
+  Future<void> _showSavedWorkout(SessionLog session) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (ctx) => NvPage(
+          title: 'Workout saved',
+          footer: NvButton(
+            variant: NvButtonVariant.filled,
+            label: 'Done',
+            large: true,
+            onPressed: () => Navigator.of(ctx).pop(),
+          ),
+          children: [
+            const Center(
+              child: NvIconBadge(
+                icon: Icons.check_rounded,
+                shape: LockoutShape.achievement,
+                size: 120,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Center(
+              child: Text(
+                session.dayName,
+                textAlign: TextAlign.center,
+                style: Theme.of(ctx).textTheme.headlineMedium,
+              ),
+            ),
+            const SizedBox(height: 24),
+            NvSurface(
+              tone: NvTone.primary,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    session.durationLabel,
+                    style: Theme.of(ctx).textTheme.displayMedium,
+                  ),
+                  Text(
+                    '${session.totalSets} completed ${session.totalSets == 1 ? 'set' : 'sets'} · ${DisplayUnits.format(ctx, session.totalVolumeKg, decimals: 0)}',
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            NvSurface(
+              child: NvWeekStrip(
+                dates: _recentSessions.map((s) => s.dateStr).toSet(),
+              ),
+            ),
+            const SizedBox(height: 24),
+            if (widget.onNavigate != null)
+              NvButton(
+                variant: NvButtonVariant.tonal,
+                label: 'View workout history',
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  widget.onNavigate?.call(
+                    'progress',
+                    segment: ProgressSegment.history,
+                  );
+                },
+              ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -585,10 +790,10 @@ class TodayTabState extends State<TodayTab> {
       title: 'Discard session?',
       body: _sessionCompletedSets > 0
           ? '$_sessionCompletedSets logged '
-              '${_sessionCompletedSets == 1 ? 'set' : 'sets'} will be lost. '
-              'Discard ${_sessionCompletedSets == 1 ? 'it' : 'them'}?'
+                '${_sessionCompletedSets == 1 ? 'set' : 'sets'} will be lost. '
+                'Discard ${_sessionCompletedSets == 1 ? 'it' : 'them'}?'
           : 'No sets were logged, so there is nothing to archive. End the '
-              'session?',
+                'session?',
       confirmLabel: 'Discard',
       cancelLabel: 'Keep going',
     );
@@ -605,9 +810,13 @@ class TodayTabState extends State<TodayTab> {
   }
 
   void _endSessionState() {
+    final route = _workoutRoute;
+    if (route != null && route.isCurrent) Navigator.of(context).pop();
+    widget.onSessionChanged?.call(false);
     _ticker?.cancel();
     setState(() {
       _sessionActive = false;
+      _sessionScheduled = null;
       _liveExercises = [];
       _startedAt = null;
       _restRunning = false;
@@ -634,41 +843,24 @@ class TodayTabState extends State<TodayTab> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+    if (_isLoading) return const Center(child: CircularProgressIndicator());
+    if (widget.presentSessionAsRoute || !_sessionActive) {
+      return _buildPreSession(context);
     }
-
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      // SafeArea(bottom: false): MainScreen dropped its global AppBar in the
-      // five-tab restructure, so each tab now owns its top inset. Without
-      // this the header paints under the status bar on an edge-to-edge
-      // window and swallows taps. Bottom is left alone — BottomNav carries
-      // its own inset, and this tab's content should scroll under it.
-      // A live session replaces this tab's body, so system back means
-      // "leave the session", not "leave the app". `TickerMode` is off while
-      // another tab is on screen (MainScreen's IndexedStack), and back there
-      // must not ask about a session the user cannot see.
       body: PopScope(
-        canPop: !(_sessionActive && TickerMode.valuesOf(context).enabled),
+        canPop: !_sessionActive,
         onPopInvokedWithResult: (didPop, _) {
           if (!didPop) _leaveSession();
         },
         child: SafeArea(
-          bottom: false,
-          child: _sessionActive
-              ? Padding(
-                  padding: const EdgeInsets.all(LockoutTheme.screenPadding),
-                  child: _buildActiveSession(),
-                )
-              : _buildPreSession(context),
+          child: Padding(
+            padding: const EdgeInsets.all(LockoutTheme.screenPadding),
+            child: _buildActiveSession(),
+          ),
         ),
       ),
-      // Kept visible while the exercise list scrolls, rather than inline in
-      // the body. This is TodayTab's own Scaffold (nested inside MainScreen's
-      // IndexedStack), so it does not compete with MainScreen's BottomNav.
-      bottomNavigationBar:
-          (_sessionActive && _restRunning) ? _buildRestBar() : null,
+      bottomNavigationBar: _restRunning ? _buildRestBar() : null,
     );
   }
 
@@ -679,383 +871,236 @@ class TodayTabState extends State<TodayTab> {
   // kept that design's decisions — a stack of uniform cards, an all-caps
   // caption, a neutral hero — in places no token could reach.
 
-  /// One tile in the quick-action grid.
-  ///
-  /// Local to this screen rather than `ActionItem` from `action_grid.dart`:
-  /// a rebuilt screen composes from `lib/widgets/house/` and the theme only.
-  Widget _quickActionTile({
-    required String label,
-    required IconData icon,
-    required VoidCallback onTap,
-  }) {
-    return NvIconTile(
-      icon: icon,
-      shape: quickActionShapes[label]!,
-      label: label,
-      onTap: onTap,
-    );
-  }
-
   Widget _buildPreSession(BuildContext context) {
     final theme = Theme.of(context);
-    final semantics = LockoutSemantics.of(context);
     final sched = _scheduled;
-    final code = ScheduleService.weekdayCode(DateTime.now());
-    // The code is a storage key ("WED"); the screen shows it in sentence case.
-    final dayLabel = '${code[0]}${code.substring(1).toLowerCase()}';
-    final isRest = sched == null;
-    // A day can be scheduled with no exercises on it yet (routine still
-    // being built). That is not a rest day, but it also has nothing to
-    // start live — offer guidance to the Routines tab instead of a session
-    // that would open with zero exercises.
-    final isEmptyDay = sched != null && sched.exercises.isEmpty;
-    final setCount =
-        sched?.exercises.fold<int>(0, (sum, e) => sum + e.targetSets) ?? 0;
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.only(
-        bottom: LockoutTheme.scrollBottomPadding,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Section 7.1: a tab screen starts with a large title, not a top
-          // app bar.
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              LockoutTheme.screenPadding,
-              LockoutTheme.screenPadding,
-              LockoutTheme.screenPadding,
-              0,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  isRest ? 'Rest day' : sched.day.name,
-                  style: theme.textTheme.displayMedium,
-                ),
-                const SizedBox(height: LockoutTheme.spaceXs),
-                Text(
-                  'Today · $dayLabel',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: LockoutTheme.headingGap),
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: LockoutTheme.cardPadding,
-            ),
-            child: NvHeroCard(
-              // Not the day's name: the screen title above already says it,
-              // and printing it twice in two sizes is not emphasis (device
-              // QA M2). A rest day carries no count at all rather than
-              // spending the one display-scale number on a zero (M1).
-              title: isRest ? 'Nothing scheduled' : "Today's session",
-              value: isRest ? null : '$setCount',
-              unit: isRest ? null : (setCount == 1 ? 'set' : 'sets'),
-              // The one subject-scale element on this screen, and the only
-              // place a cookie shape belongs: the D5 register, rest for a
-              // rest day and training otherwise. The lobe count carries the
-              // register; the colour is the hero's own "on" role, because the
-              // marker is drawn on the hero fill (pass-1 finding 7: a fixed
-              // ramp colour was muddy and unrelated to the accent). It tracks
-              // the accent, and always contrasts with heroFill because it is
-              // the hero's own on-colour.
-              marker: DecoratedBox(
-                decoration: ShapeDecoration(
-                  shape: LockoutShapeBorder(
-                      isRest ? LockoutShape.rest : LockoutShape.training),
-                  color: semantics.onHeroFill,
-                ),
-                child: const SizedBox(width: 56, height: 56),
-              ),
-              // A rest day's single action lives in the empty state below,
-              // which already asks for it. Two buttons doing the same job on
-              // one screen was device QA M1.
-              actions: [
-                if (!isRest) ...[
-                  if (!isEmptyDay)
-                    NvButton(
-                      variant: NvButtonVariant.accent,
-                      label: 'Start session',
-                      onPressed: _startScheduledSession,
+    final sets = sched?.exercises.fold<int>(0, (n, e) => n + e.targetSets) ?? 0;
+    final hasPlan = sched != null && !sched.day.isRestDay;
+    final recovery =
+        _activeRoutine != null &&
+        _planHasDays &&
+        (sched == null || sched.day.isRestDay);
+    final emptyPlan = _activeRoutine != null && !_planHasDays;
+    final startable = hasPlan && sched.exercises.isNotEmpty;
+    final now = _now();
+    final day = const [
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
+    ][now.weekday - 1];
+    final month = const [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ][now.month - 1];
+    final kcalLeft = _summary.kcalTarget == null
+        ? null
+        : _summary.kcalTarget! - _summary.kcalEaten;
+    return NvPage(
+      title: 'Today',
+      subtitle: '$day, ${now.day} $month',
+      actions: [
+        NvShapeButton(
+          key: const ValueKey('open-settings'),
+          icon: Icons.settings_outlined,
+          label: 'Settings',
+          onPressed:
+              widget.onOpenSettings ??
+              () => widget.onNavigate?.call('settings'),
+        ),
+      ],
+      children: [
+        NvSurface(
+          tone: NvTone.primary,
+          radius: 36,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          recovery
+                              ? 'Recovery day'
+                              : emptyPlan
+                              ? 'Build your training week'
+                              : hasPlan
+                              ? sched.day.name
+                              : 'Train on your terms',
+                          style: theme.textTheme.headlineLarge,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          recovery
+                              ? 'No training is planned today. Give yourself time to recover.'
+                              : emptyPlan
+                              ? 'Add your first training or rest day to ${_activeRoutine!.name}.'
+                              : hasPlan
+                              ? '${sched.exercises.length} exercises · $sets sets'
+                              : 'Choose a plan or start a custom workout.',
+                          style: theme.textTheme.bodyLarge,
+                        ),
+                      ],
                     ),
-                  NvButton(
-                    variant: NvButtonVariant.tonal,
-                    label: 'Custom session',
-                    onPressed: _startCustomSession,
+                  ),
+                  const SizedBox(width: 12),
+                  NvIconBadge(
+                    icon: hasPlan
+                        ? Icons.fitness_center_rounded
+                        : Icons.self_improvement_rounded,
+                    shape: hasPlan
+                        ? LockoutShape.flower
+                        : LockoutShape.softBurst,
+                    size: 72,
+                    tone: NvTone.surface,
                   ),
                 ],
-              ],
-            ),
-          ),
-          const SizedBox(height: LockoutTheme.sectionGap),
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: LockoutTheme.cardPadding,
-            ),
-            child: _buildDayBody(context, sched, isRest: isRest),
-          ),
-          const SizedBox(height: LockoutTheme.sectionGap),
-          _buildSectionHeading(context, "Today's numbers"),
-          const SizedBox(height: LockoutTheme.headingGap),
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: LockoutTheme.cardPadding,
-            ),
-            child: NvGroupedList(children: _summaryRows(context)),
-          ),
-          const SizedBox(height: LockoutTheme.sectionGap),
-          _buildSectionHeading(context, 'Quick actions'),
-          const SizedBox(height: LockoutTheme.headingGap),
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: LockoutTheme.cardPadding,
-            ),
-            child: GridView(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              // A fixed extent that grows with the text scale: the 48dp tile,
-              // its padding and gap, and a two-line label. An aspect ratio
-              // left the label short of room once the tile grew to 48.
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 4,
-                mainAxisExtent: 16 +
-                    48 +
-                    LockoutTheme.spaceSm +
-                    MediaQuery.textScalerOf(context).scale(16) * 2 +
-                    4,
               ),
-              children: _quickActions(context),
+              const SizedBox(height: 24),
+              if (_sessionActive)
+                NvButton(
+                  variant: NvButtonVariant.filled,
+                  label: 'Resume workout',
+                  icon: Icons.play_arrow_rounded,
+                  onPressed: resumeSession,
+                )
+              else if (startable)
+                NvButton(
+                  variant: NvButtonVariant.filled,
+                  label: 'Start workout',
+                  large: true,
+                  icon: Icons.play_arrow_rounded,
+                  onPressed: _startScheduledSession,
+                )
+              else
+                NvButton(
+                  variant: NvButtonVariant.filled,
+                  label: recovery
+                      ? 'View training plan'
+                      : emptyPlan
+                      ? 'Open plan'
+                      : hasPlan
+                      ? 'Add exercises'
+                      : 'Create routine',
+                  icon: Icons.add_rounded,
+                  onPressed: () => widget.onNavigate?.call('workout'),
+                ),
+              const SizedBox(height: 8),
+              NvButton(
+                key: const ValueKey('start-custom-workout'),
+                variant: NvButtonVariant.text,
+                label: 'Start a custom workout',
+                onPressed: _sessionActive ? resumeSession : _startCustomSession,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (widget.foodTabEnabled) ...[
+                Expanded(
+                  child: NvActionCard(
+                    title: 'Log food',
+                    subtitle: kcalLeft == null
+                        ? 'Add your first meal'
+                        : '${kcalLeft < 0 ? 0 : kcalLeft} kcal left',
+                    icon: Icons.restaurant_rounded,
+                    shape: LockoutShape.bun,
+                    tone: NvTone.secondary,
+                    onPressed: () => widget.onNavigate?.call('food'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+              ],
+              Expanded(
+                child: NvActionCard(
+                  title: 'Weigh in',
+                  subtitle: _summary.weightKg == null
+                      ? 'Add a measurement'
+                      : DisplayUnits.format(context, _summary.weightKg!),
+                  icon: Icons.monitor_weight_outlined,
+                  shape: LockoutShape.pentagon,
+                  tone: NvTone.tertiary,
+                  onPressed: () => widget.onNavigate?.call(
+                    'progress',
+                    segment: ProgressSegment.weight,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const NvHeading('This week'),
+        NvSurface(
+          child: NvWeekStrip(
+            dates: _recentSessions.map((s) => s.dateStr).toSet(),
+          ),
+        ),
+        if (_recentSessions.isNotEmpty) ...[
+          const NvHeading('Recent workout'),
+          NvListItem(
+            leading: const NvIconBadge(icon: Icons.fitness_center_rounded),
+            title: _recentSessions.first.dayName,
+            supporting: _recentSessions.first.dateStr,
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () => widget.onNavigate?.call(
+              'progress',
+              segment: ProgressSegment.history,
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildSectionHeading(BuildContext context, String text) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: LockoutTheme.screenPadding,
-      ),
-      child: Text(text, style: Theme.of(context).textTheme.titleMedium),
-    );
-  }
-
-  /// The day's own block: the exercise list, or the honest empty case.
-  Widget _buildDayBody(
-    BuildContext context,
-    ScheduledDay? sched, {
-    required bool isRest,
-  }) {
-    if (isRest) {
-      return NvEmptyState(
-        headline: 'No session today',
-        body: 'Nothing is scheduled. Train off-plan or take the day.',
-        actionLabel: 'Custom session',
-        onAction: _startCustomSession,
-      );
-    }
-
-    if (sched!.exercises.isEmpty) {
-      return const NvTbaCard(
-        message: 'This training day has no exercises yet. Add them on the '
-            'Routines tab, then come back to start the session.',
-      );
-    }
-
-    return NvGroupedList(
-      children: [
-        for (final exercise in sched.exercises)
-          NvListItem(
-            title: exercise.name,
-            supporting: '${exercise.targetSets} '
-                '${exercise.targetSets == 1 ? 'set' : 'sets'}',
-          ),
+        const NvHeading('Explore'),
+        NvGroupedList(
+          children: [
+            NvListItem(
+              leading: const NvIconBadge(
+                icon: Icons.calendar_month_outlined,
+                shape: LockoutShape.arch,
+              ),
+              title: 'Workout history',
+              supporting: 'Completed sessions and sets',
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => widget.onNavigate?.call(
+                'progress',
+                segment: ProgressSegment.history,
+              ),
+            ),
+            NvListItem(
+              leading: const NvIconBadge(
+                icon: Icons.view_week_outlined,
+                shape: LockoutShape.diamond,
+                tone: NvTone.tertiary,
+              ),
+              title: 'Training plans',
+              supporting: 'Your routines and exercise library',
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => widget.onNavigate?.call('workout'),
+            ),
+          ],
+        ),
       ],
     );
   }
-
-  /// What the hub's weight and nutrition cards used to say, as grouped-list
-  /// rows.
-  ///
-  /// The composition changed; the information did not. A null still means
-  /// "not on record" and renders a prompt rather than a zero.
-  List<Widget> _summaryRows(BuildContext context) {
-    final semantics = LockoutSemantics.of(context);
-    final rows = <Widget>[];
-
-    final series = _summary.weightSeries;
-    rows.add(
-      NvListItem(
-        title: 'Weight',
-        supporting: _weightSupporting(),
-        // Fewer than two points cannot make a line, and a flat stub would
-        // read as a trend that is not there.
-        trailing: series.length >= 2
-            ? SizedBox(
-                width: 72,
-                child: Sparkline(
-                  values: series,
-                  lineColor: semantics.chartLine,
-                  height: 28,
-                ),
-              )
-            : null,
-        onTap: () => widget.onNavigate?.call(
-          'progress',
-          segment: ProgressSegment.weight,
-        ),
-      ),
-    );
-
-    if (widget.foodTabEnabled) {
-      rows.add(
-        NvListItem(
-          title: 'Calories',
-          supporting: _caloriesSupporting(),
-          onTap: () => widget.onNavigate?.call('food'),
-        ),
-      );
-      rows.add(
-        NvListItem(
-          title: 'Protein',
-          supporting: _proteinSupporting(),
-          onTap: () => widget.onNavigate?.call('food'),
-        ),
-      );
-    }
-
-    rows.add(
-      NvListItem(
-        title: 'Burned today',
-        supporting: _burnSupporting(),
-        onTap: () => widget.onNavigate?.call(
-          'progress',
-          segment: ProgressSegment.history,
-        ),
-      ),
-    );
-
-    return rows;
-  }
-
-  String _weightSupporting() {
-    final weight = _summary.weightKg;
-    if (weight == null) return 'No weight on record yet';
-
-    final parts = <String>['${weight.toStringAsFixed(1)} kg'];
-
-    final delta = _summary.weightDeltaKg;
-    if (delta != null && delta != 0) {
-      final sign = delta > 0 ? '+' : '-';
-      parts.add('$sign${delta.abs().toStringAsFixed(1)} kg');
-    }
-
-    final target = _summary.targetWeightKg;
-    if (target != null) {
-      final gap = (weight - target).abs();
-      parts.add(
-        gap < 0.05
-            ? 'target reached'
-            : '${gap.toStringAsFixed(1)} kg to go',
-      );
-    }
-
-    return parts.join(' · ');
-  }
-
-  String _caloriesSupporting() {
-    final target = _summary.kcalTarget;
-    if (target == null) return '${_summary.kcalEaten} kcal · no target set';
-
-    final left = target - _summary.kcalEaten;
-    // Never a negative "left": past the target it reads as over, which is
-    // the arithmetic a reader can do in their head.
-    final tail = left >= 0 ? '$left kcal left' : '${left.abs()} kcal over';
-    return '${_summary.kcalEaten} of $target kcal · $tail';
-  }
-
-  String _proteinSupporting() {
-    final eaten = _summary.proteinEatenG.round();
-    final target = _summary.proteinTargetG;
-    if (target == null) return '$eaten g';
-
-    final left = target - eaten;
-    final tail = left >= 0 ? '$left g left' : '${left.abs()} g over';
-    return '$eaten of $target g · $tail';
-  }
-
-  String _burnSupporting() {
-    final burned = _summary.burnedTodayKcal;
-    // Null means no session was logged today at all. A value of zero or less
-    // means a session *was* logged but no estimate could be made for it, and
-    // saying "no session yet" there would deny something that happened.
-    if (burned == null) return 'No session logged yet';
-    if (burned <= 0) return 'Estimate unavailable';
-    return '${burned.round()} kcal';
-  }
-
-  List<Widget> _quickActions(BuildContext context) {
-    final go = widget.onNavigate;
-    // Tiles fill with `secondaryContainer` inside `NvIconTile` so they read as
-    // tinted by the generated scheme (spec 5.5); the shape now carries the
-    // identity the colour no longer has to.
-
-    return [
-      // Hidden entirely when the Food tab is off, rather than left as a tile
-      // that taps to nowhere: `_goToTab` already no-ops for a hidden tab id,
-      // so a visible "Log food" tile would silently do nothing.
-      if (widget.foodTabEnabled)
-        _quickActionTile(
-          label: 'Log food',
-          icon: Icons.restaurant,
-          onTap: () => go?.call('food'),
-        ),
-      _quickActionTile(
-        label: 'Weigh in',
-        icon: Icons.monitor_weight,
-        onTap: () => go?.call('progress', segment: ProgressSegment.weight),
-      ),
-      _quickActionTile(
-        label: 'Workout',
-        icon: Icons.fitness_center,
-        onTap: () => go?.call('workout'),
-      ),
-      _quickActionTile(
-        label: 'History',
-        icon: Icons.calendar_month,
-        onTap: () => go?.call('progress', segment: ProgressSegment.history),
-      ),
-      _quickActionTile(
-        label: 'Custom',
-        icon: Icons.add,
-        onTap: _startCustomSession,
-      ),
-      _quickActionTile(
-        label: 'Streak',
-        icon: Icons.local_fire_department,
-        onTap: () => go?.call('progress', segment: ProgressSegment.history),
-      ),
-      _quickActionTile(
-        label: 'Plan',
-        icon: Icons.insights,
-        onTap: () => go?.call('progress', segment: ProgressSegment.weight),
-      ),
-      _quickActionTile(
-        label: 'Exercises',
-        icon: Icons.list,
-        onTap: () => go?.call('workout'),
-      ),
-    ];
-  }
-
 
   // --- ACTIVE SESSION ---
 
@@ -1087,7 +1132,9 @@ class TodayTabState extends State<TodayTab> {
   Widget _buildExerciseList() {
     final theme = Theme.of(context);
     final hasExercises = _liveExercises.isNotEmpty;
-    final itemCount = (hasExercises ? _liveExercises.length : 1) + 2;
+    final showInlineAdd = !widget.presentSessionAsRoute;
+    final itemCount =
+        (hasExercises ? _liveExercises.length : 1) + (showInlineAdd ? 2 : 1);
     final lastIndex = itemCount - 1;
 
     return ListView.builder(
@@ -1099,7 +1146,7 @@ class TodayTabState extends State<TodayTab> {
             child: _buildLegSafetyNotice(),
           );
         }
-        if (index == lastIndex) {
+        if (showInlineAdd && index == lastIndex) {
           return NvButton(
             variant: NvButtonVariant.outlined,
             label: 'Add exercise',
@@ -1108,9 +1155,7 @@ class TodayTabState extends State<TodayTab> {
         }
         if (!hasExercises) {
           return Padding(
-            padding: const EdgeInsets.symmetric(
-              vertical: LockoutTheme.spaceLg,
-            ),
+            padding: const EdgeInsets.symmetric(vertical: LockoutTheme.spaceLg),
             child: Text(
               'No exercises yet. Add one to begin.',
               textAlign: TextAlign.center,
@@ -1133,141 +1178,164 @@ class TodayTabState extends State<TodayTab> {
   /// tapping Finish opens.
   Widget _buildSessionHeader(double setProgress) {
     final theme = Theme.of(context);
-    return NvInfoCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // v1's `HeroCard` stated "IN SESSION - $_sessionTitle" so a live
-          // session always named which day was running; the rebuilt header
-          // otherwise never paints `_sessionTitle` anywhere on screen.
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  _sessionTitle,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-              NvIconButton(
-                icon: Icons.close,
-                tooltip: 'Leave session',
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            if (widget.presentSessionAsRoute)
+              NvShapeButton(
+                key: const ValueKey('minimize-workout'),
+                icon: Icons.keyboard_arrow_down_rounded,
+                label: 'Minimize workout',
+                onPressed: () => Navigator.of(context).pop(),
+              )
+            else
+              NvShapeButton(
+                icon: Icons.close_rounded,
+                label: 'Leave session',
                 onPressed: _leaveSession,
               ),
-            ],
-          ),
-          const SizedBox(height: LockoutTheme.spaceXs),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(_sessionTitle, style: theme.textTheme.headlineSmall),
+            ),
+            PopupMenuButton<String>(
+              tooltip: 'Workout options',
+              onSelected: (v) {
+                if (v == 'discard') _leaveSession();
+              },
+              itemBuilder: (_) => [
+                const PopupMenuItem(
+                  value: 'discard',
+                  child: Text('Discard workout'),
+                ),
+              ],
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Workout in progress · $_elapsedLabel',
+          style: theme.textTheme.bodyLarge,
+        ),
+        const SizedBox(height: 12),
+        NvSurface(
+          tone: NvTone.secondary,
+          padding: const EdgeInsets.all(LockoutTheme.cardPadding),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // The cookie marker reads as register: the training cookie while
-              // a session is running, 4 when the day is rest. It is a
-              // subject-scale element, which is the only place a cookie shape
-              // is allowed (D5 register).
-              Container(
-                width: 44,
-                height: 44,
-                alignment: Alignment.center,
-                decoration: ShapeDecoration(
-                  color: theme.colorScheme.primaryContainer,
-                  shape: LockoutShapeBorder(_sessionTotalSets > 0
-                      ? LockoutShape.training
-                      : LockoutShape.rest),
-                ),
-                child: Icon(
-                  _sessionTotalSets > 0
-                      ? Icons.bolt_outlined
-                      : Icons.bedtime_outlined,
-                  size: 22,
-                  color: theme.colorScheme.onPrimaryContainer,
-                ),
-              ),
-              const SizedBox(width: LockoutTheme.spaceMd),
               Text(
-                '${_sessionTotalSets - _sessionCompletedSets}',
-                style: LockoutTheme.countdown(theme.colorScheme),
+                '$_sessionCompletedSets of $_sessionTotalSets sets · ${DisplayUnits.format(context, _sessionVolumeKg, decimals: 0)}',
+                style: theme.textTheme.titleMedium,
               ),
-              const SizedBox(width: LockoutTheme.spaceSm),
-              // Flexible, not a bare Padding: at 360dp the marker, the 88pt
-              // numeral and their gaps leave the label about 136dp, and a
-              // wide-metric face spills past that. It wraps rather than
-              // overflowing the header.
-              Flexible(
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 14),
-                  child: Text(
-                    _sessionTotalSets - _sessionCompletedSets == 1
-                        ? 'set left'
-                        : 'sets left',
-                    style: theme.textTheme.titleMedium,
-                  ),
-                ),
-              ),
+              const SizedBox(height: 12),
+              NvWavyProgress(value: setProgress),
             ],
           ),
-          const SizedBox(height: LockoutTheme.spaceMd),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                child: _SessionStat(label: 'Duration', value: _elapsedLabel),
-              ),
-              Expanded(
-                child: _SessionStat(
-                  // The unit lives in the label, not the value: at 360dp
-                  // the three stats share ~69dp each once the `Finish`
-                  // button takes its own ~88dp, and a four-digit
-                  // `1234.5 kg` needs ~110dp at `numeric(size: 20)` — it
-                  // ellipsises long before the figure itself would.
-                  // Dropping " kg" from the value buys back exactly the
-                  // width the unit cost.
-                  label: 'Volume (kg)',
-                  value: _fmtWeight(_sessionVolumeKg),
-                ),
-              ),
-              NvButton(
-                variant: NvButtonVariant.tonal,
-                label: 'Finish',
-                onPressed: _confirmFinishSession,
-              ),
-            ],
+        ),
+        const SizedBox(height: 8),
+        if (!widget.presentSessionAsRoute)
+          NvButton(
+            variant: NvButtonVariant.filled,
+            label: 'Finish',
+            onPressed: _confirmFinishSession,
           ),
-          const SizedBox(height: LockoutTheme.spaceMd),
-          NvWavyProgress(value: setProgress),
-        ],
-      ),
+      ],
     );
   }
 
   /// Opens the finish summary — the same Duration/Volume/Sets triple the
   /// header shows, so the numbers the log will carry are confirmed before
-  /// the write rather than discovered after it. `Save` calls the existing
-  /// `_finishSession` unchanged; `Discard` ends the session with no write.
+  /// the write rather than discovered after it. Save preserves the reviewed
+  /// completion time; discard ends the session with no write.
   Future<void> _confirmFinishSession() async {
-    final action = await showNvSheet<String>(
+    if (_confirmingFinish || _sessionSaving) return;
+    _confirmingFinish = true;
+    final reviewedAt = _now();
+    final reviewedDuration = reviewedAt
+        .difference(_startedAt ?? reviewedAt)
+        .inSeconds;
+    final action = await showNvEditor<String>(
       context: context,
-      title: 'Finish session',
-      child: _FinishSummarySheet(
-        duration: _elapsedLabel,
-        volume: _fmtWeight(_sessionVolumeKg),
-        sets: '$_sessionCompletedSets/$_sessionTotalSets',
+      title: 'Finish workout',
+      builder: (ctx) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const NvIconBadge(
+            icon: Icons.check_rounded,
+            shape: LockoutShape.achievement,
+            size: 88,
+          ),
+          const SizedBox(height: 24),
+          Text('Ready to save?', style: Theme.of(ctx).textTheme.headlineLarge),
+          const SizedBox(height: 12),
+          Text(_sessionTitle, style: Theme.of(ctx).textTheme.titleLarge),
+          const SizedBox(height: 20),
+          NvSurface(
+            tone: NvTone.secondary,
+            child: Wrap(
+              spacing: 24,
+              runSpacing: 16,
+              children: [
+                _SessionStat(
+                  label: 'Duration',
+                  value: _clockLabel(reviewedDuration),
+                ),
+                _SessionStat(label: 'Sets', value: '$_sessionCompletedSets'),
+                _SessionStat(
+                  label: 'Volume',
+                  value: '${_fmtWeight(_sessionVolumeKg)} kg',
+                ),
+              ],
+            ),
+          ),
+          const NvHeading('Your exercises'),
+          NvGroupedList(
+            children: [
+              for (final ex in _liveExercises.where(
+                (e) => e.completedCount > 0,
+              ))
+                NvListItem(
+                  title: ex.name,
+                  supporting:
+                      '${ex.completedCount} completed ${ex.completedCount == 1 ? 'set' : 'sets'} · ${DisplayUnits.format(context, ex.volumeKg, decimals: 0)}',
+                ),
+            ],
+          ),
+          if (_sessionCompletedSets == 0)
+            const Text(
+              'No sets are complete. Keep training or discard this workout.',
+            ),
+          const SizedBox(height: 24),
+          NvButton(
+            key: const ValueKey('save-workout'),
+            variant: NvButtonVariant.filled,
+            label: 'Save workout',
+            onPressed: _sessionCompletedSets == 0
+                ? null
+                : () => Navigator.of(ctx).pop('save'),
+          ),
+          const SizedBox(height: 12),
+          NvButton(
+            variant: NvButtonVariant.tonal,
+            label: 'Keep training',
+            onPressed: () => Navigator.of(ctx).pop(),
+          ),
+          const SizedBox(height: 12),
+          NvButton(
+            variant: NvButtonVariant.danger,
+            label: 'Discard workout',
+            onPressed: () => Navigator.of(ctx).pop('discard'),
+          ),
+        ],
       ),
     );
-    if (!mounted || action == null) return;
-    if (action == 'save') {
-      await _finishSession();
-    } else if (action == 'discard') {
-      // A session with logged sets is real data, not an empty draft — the
-      // same "Discard session?" gate `_finishSession` already applies when
-      // there is nothing logged must also guard the one-tap Discard here
-      // once there is something to lose.
-      if (_sessionCompletedSets > 0) {
-        final confirmed = await _confirmDiscard();
-        if (confirmed != true || !mounted) return;
-      }
-      _endSessionState();
-    }
+    _confirmingFinish = false;
+    if (!mounted) return;
+    if (action == 'save') await _finishSession(completedAt: reviewedAt);
+    if (action == 'discard') await _leaveSession();
   }
 
   Widget _buildLegSafetyNotice() {
@@ -1300,72 +1368,78 @@ class TodayTabState extends State<TodayTab> {
   }
 
   Widget _buildExerciseCard(_LiveExercise ex, int exerciseIndex) {
-    final theme = Theme.of(context);
-
-    final done = ex.completedCount;
-    final total = ex.sets.length;
-
     return Padding(
-      padding: const EdgeInsets.only(bottom: LockoutTheme.spaceMd),
-      child: NvGroupedList(
-        children: [
-          // The exercise's own row leads the group, carrying its progress in
-          // the trailing badge section 8 puts there.
-          NvListItem(
-            title: ex.name,
-            supporting: ex.lastPerformance.isEmpty
-                ? 'Target ${ex.targetLabel} - no previous data'
-                : 'Target ${ex.targetLabel} - last ${ex.lastPerformance}',
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                NvStatusBadge(
-                  label: '$done/$total',
-                  kind: _setProgressKind(done, total),
-                ),
-                const SizedBox(width: LockoutTheme.spaceSm),
-                NvIconButton(
-                  icon: Icons.play_circle_outline,
-                  tooltip: 'Watch video',
-                  onPressed: () => _openVideo(ex.name, ex.videoUrl),
-                ),
-              ],
-            ),
-          ),
-          for (var i = 0; i < ex.sets.length; i++)
-            _buildSetRow(ex, exerciseIndex, i, ex.sets[i]),
-          Container(
-            color: theme.colorScheme.surfaceContainer,
-            padding: const EdgeInsets.symmetric(
-              horizontal: LockoutTheme.spaceSm,
-              vertical: LockoutTheme.spaceXs,
-            ),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: NvButton(
-                variant: NvButtonVariant.text,
-                label: 'Add set',
-                onPressed: () {
-                  final last = ex.sets.isNotEmpty ? ex.sets.last : null;
-                  setState(() => ex.sets.add(_LiveSet(
-                        weightKg: last?.weightKg ?? 0,
-                        reps: last?.reps ?? 10,
-                      )));
-                },
+      padding: const EdgeInsets.only(bottom: 20),
+      child: NvSurface(
+        tone: exerciseIndex == 0 ? NvTone.primary : NvTone.surface,
+        padding: const EdgeInsets.all(LockoutTheme.headingGap),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 4, 4, 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  NvIconBadge(
+                    icon: Icons.fitness_center_rounded,
+                    shape: LockoutShape
+                        .values[[11, 8, 14, 6, 9][exerciseIndex % 5]],
+                    tone: NvTone.values[(exerciseIndex + 1) % 3],
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          ex.name,
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          ex.lastPerformance.isEmpty
+                              ? 'Target ${ex.targetLabel}'
+                              : 'Last time ${ex.lastPerformance}',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                  NvShapeButton(
+                    icon: Icons.play_arrow_rounded,
+                    label: 'Watch form',
+                    tone: NvTone.secondary,
+                    shape: LockoutShape.arch,
+                    onPressed: () => _openVideo(ex.name, ex.videoUrl),
+                  ),
+                ],
               ),
             ),
-          ),
-        ],
+            for (var i = 0; i < ex.sets.length; i++) ...[
+              _buildSetRow(ex, exerciseIndex, i, ex.sets[i]),
+              const SizedBox(height: 4),
+            ],
+            NvButton(
+              variant: NvButtonVariant.text,
+              label: 'Add set',
+              icon: Icons.add_rounded,
+              onPressed: () {
+                final last = ex.sets.lastOrNull;
+                setState(
+                  () => ex.sets.add(
+                    _LiveSet(
+                      weightKg: last?.weightKg ?? 0,
+                      reps: last?.reps ?? 10,
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
       ),
     );
-  }
-
-  /// What an exercise's set count is saying: nothing started, in progress,
-  /// or finished.
-  NvBadgeKind _setProgressKind(int done, int total) {
-    if (total > 0 && done >= total) return NvBadgeKind.done;
-    if (done > 0) return NvBadgeKind.accent;
-    return NvBadgeKind.neutral;
   }
 
   Widget _buildSetRow(
@@ -1373,296 +1447,198 @@ class TodayTabState extends State<TodayTab> {
     int exerciseIndex,
     int setIndex,
     _LiveSet set,
-  ) {
-    final theme = Theme.of(context);
-    final semantics = LockoutSemantics.of(context);
-    // Two lines, not one: SET + PREVIOUS + delete + the complete tick on top,
-    // the two steppers beneath. A single `Row` carrying all of it needs
-    // ~332dp of non-shrinkable children (set number, both steppers, the
-    // filled complete button) before the row's own padding, which overflows
-    // a 360-390dp phone.
-    //
-    // The tick lives on the *first* line rather than sitting beside the
-    // steppers: that line only otherwise carries a 24dp set number and a
-    // 48dp delete button, with an ellipsised label taking whatever is left,
-    // so a fifth 48dp control fits it without pressure. That leaves the
-    // second line for the two steppers alone — each `Expanded` half gets
-    // ~140dp at 360dp width. Putting the tick beside the steppers instead
-    // (the previous layout) left the value only ~20dp of that, forcing
-    // `FittedBox` to shrink a multi-digit weight far below the reps column's
-    // single digit — the two columns visibly changed scale against each
-    // other, which is what `LockoutTheme.numeric` exists to prevent.
-    // `_numberStepper` below caps the value's slot at an explicit width
-    // rather than letting it silently take whatever the ~140dp has left
-    // over from the steppers' buttons, so the value's scale stops
-    // depending on incidental neighbour layout — see its own comment.
-    final rowContent = Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: LockoutTheme.spaceSm,
-        vertical: LockoutTheme.spaceXs,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              SizedBox(
-                width: LockoutTheme.spaceLg,
-                child: Text(
-                  '${setIndex + 1}',
-                  style: LockoutTheme.numeric(context, size: 14),
-                ),
-              ),
-              Expanded(
-                child: Text(
-                  ex.lastPerformance.isEmpty ? '-' : ex.lastPerformance,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelSmall,
-                ),
-              ),
-              NvIconButton(
-                icon: Icons.close,
-                tooltip: 'Remove set',
-                onPressed: ex.sets.length > 1
-                    ? () => setState(() => ex.sets.removeAt(setIndex))
-                    : null,
-              ),
-              NvIconButton(
-                key: ValueKey('set-complete-$exerciseIndex-$setIndex'),
-                icon: Icons.check,
-                tooltip: set.completed
-                    ? 'Mark set incomplete'
-                    : 'Mark set complete',
-                tone: set.completed
-                    ? NvIconButtonTone.success
-                    : NvIconButtonTone.neutral,
-                onPressed: () {
-                  final wasDone = set.completed;
-                  setState(() => set.completed = !wasDone);
-                  if (!wasDone) _beginRest(ex.restSeconds);
-                },
-              ),
-            ],
-          ),
-          Row(
-            children: [
-              Expanded(
-                child: _numberStepper(
-                  label: 'weight',
-                  value: _fmtWeight(set.weightKg),
-                  onMinus: () {
-                    if (set.weightKg >= 2.5) {
-                      setState(() => set.weightKg -= 2.5);
-                    } else if (set.weightKg > 0) {
-                      setState(() => set.weightKg = 0);
-                    }
-                  },
-                  onPlus: () => setState(() => set.weightKg += 2.5),
-                ),
-              ),
-              Expanded(
-                child: _numberStepper(
-                  label: 'reps',
-                  value: '${set.reps}',
-                  onMinus: () {
-                    if (set.reps > 1) setState(() => set.reps--);
-                  },
-                  onPlus: () => setState(() => set.reps++),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
+  ) => NvSetRow(
+    key: ObjectKey(set),
+    index: setIndex + 1,
+    weight: set.weightKg,
+    reps: set.reps,
+    completed: set.completed,
+    completionKey: ValueKey('set-complete-$exerciseIndex-$setIndex'),
+    onWeight: (v) {
+      if (set.weightKg != v) setState(() => set.weightKg = v);
+    },
+    onReps: (v) {
+      if (set.reps != v) setState(() => set.reps = v);
+    },
+    onDelete: ex.sets.length > 1
+        ? () => setState(() => ex.sets.removeAt(setIndex))
+        : null,
+    onToggle: () {
+      final wasDone = set.completed;
+      setState(() => set.completed = !wasDone);
+      if (!wasDone) _beginRest(ex.restSeconds);
+    },
+  );
 
-    // A completed row tints its whole background, not just the tick — a
-    // TweenAnimationBuilder rather than a plain DecoratedBox so the tint
-    // fades in instead of snapping, while the keyed widget the tests read
-    // stays a real `DecoratedBox`.
-    //
-    // `effects` is the tier for colour and opacity: 200ms on an ease-out,
-    // with none of the spring tiers' overshoot, since a colour that passes
-    // its target lands on a hue nobody authored. Taken through
-    // `durationFor` so the fade collapses to nothing when the user has
-    // asked the OS to remove animations.
-    // The row's own surface is the group's, not transparent: a set row lives
-    // inside an `NvGroupedList`, and a transparent one left its steppers and
-    // tick floating on the page background with no row behind them (device
-    // QA B2). The completion tint is composited over that surface rather
-    // than standing in for it.
-    final rowSurface = theme.colorScheme.surfaceContainer;
-    final targetColor = set.completed
-        ? Color.alphaBlend(
-            semantics.success.withValues(alpha: 0.12),
-            rowSurface,
-          )
-        : rowSurface;
-    return TweenAnimationBuilder<Color?>(
-      key: ObjectKey(set),
-      tween: ColorTween(end: targetColor),
-      duration: LockoutMotion.effects.durationFor(context),
-      curve: LockoutMotion.effects.curve,
-      builder: (context, color, child) => DecoratedBox(
-        key: ValueKey('set-row-$exerciseIndex-$setIndex'),
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(LockoutTheme.radiusField),
-        ),
-        child: child,
-      ),
-      child: rowContent,
-    );
+  String get _restLabel =>
+      '${(_restSeconds ~/ 60).toString().padLeft(2, '0')}:${(_restSeconds % 60).toString().padLeft(2, '0')}';
+
+  void _adjustRest(int delta) {
+    final end = _restEndsAt;
+    if (end == null) return;
+    setState(() {
+      final before = _restSeconds;
+      _restEndsAt = delta < 0 && before <= -delta
+          ? _now()
+          : end.add(Duration(seconds: delta));
+      _syncRest();
+      final total = delta > 0
+          ? _restTotalSeconds + delta
+          : _restTotalSeconds - (before - _restSeconds);
+      _restTotalSeconds = total < 0 ? 0 : total;
+    });
   }
 
-  Widget _numberStepper({
-    required String label,
-    required String value,
-    required VoidCallback onMinus,
-    required VoidCallback onPlus,
-  }) {
-    // `NvIconButton` is 48dp square by construction, so the explicit
-    // constraints the framework `IconButton` needed are gone with it.
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        NvIconButton(
-          icon: Icons.remove,
-          tooltip: 'Decrease $label',
-          onPressed: onMinus,
-        ),
-        // `Flexible` still, so this can never overflow its Row regardless
-        // of what else shares the line — but capped with an explicit
-        // `maxWidth` rather than left to take "whatever is left": the
-        // previous uncapped `Flexible` grew or shrank with viewport *and*
-        // sibling layout together, so it could match the reps column's
-        // scale by coincidence at one combination and diverge from it at
-        // the next (round-2 finding B). `LockoutTheme.spaceXl + spaceMd`
-        // (48dp) is the budget: each stepper's own two 48dp buttons leave
-        // ~44dp of its ~140dp `Expanded` half at 360dp width (140 - 96 =
-        // 44), and a five-character value at `numeric(size: 14)` needs
-        // ~43dp at the default text scale, so 48dp fits it at 1.0 scale
-        // with a small margin rather than forcing `FittedBox` to shrink it
-        // below the reps column's scale. It still shrinks below 48dp if a
-        // neighbour (e.g. the complete tick, wrongly sharing this line)
-        // leaves less room than that — capping the budget states the
-        // assumption; it does not remove the squeeze.
-        Flexible(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(
-              maxWidth: LockoutTheme.spaceXl + LockoutTheme.spaceMd,
-            ),
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                value,
-                textAlign: TextAlign.center,
-                style: LockoutTheme.numeric(context, size: 14),
-              ),
-            ),
-          ),
-        ),
-        NvIconButton(
-          icon: Icons.add,
-          tooltip: 'Increase $label',
-          onPressed: onPlus,
-        ),
-      ],
-    );
-  }
+  void _skipRest() => setState(() {
+    _restRunning = false;
+    _restSeconds = 0;
+    _restEndsAt = null;
+  });
 
-  Widget _buildRestBar() {
-    final theme = Theme.of(context);
-    final progress = _restTotalSeconds <= 0
-        ? 0.0
-        : (_restSeconds / _restTotalSeconds).clamp(0.0, 1.0);
-
-    return DecoratedBox(
-      decoration: BoxDecoration(color: theme.colorScheme.surfaceContainerHigh),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            LockoutTheme.spaceMd,
-            LockoutTheme.spaceSm,
-            LockoutTheme.spaceMd,
-            LockoutTheme.spaceSm,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              NvWavyProgress(value: progress),
-              const SizedBox(height: LockoutTheme.spaceSm),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  Future<void> _openRestTimer() async {
+    if (_restSheetOpen || !_restRunning || !mounted) return;
+    _restSheetOpen = true;
+    await showModalBottomSheet<void>(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
+      builder: (ctx) => ValueListenableBuilder<int>(
+        valueListenable: _sessionRevision,
+        builder: (_, revision, child) {
+          final next = _liveExercises
+              .where((e) => e.completedCount < e.sets.length)
+              .firstOrNull;
+          return SafeArea(
+            top: false,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    '${_restSeconds}s',
-                    style: LockoutTheme.numeric(context, size: 28),
+                    _restRunning ? 'Rest time' : 'Rest complete',
+                    style: Theme.of(ctx).textTheme.headlineMedium,
                   ),
-                  Row(
+                  const SizedBox(height: 24),
+                  const Center(
+                    child: NvIconBadge(
+                      icon: Icons.timer_outlined,
+                      shape: LockoutShape.sunny,
+                      size: 88,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    _restLabel,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(ctx).textTheme.displayLarge,
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    next == null
+                        ? 'All planned sets complete'
+                        : 'Next: ${next.name}',
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 24),
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 8,
+                    runSpacing: 8,
                     children: [
                       NvButton(
-                        variant: NvButtonVariant.text,
-                        label: '-15s',
-                        onPressed: () => setState(() {
-                          // The end time, not the counter: a control that
-                          // only moved `_restSeconds` would read right until
-                          // the next tick recomputed it away.
-                          //
-                          // `_restTotalSeconds` is the progress bar's
-                          // denominator, so it shrinks by the same amount
-                          // the remaining time does — otherwise the bar
-                          // reads a stale, too-large total. Taking the last
-                          // 15 seconds off ends the rest now rather than
-                          // pushing the end time into the past, and
-                          // `_syncRest` clears `_restRunning` with it
-                          // instead of leaving a finished rest on screen
-                          // for up to a second.
-                          final endsAt = _restEndsAt;
-                          if (endsAt == null) return;
-                          final before = _restSeconds;
-                          _restEndsAt = before > 15
-                              ? endsAt.subtract(const Duration(seconds: 15))
-                              : _now();
-                          _syncRest();
-                          final remainingTotal =
-                              _restTotalSeconds - (before - _restSeconds);
-                          _restTotalSeconds =
-                              remainingTotal < 0 ? 0 : remainingTotal;
-                        }),
+                        variant: NvButtonVariant.tonal,
+                        label: '−15 sec',
+                        onPressed: _restRunning ? () => _adjustRest(-15) : null,
                       ),
                       NvButton(
-                        variant: NvButtonVariant.text,
-                        label: '+15s',
-                        onPressed: () => setState(() {
-                          // Symmetric with the total above: extending the
-                          // rest also extends what "full" means for the bar,
-                          // or +15s would pin it at 100% until the clock
-                          // fell back under the original total.
-                          final endsAt = _restEndsAt;
-                          if (endsAt == null) return;
-                          _restEndsAt =
-                              endsAt.add(const Duration(seconds: 15));
-                          _restTotalSeconds += 15;
-                          _syncRest();
-                        }),
+                        variant: NvButtonVariant.tonal,
+                        label: '+15 sec',
+                        onPressed: _restRunning ? () => _adjustRest(15) : null,
                       ),
                       NvButton(
-                        variant: NvButtonVariant.text,
-                        label: 'Skip',
-                        onPressed: () => setState(() {
-                          _restRunning = false;
-                          _restEndsAt = null;
-                        }),
+                        variant: NvButtonVariant.filled,
+                        label: _restRunning ? 'Skip rest' : 'Keep training',
+                        onPressed: () {
+                          _skipRest();
+                          Navigator.of(ctx).pop();
+                        },
                       ),
                     ],
                   ),
                 ],
               ),
+            ),
+          );
+        },
+      ),
+    );
+    _restSheetOpen = false;
+  }
+
+  Widget _workoutActions() {
+    final buttons = [
+      NvButton(
+        variant: NvButtonVariant.tonal,
+        label: 'Add exercise',
+        onPressed: _addExerciseMidSession,
+      ),
+      NvButton(
+        variant: NvButtonVariant.filled,
+        label: _sessionSaving ? 'Saving…' : 'Finish workout',
+        onPressed: _sessionSaving ? null : _confirmFinishSession,
+      ),
+    ];
+    return MediaQuery.textScalerOf(context).scale(16) > 20
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [buttons[0], const SizedBox(height: 8), buttons[1]],
+          )
+        : Row(
+            children: [
+              Expanded(child: buttons[0]),
+              const SizedBox(width: 12),
+              Expanded(child: buttons[1]),
             ],
-          ),
+          );
+  }
+
+  Widget _buildRestBar() {
+    final progress = _restTotalSeconds <= 0
+        ? 0.0
+        : (_restSeconds / _restTotalSeconds).clamp(0.0, 1.0);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: NvSurface(
+        tone: NvTone.secondary,
+        padding: const EdgeInsets.all(LockoutTheme.headingGap),
+        onPressed: _openRestTimer,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                const NvIconBadge(
+                  icon: Icons.timer_outlined,
+                  shape: LockoutShape.sunny,
+                  size: 40,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Rest · $_restLabel',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ),
+                const Icon(Icons.keyboard_arrow_up_rounded),
+              ],
+            ),
+            const SizedBox(height: 8),
+            NvWavyProgress(value: progress),
+          ],
         ),
       ),
     );
@@ -1672,61 +1648,6 @@ class TodayTabState extends State<TodayTab> {
 /// The Finish confirmation sheet: the same Duration/Volume/Sets triple the
 /// session header states, plus the two ways to end the session. Pops with
 /// `'save'` or `'discard'` for `_confirmFinishSession` to act on.
-class _FinishSummarySheet extends StatelessWidget {
-  final String duration;
-  final String volume;
-  final String sets;
-
-  const _FinishSummarySheet({
-    required this.duration,
-    required this.volume,
-    required this.sets,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(child: _SessionStat(label: 'Duration', value: duration)),
-            Expanded(
-              child: _SessionStat(label: 'Volume (kg)', value: volume),
-            ),
-            Expanded(child: _SessionStat(label: 'Sets', value: sets)),
-          ],
-        ),
-        const SizedBox(height: LockoutTheme.spaceLg),
-        Row(
-          children: [
-            Expanded(
-              child: NvButton(
-                variant: NvButtonVariant.outlined,
-                label: 'Discard',
-                onPressed: () => Navigator.pop(context, 'discard'),
-              ),
-            ),
-            const SizedBox(width: LockoutTheme.spaceMd),
-            Expanded(
-              child: NvButton(
-                variant: NvButtonVariant.filled,
-                label: 'Save',
-                onPressed: () => Navigator.pop(context, 'save'),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-/// The Duration/Volume/Sets caption-over-value pairing shared by the session
-/// header (`_buildSessionHeader`) and the finish summary sheet
-/// (`_FinishSummarySheet`) — the whole point of the sheet is that it states
-/// the same triple the header does, so both render through the one widget.
 class _SessionStat extends StatelessWidget {
   final String label;
   final String value;

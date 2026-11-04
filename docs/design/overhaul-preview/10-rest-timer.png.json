@@ -1,0 +1,10 @@
+{
+  "title": "Rest timer",
+  "tool": "Built-in image_gen",
+  "prompt": "Edit the REST TIMER concept (reference image 2), keeping its phone frame, bottom sheet, typography, color roles, 01:24 countdown, Next: Bench press · Set 4, -15 sec / +15 sec / Skip rest controls and lower-sheet composition unchanged. Replace ONLY the dimmed underlying Today screen with the ACTIVE WORKOUT from reference image 1: header Upper body, Workout in progress · 24:18, 2 of 5 exercises and Bench press. The rest timer must clearly overlay the workout, never the Today dashboard. Keep the entire output portrait, one phone only, crisp readable native Android Material 3 Expressive, same light lime/lavender/peach system. Remove duplicate minus/plus symbols if necessary, so buttons read '-15 sec' and '+15 sec' exactly once.",
+  "source": "C:\\Users\\mdlia\\.codex\\generated_images\\01a1a046-8052-7061-834b-c9d002776708\\exec-62bba4e6-84f6-4363-8a26-dff5e16a248c.png",
+  "approved": true,
+  "kind": "ui-mockup",
+  "notes": "Concept preview only; illustrative data. Not an implementation or accessibility certification.",
+  "approval": "That’s great!!!! Proceed then — 2026-11-03"
+}

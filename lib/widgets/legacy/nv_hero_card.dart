@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../theme/lockout_semantics.dart';
 import '../../theme/lockout_theme.dart';
-import 'nv_wavy_progress.dart';
+import '../house/nv_wavy_progress.dart';
 
 /// The one accent card a screen is allowed, section 8.
 ///

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../theme/lockout_semantics.dart';
 import '../../theme/lockout_theme.dart';
 import '../morphing_surface.dart';
+import 'nv_keyboard_action.dart';
 
 /// The house button variants, section 8 of the design system.
 ///
@@ -46,6 +47,7 @@ class NvButton extends StatefulWidget {
 
 class _NvButtonState extends State<NvButton> {
   bool _pressed = false;
+  bool _focused = false;
 
   bool get _enabled => widget.onPressed != null;
 
@@ -73,39 +75,39 @@ class _NvButtonState extends State<NvButton> {
       // invisible on a device while every unit assertion passed (device QA
       // B1); the ink is the one colour guaranteed to contrast with it.
       NvButtonVariant.accent => (
-          background: semantics.onHeroFill,
-          foreground: semantics.heroFill,
-          side: BorderSide.none,
-        ),
+        background: semantics.onHeroFill,
+        foreground: semantics.heroFill,
+        side: BorderSide.none,
+      ),
       NvButtonVariant.filled => (
-          background: colors.primary,
-          foreground: colors.onPrimary,
-          side: BorderSide.none,
-        ),
+        background: colors.primary,
+        foreground: colors.onPrimary,
+        side: BorderSide.none,
+      ),
       NvButtonVariant.tonal => (
-          background: colors.secondaryContainer,
-          foreground: colors.onSecondaryContainer,
-          side: BorderSide.none,
-        ),
+        background: colors.secondaryContainer,
+        foreground: colors.onSecondaryContainer,
+        side: BorderSide.none,
+      ),
       // No fill, not `surface`: section 8 gives these a border or nothing at
       // all, and a `surface` fill reads as a solid pill on any tinted
       // background — three of them sat on the rest bar looking filled
       // (device QA B3).
       NvButtonVariant.outlined => (
-          background: noFill,
-          foreground: colors.onSurface,
-          side: BorderSide(color: colors.outline),
-        ),
+        background: noFill,
+        foreground: colors.onSurface,
+        side: BorderSide(color: colors.outline),
+      ),
       NvButtonVariant.text => (
-          background: noFill,
-          foreground: colors.primary,
-          side: BorderSide.none,
-        ),
+        background: noFill,
+        foreground: colors.primary,
+        side: BorderSide.none,
+      ),
       NvButtonVariant.danger => (
-          background: noFill,
-          foreground: semantics.danger,
-          side: BorderSide(color: colors.outlineVariant),
-        ),
+        background: noFill,
+        foreground: semantics.danger,
+        side: BorderSide(color: colors.outlineVariant),
+      ),
     };
   }
 
@@ -113,66 +115,76 @@ class _NvButtonState extends State<NvButton> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final palette = _paletteFor(context);
-    final foreground =
-        _enabled ? palette.foreground : theme.colorScheme.onSurfaceVariant;
+    final foreground = _enabled
+        ? palette.foreground
+        : theme.colorScheme.onSurfaceVariant;
 
     // `onTap` on the same node as the label: `excludeSemantics` drops the
     // `GestureDetector`'s own semantics, including its tap action, so
     // without this the button reaches a screen reader announced and
     // unpressable.
-    return Semantics(
-      button: true,
-      enabled: _enabled,
-      label: widget.label,
-      onTap: widget.onPressed,
-      excludeSemantics: true,
-      child: GestureDetector(
-        onTapDown: _enabled ? (_) => setState(() => _pressed = true) : null,
-        onTapUp: _enabled ? (_) => setState(() => _pressed = false) : null,
-        onTapCancel: _enabled ? () => setState(() => _pressed = false) : null,
+    return NvKeyboardAction(
+      onPressed: widget.onPressed,
+      onFocusChanged: (v) => setState(() => _focused = v),
+      child: Semantics(
+        button: true,
+        enabled: _enabled,
+        label: widget.label,
         onTap: widget.onPressed,
-        child: MorphingSurface(
-          restRadius: LockoutTheme.radiusButtonRest,
-          activeRadius: _activeRadius,
-          active: _pressed,
-          activeScale: LockoutTheme.pressScale,
-          color: _enabled
-              ? palette.background
-              : theme.colorScheme.surfaceContainerHighest,
-          child: Container(
-            height: widget.large ? 60 : LockoutTheme.minTouchTarget,
-            padding:
-                const EdgeInsets.symmetric(horizontal: LockoutTheme.spaceLg),
-            decoration: BoxDecoration(
-              border: Border.fromBorderSide(
-                _enabled ? palette.side : BorderSide.none,
+        excludeSemantics: true,
+        child: GestureDetector(
+          onTapDown: _enabled ? (_) => setState(() => _pressed = true) : null,
+          onTapUp: _enabled ? (_) => setState(() => _pressed = false) : null,
+          onTapCancel: _enabled ? () => setState(() => _pressed = false) : null,
+          onTap: widget.onPressed,
+          child: MorphingSurface(
+            restRadius: LockoutTheme.radiusButtonRest,
+            activeRadius: _activeRadius,
+            active: _pressed || _focused,
+            activeScale: LockoutTheme.pressScale,
+            color: _enabled
+                ? palette.background
+                : theme.colorScheme.surfaceContainerHighest,
+            child: Container(
+              constraints: BoxConstraints(
+                minHeight: widget.large ? 60 : LockoutTheme.minTouchTarget,
               ),
-              borderRadius: BorderRadius.circular(
-                _pressed ? _activeRadius : LockoutTheme.radiusButtonRest,
+              padding: const EdgeInsets.symmetric(
+                horizontal: LockoutTheme.spaceLg,
+                vertical: LockoutTheme.headingGap,
               ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                if (widget.icon != null) ...[
-                  Icon(widget.icon, size: 20, color: foreground),
-                  const SizedBox(width: LockoutTheme.spaceSm),
-                ],
-                // Flexible, not bare: a button in a `Wrap` or a grid cell can
-                // be handed less width than its label wants, and an
-                // unshrinkable label overflows the row rather than eliding.
-                Flexible(
-                  child: Text(
-                    widget.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.labelLarge?.copyWith(
-                      color: foreground,
+              decoration: BoxDecoration(
+                border: Border.fromBorderSide(
+                  _enabled ? palette.side : BorderSide.none,
+                ),
+                borderRadius: BorderRadius.circular(
+                  (_pressed || _focused)
+                      ? _activeRadius
+                      : LockoutTheme.radiusButtonRest,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (widget.icon != null) ...[
+                    Icon(widget.icon, size: 20, color: foreground),
+                    const SizedBox(width: LockoutTheme.spaceSm),
+                  ],
+                  // Flexible, not bare: a button in a `Wrap` or a grid cell can
+                  // be handed less width than its label wants, and an
+                  // unshrinkable label overflows the row rather than eliding.
+                  Flexible(
+                    child: Text(
+                      widget.label,
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: foreground,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -214,6 +226,7 @@ class NvIconButton extends StatefulWidget {
 
 class _NvIconButtonState extends State<NvIconButton> {
   bool _pressed = false;
+  bool _focused = false;
 
   bool get _enabled => widget.onPressed != null;
 
@@ -222,51 +235,55 @@ class _NvIconButtonState extends State<NvIconButton> {
     final colors = Theme.of(context).colorScheme;
     final semantics = LockoutSemantics.of(context);
 
-    final (Color background, Color foreground) =
-        switch (widget.tone) {
+    final (Color background, Color foreground) = switch (widget.tone) {
       NvIconButtonTone.neutral => (
-          colors.surfaceContainerHigh,
-          colors.onSurface,
-        ),
+        colors.surfaceContainerHigh,
+        colors.onSurface,
+      ),
       NvIconButtonTone.success => (semantics.success, semantics.onSuccess),
     };
 
     // A disabled control must not keep the surface that says "press me".
     // The M3 disabled container: onSurface at 12%, glyph at 38%.
-    final fill = _enabled ? background : colors.onSurface.withValues(alpha: 0.12);
-    final glyph =
-        _enabled ? foreground : colors.onSurface.withValues(alpha: 0.38);
+    final fill = _enabled
+        ? background
+        : colors.onSurface.withValues(alpha: 0.12);
+    final glyph = _enabled
+        ? foreground
+        : colors.onSurface.withValues(alpha: 0.38);
 
     // Semantics outside Tooltip, not inside: a Tooltip introduces its own
     // semantics node, and with the label nested under it the button's own
     // node reaches a screen reader unlabelled.
-    return Semantics(
-      button: true,
-      enabled: _enabled,
-      label: widget.tooltip,
-      // Same reason as NvButton: excluded descendants take their tap action
-      // with them, so the action has to live on the labelled node.
-      onTap: widget.onPressed,
-      excludeSemantics: true,
-      child: Tooltip(
-        message: widget.tooltip,
-        child: GestureDetector(
-          onTapDown: _enabled ? (_) => setState(() => _pressed = true) : null,
-          onTapUp: _enabled ? (_) => setState(() => _pressed = false) : null,
-          onTapCancel: _enabled ? () => setState(() => _pressed = false) : null,
-          onTap: widget.onPressed,
-          child: MorphingSurface(
-            restRadius: LockoutTheme.radiusButtonRest,
-            activeRadius: 14,
-            active: _pressed,
-            color: fill,
-            child: SizedBox(
-              width: LockoutTheme.minTouchTarget,
-              height: LockoutTheme.minTouchTarget,
-              child: Icon(
-                widget.icon,
-                size: 24,
-                color: glyph,
+    return NvKeyboardAction(
+      onPressed: widget.onPressed,
+      onFocusChanged: (v) => setState(() => _focused = v),
+      child: Semantics(
+        button: true,
+        enabled: _enabled,
+        label: widget.tooltip,
+        // Same reason as NvButton: excluded descendants take their tap action
+        // with them, so the action has to live on the labelled node.
+        onTap: widget.onPressed,
+        excludeSemantics: true,
+        child: Tooltip(
+          message: widget.tooltip,
+          child: GestureDetector(
+            onTapDown: _enabled ? (_) => setState(() => _pressed = true) : null,
+            onTapUp: _enabled ? (_) => setState(() => _pressed = false) : null,
+            onTapCancel: _enabled
+                ? () => setState(() => _pressed = false)
+                : null,
+            onTap: widget.onPressed,
+            child: MorphingSurface(
+              restRadius: LockoutTheme.radiusButtonRest,
+              activeRadius: 14,
+              active: _pressed || _focused,
+              color: fill,
+              child: SizedBox(
+                width: LockoutTheme.minTouchTarget,
+                height: LockoutTheme.minTouchTarget,
+                child: Icon(widget.icon, size: 24, color: glyph),
               ),
             ),
           ),

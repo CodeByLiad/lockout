@@ -54,41 +54,48 @@ void main() {
   });
 
   testWidgets(
-      'every visible tab (food enabled) resolves to a screen instead of '
-      'throwing StateError', (tester) async {
-    await tester.pumpWidget(MaterialApp(theme: lockoutTestTheme(), home: MainScreen()));
-    await _settle(tester);
-
-    for (final tab in BottomNav.visibleTabs(foodTabEnabled: true)) {
-      // Scoped to BottomNav: the destination screen's own body can contain
-      // the same label text (e.g. a "ROUTINES" section header), and
-      // IndexedStack keeps every tab's widgets in the tree even when
-      // Offstage, so an unscoped `find.text` becomes ambiguous once more
-      // than one tab has been visited.
-      await tester.tap(_navLabel(tab.label));
+    'every visible tab (food enabled) resolves to a screen instead of '
+    'throwing StateError',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(theme: lockoutTestTheme(), home: MainScreen()),
+      );
       await _settle(tester);
-      expect(tester.takeException(), isNull);
-    }
-  });
+
+      for (final tab in BottomNav.visibleTabs(foodTabEnabled: true)) {
+        // Scoped to BottomNav: the destination screen's own body can contain
+        // the same label text (e.g. a "ROUTINES" section header), and
+        // IndexedStack keeps every tab's widgets in the tree even when
+        // Offstage, so an unscoped `find.text` becomes ambiguous once more
+        // than one tab has been visited.
+        await tester.tap(_navLabel(tab.label));
+        await _settle(tester);
+        expect(tester.takeException(), isNull);
+      }
+    },
+  );
 
   testWidgets(
-      'every visible tab (food disabled) resolves to a screen instead of '
-      'throwing StateError', (tester) async {
-    await DatabaseService.instance
-        .saveSetting('food_tab_enabled', 'false');
+    'every visible tab (food disabled) resolves to a screen instead of '
+    'throwing StateError',
+    (tester) async {
+      await DatabaseService.instance.saveSetting('food_tab_enabled', 'false');
 
-    await tester.pumpWidget(MaterialApp(theme: lockoutTestTheme(), home: MainScreen()));
-    await _settle(tester);
-
-    final tabs = BottomNav.visibleTabs(foodTabEnabled: false);
-    expect(tabs.map((t) => t.id), isNot(contains('food')));
-
-    for (final tab in tabs) {
-      await tester.tap(_navLabel(tab.label));
+      await tester.pumpWidget(
+        MaterialApp(theme: lockoutTestTheme(), home: MainScreen()),
+      );
       await _settle(tester);
-      expect(tester.takeException(), isNull);
-    }
-  });
+
+      final tabs = BottomNav.visibleTabs(foodTabEnabled: false);
+      expect(tabs.map((t) => t.id), isNot(contains('food')));
+
+      for (final tab in tabs) {
+        await tester.tap(_navLabel(tab.label));
+        await _settle(tester);
+        expect(tester.takeException(), isNull);
+      }
+    },
+  );
 
   // Second-round review, Finding 4: `showUndoBanner`'s `Positioned(bottom:
   // 24)` only cleared the screen edge, not this app's own `BottomNav` — at
@@ -98,35 +105,41 @@ void main() {
   // specifically, inside the real `MainScreen`/`BottomNav` this only shows
   // up in — `body_tab_test.dart` pumps `BodyTab` standalone, with no bottom
   // nav present to overlap in the first place.
-  testWidgets(
-      'the UNDO banner clears the bottom navigation bar instead of '
+  testWidgets('the UNDO banner clears the bottom navigation bar instead of '
       'painting over it', (tester) async {
-    await DatabaseService.instance.insertBodyLog(BodyEntry(
-      id: 'a',
-      dateStr: '2026-09-01',
-      weightKg: 80.0,
-    ).toMap());
+    await DatabaseService.instance.insertBodyLog(
+      BodyEntry(id: 'a', dateStr: '2026-09-01', weightKg: 80.0).toMap(),
+    );
 
     await tester.binding.setSurfaceSize(const Size(390, 1600));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    await tester.pumpWidget(MaterialApp(theme: lockoutTestTheme(), home: MainScreen()));
+    await tester.pumpWidget(
+      MaterialApp(theme: lockoutTestTheme(), home: MainScreen()),
+    );
     await _settle(tester);
 
     // Body now lives inside Progress, which opens on its Weight segment.
     await tester.tap(_navLabel('Progress'));
     await _settle(tester);
 
-    await tester.tap(find.text('Weight history'));
+    await tester.tap(find.text('Measurements'));
+    await _settle(tester);
+    await tester.ensureVisible(find.byTooltip('Delete entry').first);
     await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.delete_outline).first);
+    await tester.tap(find.byIcon(Icons.delete_outline_rounded).first);
     await tester.pumpAndSettle();
     await _settle(tester);
 
-    expect(find.text('UNDO'), findsOneWidget);
-    final bannerBottom = tester.getBottomLeft(find.text('UNDO')).dy;
+    await tester.pageBack();
+    await _settle(tester);
+    expect(find.text('Undo'), findsOneWidget);
+    final bannerBottom = tester.getBottomLeft(find.text('Undo')).dy;
     final navTop = tester.getTopLeft(find.byType(BottomNav)).dy;
-    expect(bannerBottom, lessThanOrEqualTo(navTop),
-        reason: 'the banner must sit above the bottom nav, not over it');
+    expect(
+      bannerBottom,
+      lessThanOrEqualTo(navTop),
+      reason: 'the banner must sit above the bottom nav, not over it',
+    );
 
     // Flush the banner's 5s auto-dismiss Timer so none is left pending when
     // the test ends.
@@ -175,7 +188,8 @@ void main() {
       expect(
         highest,
         greaterThanOrEqualTo(statusBar),
-        reason: '${tab.id}: "$highestLabel" starts at $highest, inside the '
+        reason:
+            '${tab.id}: "$highestLabel" starts at $highest, inside the '
             '${statusBar}dp status bar',
       );
     }
@@ -225,7 +239,8 @@ void main() {
         expect(
           TickerMode.getValuesNotifier(element).value.enabled,
           other.id == selected.id,
-          reason: 'with ${selected.id} selected, ${other.id} reports its '
+          reason:
+              'with ${selected.id} selected, ${other.id} reports its '
               'tickers ${other.id == selected.id ? 'muted' : 'running'}',
         );
       }
@@ -252,22 +267,26 @@ void main() {
 
     // `warnIfMissed: false` is the point of the test, not a workaround: the
     // tap reaches the bar's pixels and no handler, which is what a lock is.
-    await tester.tap(_navLabel('Workout'), warnIfMissed: false);
+    await tester.tap(_navLabel('Training'), warnIfMissed: false);
     await _settle(tester);
 
-    expect(find.byType(BottomNav), findsOneWidget,
-        reason: 'the bar stays visible; it is locked, not removed');
+    expect(
+      find.byType(BottomNav),
+      findsOneWidget,
+      reason: 'the bar stays visible; it is locked, not removed',
+    );
     expect(
       tester.widget<BottomNav>(find.byType(BottomNav)).currentIndex,
       0,
-      reason: 'a tab switch mid-import lands the user on a tab reading a '
+      reason:
+          'a tab switch mid-import lands the user on a tab reading a '
           'half-restored database',
     );
 
     // And the lock lifts with the import rather than outliving it.
     SettingsBody.importInFlight.value = false;
     await tester.pump();
-    await tester.tap(_navLabel('Workout'));
+    await tester.tap(_navLabel('Training'));
     await _settle(tester);
 
     expect(
@@ -279,7 +298,5 @@ void main() {
 
 /// The nav bar's copy of [label], not any other widget's — see the note
 /// above the loop that uses this.
-Finder _navLabel(String label) => find.descendant(
-      of: find.byType(BottomNav),
-      matching: find.text(label),
-    );
+Finder _navLabel(String label) =>
+    find.descendant(of: find.byType(BottomNav), matching: find.text(label));

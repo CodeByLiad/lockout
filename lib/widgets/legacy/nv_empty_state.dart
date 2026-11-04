@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/lockout_theme.dart';
-import 'nv_button.dart';
+import '../house/nv_button.dart';
 
 /// Section 8's empty state: a `surfaceContainer` block with 32dp corners, a
 /// short headline, one sentence saying what to do, and one button that does

@@ -1,4 +1,7 @@
+import '../widgets/house/nv_expressive.dart';
 import 'package:flutter/material.dart';
+import '../services/display_units.dart';
+
 import '../services/backup_service.dart';
 import '../services/database_service.dart';
 import '../services/goal_service.dart';
@@ -33,6 +36,8 @@ class SettingsBody extends StatefulWidget {
   /// False when hosted as the Profile tab, where the surrounding screen owns
   /// the title and there is no route to pop.
   final bool showAppBar;
+  final String? section;
+  final bool restoreAllowed;
 
   // Non-const constructor: see "Why some constructors in this app are
   // not const" at the top of lib/widgets/day_block.dart.
@@ -41,6 +46,8 @@ class SettingsBody extends StatefulWidget {
     super.key,
     required this.onSettingsUpdated,
     this.showAppBar = true,
+    this.section,
+    this.restoreAllowed = true,
   });
 
   /// True while [_import] is replacing the database.
@@ -180,8 +187,11 @@ class SettingsBodyState extends State<SettingsBody> {
   }
 
   /// The three controllers that hold one value between them.
-  List<TextEditingController> get _heightCtrls =>
-      [_heightCmCtrl, _heightFtCtrl, _heightInCtrl];
+  List<TextEditingController> get _heightCtrls => [
+    _heightCmCtrl,
+    _heightFtCtrl,
+    _heightInCtrl,
+  ];
 
   /// The non-text half of [_loadedText].
   ///
@@ -213,6 +223,7 @@ class SettingsBodyState extends State<SettingsBody> {
   Future<void> reload() => _loadSettings();
 
   Future<void> _loadSettings() async {
+    await DisplayUnits.load();
     final db = DatabaseService.instance;
     final c = await db.getSetting(
       'calorie_target',
@@ -220,12 +231,16 @@ class SettingsBodyState extends State<SettingsBody> {
     );
     final f = await db.getSetting('food_tab_enabled', defaultValue: 'true');
     final u = await db.getSetting('height_unit', defaultValue: 'cm');
-    final rEnabled =
-        await db.getSetting('reminders_enabled', defaultValue: 'false');
+    final rEnabled = await db.getSetting(
+      'reminders_enabled',
+      defaultValue: 'false',
+    );
     final rHour = await db.getSetting('reminder_hour', defaultValue: '18');
     final rMin = await db.getSetting('reminder_minute', defaultValue: '0');
-    final sAlerts =
-        await db.getSetting('streak_alerts_enabled', defaultValue: 'true');
+    final sAlerts = await db.getSetting(
+      'streak_alerts_enabled',
+      defaultValue: 'true',
+    );
 
     final goal = await GoalService.instance.loadProfile();
     final snap = await GoalService.instance.snapshot();
@@ -248,13 +263,22 @@ class SettingsBodyState extends State<SettingsBody> {
       // `_loadInto`, not a bare assignment: see [_loadedText].
       _loadInto(_heightCmCtrl, cm.toStringAsFixed(cm % 1 == 0 ? 0 : 1));
       _loadInto(_heightFtCtrl, split.feet.toString());
-      _loadInto(_heightInCtrl,
-          split.inches.toStringAsFixed(split.inches % 1 == 0 ? 0 : 1));
+      _loadInto(
+        _heightInCtrl,
+        split.inches.toStringAsFixed(split.inches % 1 == 0 ? 0 : 1),
+      );
       _loadInto(_calorieCtrl, c);
       // `_loadValue`, not a bare assignment: see [_loadedValues].
-      _foodTabEnabled = _loadValue('food_tab_enabled', _foodTabEnabled, f == 'true');
-      _heightUnit =
-          _loadValue('height_unit', _heightUnit, u == 'ft' ? 'ft' : 'cm');
+      _foodTabEnabled = _loadValue(
+        'food_tab_enabled',
+        _foodTabEnabled,
+        f == 'true',
+      );
+      _heightUnit = _loadValue(
+        'height_unit',
+        _heightUnit,
+        u == 'ft' ? 'ft' : 'cm',
+      );
       _remindersEnabled = rEnabled == 'true';
       _streakAlertsEnabled = sAlerts == 'true';
       _reminderTime = TimeOfDay(
@@ -263,8 +287,10 @@ class SettingsBodyState extends State<SettingsBody> {
       );
 
       _loadInto(_ageCtrl, goal.age > 0 ? goal.age.toString() : '');
-      _loadInto(_targetWeightCtrl,
-          goal.targetWeightKg > 0 ? goal.targetWeightKg.toString() : '');
+      _loadInto(
+        _targetWeightCtrl,
+        goal.targetWeightKg > 0 ? goal.targetWeightKg.toString() : '',
+      );
       _loadInto(_weeksCtrl, goal.weeks.toString());
       _sex = _loadValue('sex', _sex, goal.sex);
       _activity = goal.activity;
@@ -292,8 +318,10 @@ class SettingsBodyState extends State<SettingsBody> {
   /// card's own reminder toggles already use: persist on change, no button.
   Future<void> _setDaysPerWeek(int days) async {
     setState(() => _daysPerWeek = days);
-    await DatabaseService.instance
-        .saveSetting('training_days_per_week', days.toString());
+    await DatabaseService.instance.saveSetting(
+      'training_days_per_week',
+      days.toString(),
+    );
   }
 
   /// Persists the activity-level radio the instant it changes. See
@@ -355,7 +383,12 @@ class SettingsBodyState extends State<SettingsBody> {
     // unsaved typing any more. `_calorieCtrl` is not in the list: this path
     // does not persist what is in it — it replaces it below, through
     // `_setField`, which moves that baseline itself.
-    _markFieldsSaved([..._heightCtrls, _ageCtrl, _targetWeightCtrl, _weeksCtrl]);
+    _markFieldsSaved([
+      ..._heightCtrls,
+      _ageCtrl,
+      _targetWeightCtrl,
+      _weeksCtrl,
+    ]);
 
     final plan = await GoalService.instance.recalculateAndSaveTarget();
     if (!mounted) return;
@@ -441,8 +474,10 @@ class SettingsBodyState extends State<SettingsBody> {
       _setField(_heightCmCtrl, cm.toStringAsFixed(cm % 1 == 0 ? 0 : 1));
       final split = Units.cmToFeetInches(cm);
       _setField(_heightFtCtrl, split.feet.toString());
-      _setField(_heightInCtrl,
-          split.inches.toStringAsFixed(split.inches % 1 == 0 ? 0 : 1));
+      _setField(
+        _heightInCtrl,
+        split.inches.toStringAsFixed(split.inches % 1 == 0 ? 0 : 1),
+      );
     });
   }
 
@@ -454,8 +489,9 @@ class SettingsBodyState extends State<SettingsBody> {
         backgroundColor: warn ? colors.errorContainer : colors.inverseSurface,
         // A warning is the longest toast on this screen (the import tail runs
         // to ~180 characters), so it outlasts the 4-second default.
-        duration:
-            warn ? const Duration(seconds: 8) : const Duration(seconds: 4),
+        duration: warn
+            ? const Duration(seconds: 8)
+            : const Duration(seconds: 4),
         content: Text(
           message,
           style: TextStyle(
@@ -513,13 +549,18 @@ class SettingsBodyState extends State<SettingsBody> {
     if (value) {
       final granted = await NotificationService.instance.requestPermission();
       if (!granted) {
-        _toast('Notification permission denied in system settings.', warn: true);
+        _toast(
+          'Notification permission denied in system settings.',
+          warn: true,
+        );
         return;
       }
     }
 
-    await DatabaseService.instance
-        .saveSetting('reminders_enabled', value ? 'true' : 'false');
+    await DatabaseService.instance.saveSetting(
+      'reminders_enabled',
+      value ? 'true' : 'false',
+    );
     if (!mounted) return;
     setState(() => _remindersEnabled = value);
 
@@ -545,8 +586,10 @@ class SettingsBodyState extends State<SettingsBody> {
   }
 
   Future<void> _toggleStreakAlerts(bool value) async {
-    await DatabaseService.instance
-        .saveSetting('streak_alerts_enabled', value ? 'true' : 'false');
+    await DatabaseService.instance.saveSetting(
+      'streak_alerts_enabled',
+      value ? 'true' : 'false',
+    );
     if (!mounted) return;
     setState(() => _streakAlertsEnabled = value);
     await NotificationService.instance.rescheduleAll();
@@ -575,7 +618,8 @@ class SettingsBodyState extends State<SettingsBody> {
     final confirmed = await showNvDestructiveDialog(
       context: context,
       title: 'Replace all data?',
-      body: 'Importing a backup deletes every routine, workout, meal and '
+      body:
+          'Importing a backup deletes every routine, workout, meal and '
           'body entry currently on this device and replaces them with the '
           'file\'s contents. This cannot be undone — export a backup first '
           'if you are not sure.',
@@ -584,11 +628,27 @@ class SettingsBodyState extends State<SettingsBody> {
 
     if (!confirmed) return;
 
+    if (!widget.restoreAllowed) {
+      _toast(
+        'Finish or discard your active workout before restoring a backup.',
+        warn: true,
+      );
+      return;
+    }
     setState(() => _busy = true);
     SettingsBody.importInFlight.value = true;
     final ImportResult result;
     try {
       result = await BackupService.instance.pickAndImport();
+    } catch (_) {
+      if (mounted) {
+        setState(() => _busy = false);
+        _toast(
+          'Backup not restored. Your existing data is unchanged.',
+          warn: true,
+        );
+      }
+      return;
     } finally {
       // Dropped in a `finally`, and ahead of the `mounted` guard, for the
       // same reason twice over: a lock this method fails to clear is not
@@ -669,8 +729,10 @@ class SettingsBodyState extends State<SettingsBody> {
       // Reported rather than rethrown: this is the one place in the app
       // where a failure after the restore must not be allowed to hide the
       // restore itself.
-      debugPrint('The import tail failed after the restore applied: '
-          '$error\n$stack');
+      debugPrint(
+        'The import tail failed after the restore applied: '
+        '$error\n$stack',
+      );
       tailFailed = true;
     } finally {
       // Unconditional, and deliberately not behind `mounted`: the data on
@@ -703,14 +765,14 @@ class SettingsBodyState extends State<SettingsBody> {
       final rewritten = result.coercedValues > 0;
       final restored = reloaded
           ? 'Import complete. ${result.rowsRestored} rows restored.'
-              '${ImportResult.coercionNote(result.coercedValues)}'
+                '${ImportResult.coercionNote(result.coercedValues)}'
           : 'Import complete. ${result.rowsRestored} rows restored, but some '
-              'of them could not be read back.'
-              '${rewritten ? ' Check the backup file.' : ''}';
+                'of them could not be read back.'
+                '${rewritten ? ' Check the backup file.' : ''}';
       _toast(
         tailFailed
             ? '$restored Reminders could not be rescheduled. Open '
-                'Notifications to set them again.'
+                  'Notifications to set them again.'
             : restored,
         warn: !reloaded || rewritten || tailFailed,
       );
@@ -722,61 +784,82 @@ class SettingsBodyState extends State<SettingsBody> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Scaffold(
-      backgroundColor: theme.colorScheme.surface,
-      // Null when hosted as the Profile tab: that screen owns the title, and
-      // a pushed route is the only presentation with something to pop back to.
-      appBar: widget.showAppBar ? AppBar(title: const Text('Settings')) : null,
-      body: AbsorbPointer(
-        absorbing: _busy,
-        child: SingleChildScrollView(
-          // Padding rather than a `SafeArea`: this route has an `AppBar` but
-          // no `bottomNavigationBar`, so on an edge-to-edge window the list
-          // runs to the physical bottom of the screen and the nav bar inset
-          // cannot be cleared by a fixed padding alone. The tab screens
-          // escape this only because `BottomNav` carries its own `SafeArea`.
-          // Padding keeps content scrolling UNDER the bar, which a `SafeArea`
-          // would stop, while still letting the user scroll the last line
-          // clear of it.
-          //
-          // `paddingOf`, not `viewPaddingOf`: `resizeToAvoidBottomInset` has
-          // already shortened this body when the keyboard is up, and
-          // `viewPadding` ignores insets, so it would reserve another chunk
-          // of dead space above the keyboard. `padding.bottom` collapses to 0
-          // in exactly that case.
-          //
-          // Vertical only. The house system gives text and headings a 20dp
-          // margin and grouped lists and cards a 16dp one, and `_section`
-          // is the one thing that knows which of its children is which —
-          // so a horizontal padding here is a second margin underneath
-          // that one, which put every heading at 40 and every group at 36.
-          // `today_tab.dart` pads per element for the same reason.
-          padding: EdgeInsets.fromLTRB(
-            0,
-            LockoutTheme.spaceMd,
-            0,
-            LockoutTheme.spaceMd + MediaQuery.paddingOf(context).bottom,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // The header is text at subject scale, so it takes the text
-              // margin rather than the grouped-list one.
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: LockoutTheme.screenPadding,
+    return PopScope(
+      canPop: !_busy,
+      child: Scaffold(
+        backgroundColor: theme.colorScheme.surface,
+        // Null when hosted as the Profile tab: that screen owns the title, and
+        // a pushed route is the only presentation with something to pop back to.
+        appBar: widget.showAppBar
+            ? AppBar(
+                title: Text(switch (widget.section) {
+                  'appearance' => 'Appearance',
+                  'units' => 'Units',
+                  'goals' => 'Profile & goals',
+                  'training' => 'Training preferences',
+                  'reminders' => 'Reminders',
+                  'data' => 'Backup & restore',
+                  _ => 'Settings',
+                }),
+              )
+            : null,
+        body: AbsorbPointer(
+          absorbing: _busy,
+          child: SingleChildScrollView(
+            // Padding rather than a `SafeArea`: this route has an `AppBar` but
+            // no `bottomNavigationBar`, so on an edge-to-edge window the list
+            // runs to the physical bottom of the screen and the nav bar inset
+            // cannot be cleared by a fixed padding alone. The tab screens
+            // escape this only because `BottomNav` carries its own `SafeArea`.
+            // Padding keeps content scrolling UNDER the bar, which a `SafeArea`
+            // would stop, while still letting the user scroll the last line
+            // clear of it.
+            //
+            // `paddingOf`, not `viewPaddingOf`: `resizeToAvoidBottomInset` has
+            // already shortened this body when the keyboard is up, and
+            // `viewPadding` ignores insets, so it would reserve another chunk
+            // of dead space above the keyboard. `padding.bottom` collapses to 0
+            // in exactly that case.
+            //
+            // Vertical only. The house system gives text and headings a 20dp
+            // margin and grouped lists and cards a 16dp one, and `_section`
+            // is the one thing that knows which of its children is which —
+            // so a horizontal padding here is a second margin underneath
+            // that one, which put every heading at 40 and every group at 36.
+            // `today_tab.dart` pads per element for the same reason.
+            padding: EdgeInsets.fromLTRB(
+              0,
+              LockoutTheme.spaceMd,
+              0,
+              LockoutTheme.spaceMd + MediaQuery.paddingOf(context).bottom,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // The header is text at subject scale, so it takes the text
+                // margin rather than the grouped-list one.
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: LockoutTheme.screenPadding,
+                  ),
+                  child: _buildHeader(context),
                 ),
-                child: _buildHeader(context),
-              ),
-              const SizedBox(height: LockoutTheme.sectionGap),
-              _buildAppearanceCard(context),
-              _buildUnitsCard(context),
-              _buildTrainingCard(context),
-              _buildFoodCard(context),
-              _buildNotificationsCard(context),
-              _buildDataCard(context),
-              _buildAboutSection(context),
-            ],
+                const SizedBox(height: LockoutTheme.sectionGap),
+                if (widget.section == null || widget.section == 'appearance')
+                  _buildAppearanceCard(context),
+                if (widget.section == null || widget.section == 'units')
+                  _buildUnitsCard(context),
+                if (widget.section == null || widget.section == 'training')
+                  _buildTrainingCard(context),
+                if (widget.section == null || widget.section == 'goals')
+                  _buildFoodCard(context),
+                if (widget.section == null || widget.section == 'reminders')
+                  _buildNotificationsCard(context),
+                if (widget.section == null || widget.section == 'data')
+                  _buildDataCard(context),
+                if (widget.section == null) _buildAboutSection(context),
+              ],
+            ),
           ),
         ),
       ),
@@ -895,50 +978,67 @@ class SettingsBodyState extends State<SettingsBody> {
     );
   }
 
-  /// The appearance picker: three independent axes, nothing else.
-  ///
-  /// Brightness is a segmented button rather than a switch because "system"
-  /// is a real third choice, not the absence of the other two. Accent is a
-  /// row of swatches with no text beside them — the colour *is* the label,
-  /// and each swatch carries its name in semantics so a screen reader is
-  /// not left reading five identical buttons. The style is a segmented
-  /// button because it is a short closed set.
+  /// A live component preview followed by three independent theme choices.
   Widget _buildAppearanceCard(BuildContext context) {
     final theme = Theme.of(context);
     final controller = ThemeController.instance;
-
     return _section(
       context,
-      heading: 'Look and feel',
+      heading: 'Color & shape',
       rows: const [],
       extras: [
         Text('Applies instantly.', style: theme.textTheme.bodySmall),
         const SizedBox(height: LockoutTheme.headingGap),
         NvSegmentedButton<LockoutBrightnessChoice>(
           segments: const [
-            NvSegment(
-              value: LockoutBrightnessChoice.system,
-              label: 'System',
-            ),
-            NvSegment(
-              value: LockoutBrightnessChoice.light,
-              label: 'Light',
-            ),
-            NvSegment(
-              value: LockoutBrightnessChoice.dark,
-              label: 'Dark',
-            ),
+            NvSegment(value: LockoutBrightnessChoice.system, label: 'System'),
+            NvSegment(value: LockoutBrightnessChoice.light, label: 'Light'),
+            NvSegment(value: LockoutBrightnessChoice.dark, label: 'Dark'),
           ],
           selected: controller.brightnessChoice,
           onChanged: _applyBrightness,
         ),
         const SizedBox(height: LockoutTheme.sectionGap),
+        Text('Live preview', style: theme.textTheme.titleMedium),
+        const SizedBox(height: LockoutTheme.headingGap),
+        _CardMargin(
+          child: NvSurface(
+            tone: NvTone.primary,
+            radius: 36,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Your next set',
+                        style: theme.textTheme.headlineSmall,
+                      ),
+                    ),
+                    const NvIconBadge(
+                      icon: Icons.fitness_center_rounded,
+                      shape: LockoutShape.flower,
+                      tone: NvTone.tertiary,
+                      size: 56,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: LockoutTheme.spaceSm),
+                const Text('Try the button to feel the shape change.'),
+                const SizedBox(height: LockoutTheme.spaceMd),
+                NvButton(
+                  variant: NvButtonVariant.tonal,
+                  label: 'Try a press',
+                  onPressed: () {},
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: LockoutTheme.sectionGap),
         Text('Accent', style: theme.textTheme.titleSmall),
         const SizedBox(height: LockoutTheme.headingGap),
-        // A `Wrap`, not a `Row`: five 48dp targets plus their gaps clear
-        // 360dp only just, and a device at a large display scale has less
-        // room than that. Wrapping onto a second line is the one failure
-        // mode here that is not an overflow stripe.
         Wrap(
           spacing: LockoutTheme.spaceSm,
           runSpacing: LockoutTheme.spaceSm,
@@ -954,14 +1054,52 @@ class SettingsBodyState extends State<SettingsBody> {
         const SizedBox(height: LockoutTheme.sectionGap),
         Text('Style', style: theme.textTheme.titleSmall),
         const SizedBox(height: LockoutTheme.headingGap),
-        NvSegmentedButton<LockoutSchemeStyle>(
-          segments: [
-            for (final style in LockoutSchemeStyle.values)
-              NvSegment(value: style, label: style.label),
-          ],
-          selected: controller.style,
-          onChanged: _applyStyle,
-        ),
+        for (final style in LockoutSchemeStyle.values) ...[
+          Semantics(
+            button: true,
+            selected: controller.style == style,
+            child: NvSurface(
+              selected: controller.style == style,
+              tone: controller.style == style
+                  ? NvTone.secondary
+                  : NvTone.surface,
+              onPressed: () => _applyStyle(style),
+              child: Row(
+                children: [
+                  NvIconBadge(
+                    icon: controller.style == style
+                        ? Icons.radio_button_checked_rounded
+                        : Icons.radio_button_off_rounded,
+                    shape: switch (style) {
+                      LockoutSchemeStyle.tonal => LockoutShape.gem,
+                      LockoutSchemeStyle.vibrant => LockoutShape.sunny,
+                      LockoutSchemeStyle.expressive => LockoutShape.flower,
+                    },
+                    tone: NvTone.tertiary,
+                  ),
+                  const SizedBox(width: LockoutTheme.spaceMd),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(style.label, style: theme.textTheme.titleMedium),
+                        const SizedBox(height: LockoutTheme.spaceXs),
+                        Text(switch (style) {
+                          LockoutSchemeStyle.tonal => 'Soft, balanced color',
+                          LockoutSchemeStyle.vibrant =>
+                            'Rich color with stronger emphasis',
+                          LockoutSchemeStyle.expressive =>
+                            'Playful contrasting color roles',
+                        }, style: theme.textTheme.bodyMedium),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: LockoutTheme.spaceSm),
+        ],
       ],
     );
   }
@@ -972,6 +1110,29 @@ class SettingsBodyState extends State<SettingsBody> {
       heading: 'Units',
       rows: const [],
       extras: [
+        Text('Weight', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 12),
+        NvSegmentedButton<String>(
+          segments: const [
+            NvSegment(value: 'kg', label: 'Kilograms'),
+            NvSegment(value: 'lb', label: 'Pounds'),
+          ],
+          selected: DisplayUnits.unit,
+          onChanged: (unit) async {
+            try {
+              await DisplayUnits.select(unit);
+              if (mounted) {
+                setState(() {});
+                widget.onSettingsUpdated();
+              }
+            } catch (_) {
+              _toast('Units not saved. Try again.', warn: true);
+            }
+          },
+        ),
+        const SizedBox(height: 24),
+        Text('Height', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 12),
         NvSegmentedButton<String>(
           segments: const [
             NvSegment(value: 'cm', label: 'Centimetres'),
@@ -999,8 +1160,9 @@ class SettingsBodyState extends State<SettingsBody> {
                   label: 'Height (in)',
                   controller: _heightInCtrl,
                   hintText: '9',
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                 ),
               ),
             ],
@@ -1055,8 +1217,10 @@ class SettingsBodyState extends State<SettingsBody> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text('x${a.multiplier}',
-                          style: theme.textTheme.labelMedium),
+                      Text(
+                        'x${a.multiplier}',
+                        style: theme.textTheme.labelMedium,
+                      ),
                       if (a == _activity) ...[
                         const SizedBox(height: LockoutTheme.spaceXs),
                         const NvStatusBadge(
@@ -1102,7 +1266,10 @@ class SettingsBodyState extends State<SettingsBody> {
                   : null,
             ),
             const SizedBox(width: LockoutTheme.spaceMd),
-            Text('$_daysPerWeek', style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              '$_daysPerWeek',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(width: LockoutTheme.spaceMd),
             NvIconButton(
               icon: Icons.add_circle_outline,
@@ -1126,7 +1293,7 @@ class SettingsBodyState extends State<SettingsBody> {
 
     return _section(
       context,
-      heading: 'Food',
+      heading: 'Profile & goals',
       rows: [
         NvSwitchRow(
           title: 'Enable nutrition tab',
@@ -1158,8 +1325,9 @@ class SettingsBodyState extends State<SettingsBody> {
                 label: 'Target weight (kg)',
                 controller: _targetWeightCtrl,
                 hintText: '72',
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
               ),
             ),
           ],
@@ -1209,16 +1377,23 @@ class SettingsBodyState extends State<SettingsBody> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    spacing: LockoutTheme.spaceSm,
+                    runSpacing: LockoutTheme.spaceSm,
                     children: [
                       Text(
                         'Daily target',
-                        style: theme.textTheme.labelMedium
-                            ?.copyWith(color: theme.colorScheme.onPrimaryContainer),
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: theme.colorScheme.onPrimaryContainer,
+                        ),
                       ),
                       NvStatusBadge(
-                        label: plan.directionLabel,
+                        label: switch (plan.direction) {
+                          GoalDirection.cut => 'Lose weight',
+                          GoalDirection.maintain => 'Maintain',
+                          GoalDirection.gain => 'Gain weight',
+                        },
                         kind: NvBadgeKind.neutral,
                       ),
                     ],
@@ -1226,15 +1401,17 @@ class SettingsBodyState extends State<SettingsBody> {
                   const SizedBox(height: LockoutTheme.spaceXs),
                   Text(
                     '${plan.targetKcal} kcal',
-                    style: theme.textTheme.headlineSmall
-                        ?.copyWith(color: theme.colorScheme.onPrimaryContainer),
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      color: theme.colorScheme.onPrimaryContainer,
+                    ),
                   ),
                   const SizedBox(height: LockoutTheme.spaceSm),
                   Text(
                     'BMR ${plan.bmr.round()} -> TDEE ${plan.tdee.round()} -> '
                     '${plan.dailyDeltaKcal >= 0 ? '+' : ''}${plan.dailyDeltaKcal} kcal/day',
-                    style: theme.textTheme.bodySmall
-                        ?.copyWith(color: theme.colorScheme.onPrimaryContainer),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onPrimaryContainer,
+                    ),
                   ),
                   const SizedBox(height: LockoutTheme.spaceXs),
                   Text(
@@ -1263,8 +1440,9 @@ class SettingsBodyState extends State<SettingsBody> {
                 ),
                 child: Text(
                   plan.warning!,
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.onTertiaryContainer),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onTertiaryContainer,
+                  ),
                 ),
               ),
             ),
@@ -1296,10 +1474,10 @@ class SettingsBodyState extends State<SettingsBody> {
   Widget _buildNotificationsCard(BuildContext context) {
     return _section(
       context,
-      heading: 'Notifications',
+      heading: 'Reminders',
       rows: [
         NvSwitchRow(
-          title: 'Daily training nudge',
+          title: 'Training reminder',
           supporting: 'Scheduled on this device. Nothing is sent anywhere.',
           value: _remindersEnabled,
           onChanged: _toggleReminders,
@@ -1337,9 +1515,13 @@ class SettingsBodyState extends State<SettingsBody> {
 
     return _section(
       context,
-      heading: 'Data',
+      heading: 'Your data',
       rows: const [],
       extras: [
+        if (!widget.restoreAllowed)
+          const Text(
+            'Finish or discard your active workout before restoring a backup.',
+          ),
         Text(
           'Export writes every routine, workout, set, meal, body entry and '
           'setting to a single JSON file. Import replaces everything on this '
@@ -1349,7 +1531,7 @@ class SettingsBodyState extends State<SettingsBody> {
         const SizedBox(height: LockoutTheme.spaceMd),
         NvButton(
           variant: NvButtonVariant.filled,
-          label: _busy ? 'Working…' : 'Export backup JSON',
+          label: _busy ? 'Working…' : 'Export backup',
           onPressed: _busy ? null : _export,
         ),
         const SizedBox(height: LockoutTheme.spaceSm),
@@ -1364,8 +1546,8 @@ class SettingsBodyState extends State<SettingsBody> {
         NvButton(
           key: const Key('importBackupButton'),
           variant: NvButtonVariant.outlined,
-          label: _busy ? 'Working…' : 'Import backup JSON',
-          onPressed: _busy ? null : _import,
+          label: _busy ? 'Working…' : 'Restore backup',
+          onPressed: _busy || !widget.restoreAllowed ? null : _import,
         ),
       ],
     );
@@ -1388,9 +1570,9 @@ class SettingsBodyState extends State<SettingsBody> {
         NvListItem(
           title: 'About Lockout',
           trailing: const Icon(Icons.chevron_right),
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute<void>(builder: (_) => const AboutScreen()),
-          ),
+          onTap: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute<void>(builder: (_) => const AboutScreen())),
         ),
       ],
     );
@@ -1408,63 +1590,79 @@ class SettingsBodyState extends State<SettingsBody> {
 /// identical buttons. `selected` is set on both states rather than only the
 /// chosen one, so an unselected swatch reads as "not selected" instead of
 /// as something with no selection state to report.
-class _AccentSwatch extends StatelessWidget {
+class _AccentSwatch extends StatefulWidget {
   final LockoutAccent accent;
   final bool selected;
   final VoidCallback onTap;
-
   const _AccentSwatch({
     required this.accent,
     required this.selected,
     required this.onTap,
   });
+  @override
+  State<_AccentSwatch> createState() => _AccentSwatchState();
+}
 
-  /// The swatch at rest and when chosen. Both sit inside
-  /// [LockoutTheme.minTouchTarget], so growing one never grows the target
-  /// it lives in — the tap area is the same 48dp either way.
-  static const double _restDiameter = 34;
-  static const double _selectedDiameter = 44;
-
+class _AccentSwatchState extends State<_AccentSwatch> {
+  bool _pressed = false, _focused = false;
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final tier = LockoutMotion.springFast;
-
     return Semantics(
-      label: accent.name,
+      label: widget.accent.name,
       button: true,
-      selected: selected,
+      selected: widget.selected,
       child: InkWell(
-        onTap: onTap,
-        // The ripple takes the swatch's own outline. A `CircleBorder` at
-        // the 48dp target's radius splashed well outside the 34dp disc it
-        // belonged to, which read as the wrong swatch lighting up.
-        customBorder: const LockoutShapeBorder(LockoutShape.training),
+        onTap: widget.onTap,
+        onHighlightChanged: (v) => setState(() => _pressed = v),
+        onFocusChange: (v) => setState(() => _focused = v),
+        borderRadius: BorderRadius.circular(_pressed ? 16 : 28),
         child: SizedBox(
-          width: LockoutTheme.minTouchTarget,
-          height: LockoutTheme.minTouchTarget,
-          child: Center(
-            child: AnimatedContainer(
-              duration: tier.durationFor(context),
-              curve: tier.curve,
-              width: selected ? _selectedDiameter : _restDiameter,
-              height: selected ? _selectedDiameter : _restDiameter,
-              decoration: ShapeDecoration(
-                color: accent.accent,
-                // The package cookie has a fixed outline, so the rest and
-                // chosen states differ by diameter (34 to 44) and the ring,
-                // not by lobe amplitude. Both states are the same six-cookie.
-                shape: LockoutShapeBorder(
-                  LockoutShape.training,
-                  side: BorderSide(
-                    color: selected ? colors.onSurface : Colors.transparent,
-                    width: 2,
+          width: 88,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: LockoutTheme.spaceSm),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  height: 48,
+                  child: Center(
+                    child: AnimatedContainer(
+                      duration: tier.durationFor(context),
+                      curve: tier.curve,
+                      width: widget.selected ? 44 : 34,
+                      height: widget.selected ? 44 : 34,
+                      decoration: ShapeDecoration(
+                        color: widget.accent.accent,
+                        shape: LockoutShapeBorder(
+                          LockoutShape.training,
+                          morphTo: LockoutShape.circle,
+                          progress: _pressed || _focused ? 1 : 0,
+                          side: widget.selected || _focused
+                              ? BorderSide(color: colors.onSurface, width: 2)
+                              : BorderSide.none,
+                        ),
+                      ),
+                      child: widget.selected
+                          ? Icon(
+                              Icons.check,
+                              size: 18,
+                              color: widget.accent.ink,
+                            )
+                          : null,
+                    ),
                   ),
                 ),
-              ),
-              child: selected
-                  ? Icon(Icons.check, size: 18, color: accent.ink)
-                  : null,
+                const SizedBox(height: LockoutTheme.spaceXs),
+                ExcludeSemantics(
+                  child: Text(
+                    widget.accent.name,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.labelMedium,
+                  ),
+                ),
+              ],
             ),
           ),
         ),

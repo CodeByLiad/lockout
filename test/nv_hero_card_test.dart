@@ -4,7 +4,7 @@ import 'package:lockout/theme/accents.dart';
 import 'package:lockout/theme/lockout_shapes.dart';
 import 'package:lockout/theme/lockout_semantics.dart';
 import 'package:lockout/theme/lockout_theme.dart';
-import 'package:lockout/widgets/house/nv_hero_card.dart';
+import 'package:lockout/widgets/legacy/nv_hero_card.dart';
 import 'package:lockout/widgets/house/nv_wavy_progress.dart';
 
 import 'test_helpers.dart';
@@ -52,12 +52,14 @@ void main() {
     await tester.pumpWidget(_host());
     await tester.pumpAndSettle();
 
-    final semantics =
-        LockoutSemantics.of(tester.element(find.byType(NvHeroCard)));
+    final semantics = LockoutSemantics.of(
+      tester.element(find.byType(NvHeroCard)),
+    );
     expect(
       _cardMaterial(tester).color,
       semantics.heroFill,
-      reason: 'house section 8 gives the hero card an accent fill; a neutral '
+      reason:
+          'house section 8 gives the hero card an accent fill; a neutral '
           'fill with an accent rail is the previous design, and only a device '
           'screenshot caught it last time',
     );
@@ -73,21 +75,24 @@ void main() {
 
     await tester.pumpWidget(
       _host(
-        appearance:
-            const TestAppearance(Brightness.dark, LockoutAccent.violet),
+        appearance: const TestAppearance(Brightness.dark, LockoutAccent.violet),
       ),
     );
     await tester.pumpAndSettle();
     expect(_cardMaterial(tester).color, isNot(lime));
   });
 
-  testWidgets('it takes the accent fill in light as well as dark',
-      (tester) async {
+  testWidgets('it takes the accent fill in light as well as dark', (
+    tester,
+  ) async {
     for (final appearance in [darkAppearance, lightAppearance]) {
       await tester.pumpWidget(_host(appearance: appearance));
       await tester.pumpAndSettle();
-      expect(_cardMaterial(tester).color, appearance.semantics.heroFill,
-          reason: '${appearance.key} lost the accent fill');
+      expect(
+        _cardMaterial(tester).color,
+        appearance.semantics.heroFill,
+        reason: '${appearance.key} lost the accent fill',
+      );
     }
   });
 
@@ -95,12 +100,16 @@ void main() {
     await tester.pumpWidget(_host());
     await tester.pumpAndSettle();
 
-    final colors = Theme.of(tester.element(find.byType(NvHeroCard))).colorScheme;
+    final colors = Theme.of(
+      tester.element(find.byType(NvHeroCard)),
+    ).colorScheme;
     final value = tester.widget<Text>(find.text('18'));
     expect(value.style?.fontSize, LockoutTheme.countdown(colors).fontSize);
     expect(value.style?.fontWeight, LockoutTheme.countdown(colors).fontWeight);
-    expect(value.style?.color,
-        LockoutSemantics.of(tester.element(find.byType(NvHeroCard))).onHeroFill);
+    expect(
+      value.style?.color,
+      LockoutSemantics.of(tester.element(find.byType(NvHeroCard))).onHeroFill,
+    );
   });
 
   testWidgets('it states the unit beside the number', (tester) async {
@@ -143,14 +152,14 @@ void main() {
           )
           .first,
     );
-    expect((decorated.decoration as ShapeDecoration).shape,
-        const LockoutShapeBorder(LockoutShape.training));
+    expect(
+      (decorated.decoration as ShapeDecoration).shape,
+      const LockoutShapeBorder(LockoutShape.training),
+    );
   });
 
   testWidgets('actions render below the number', (tester) async {
-    await tester.pumpWidget(
-      _host(actions: const [Text('Start session')]),
-    );
+    await tester.pumpWidget(_host(actions: const [Text('Start session')]));
     await tester.pumpAndSettle();
 
     expect(

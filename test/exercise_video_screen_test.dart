@@ -1,3 +1,5 @@
+import 'package:lockout/widgets/house/nv_wavy_progress.dart';
+import 'package:lockout/widgets/house/nv_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -36,21 +38,28 @@ void main() {
     testWidgets('pumping the screen never throws', (tester) async {
       await pump(tester, ExerciseVideoScreen(exerciseName: 'Bench Press'));
 
-      expect(tester.takeException(), isNull,
-          reason: 'Theme.of(context) must not be read from initState');
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'Theme.of(context) must not be read from initState',
+      );
     });
 
     testWidgets(
-        'an unpinned exercise opens the search query and shows the webview',
-        (tester) async {
-      await pump(tester, ExerciseVideoScreen(exerciseName: 'Squat'));
+      'an unpinned exercise opens the search query and shows the webview',
+      (tester) async {
+        await pump(tester, ExerciseVideoScreen(exerciseName: 'Squat'));
 
-      expect(find.byType(WebViewWidget), findsOneWidget);
-      expect(find.text('Link not usable'), findsNothing);
-      expect(find.text('Video unavailable'), findsNothing);
-      expect(fakePlatform.lastController.loadedUris, isNotEmpty,
-          reason: 'the search query should have been handed to loadRequest');
-    });
+        expect(find.byType(WebViewWidget), findsOneWidget);
+        expect(find.text('Link not usable'), findsNothing);
+        expect(find.text('Video unavailable'), findsNothing);
+        expect(
+          fakePlatform.lastController.loadedUris,
+          isNotEmpty,
+          reason: 'the search query should have been handed to loadRequest',
+        );
+      },
+    );
 
     // Finding 2 (round 2). `FakeWebViewController.setBackgroundColor` was a
     // silent no-op, so nothing distinguished "the call happens once, after
@@ -58,24 +67,25 @@ void main() {
     // `didChangeDependencies` outright still left every other test in this
     // suite green. This pins the call positively: see the task report for
     // that red run, captured by commenting `didChangeDependencies` out.
-    testWidgets(
-        "didChangeDependencies hands the theme's surface colour to the "
+    testWidgets("didChangeDependencies hands the theme's surface colour to the "
         'webview, exactly once', (tester) async {
       final theme = lockoutTestTheme();
-      await tester.pumpWidget(MaterialApp(
-        theme: theme,
-        home: ExerciseVideoScreen(exerciseName: 'Squat'),
-      ));
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: theme,
+          home: ExerciseVideoScreen(exerciseName: 'Squat'),
+        ),
+      );
       await tester.pump();
 
-      expect(fakePlatform.lastController.backgroundColors.single,
-          theme.colorScheme.surface);
+      expect(
+        fakePlatform.lastController.backgroundColors.single,
+        theme.colorScheme.surface,
+      );
     });
 
-    testWidgets(
-        'a pinned link that cannot be made loadable shows the unusable '
-        'notice instead of the webview, with no reload button',
-        (tester) async {
+    testWidgets('a pinned link that cannot be made loadable shows the unusable '
+        'notice instead of the webview, with no reload button', (tester) async {
       await pump(
         tester,
         ExerciseVideoScreen(
@@ -86,40 +96,44 @@ void main() {
 
       expect(find.text('Link not usable'), findsOneWidget);
       expect(find.byType(WebViewWidget), findsNothing);
-      expect(find.byTooltip('Reload'), findsNothing,
-          reason: 'there is no target to reload');
+      expect(
+        find.byTooltip('Reload'),
+        findsNothing,
+        reason: 'there is no target to reload',
+      );
       expect(fakePlatform.lastController.loadedUris, isEmpty);
     });
 
     testWidgets(
-        'a resource error flips to the offline notice and hides the webview',
-        (tester) async {
+      'a resource error flips to the offline notice and hides the webview',
+      (tester) async {
+        await pump(tester, ExerciseVideoScreen(exerciseName: 'Squat'));
+        expect(find.byType(WebViewWidget), findsOneWidget);
+
+        fakePlatform.lastController.navigationDelegate!.onWebResourceError!(
+          const WebResourceError(errorCode: -2, description: 'no connection'),
+        );
+        await tester.pump();
+
+        expect(find.text('Video unavailable'), findsOneWidget);
+        expect(find.byType(WebViewWidget), findsNothing);
+        expect(find.widgetWithText(NvButton, 'Try again'), findsOneWidget);
+      },
+    );
+
+    testWidgets('progress reaching 100 hides the progress bar while the reload '
+        'button, gated on the same target, stays available throughout', (
+      tester,
+    ) async {
       await pump(tester, ExerciseVideoScreen(exerciseName: 'Squat'));
-      expect(find.byType(WebViewWidget), findsOneWidget);
 
-      fakePlatform.lastController.navigationDelegate!.onWebResourceError!(
-        const WebResourceError(errorCode: -2, description: 'no connection'),
-      );
-      await tester.pump();
-
-      expect(find.text('Video unavailable'), findsOneWidget);
-      expect(find.byType(WebViewWidget), findsNothing);
-      expect(find.widgetWithText(FilledButton, 'Retry'), findsOneWidget);
-    });
-
-    testWidgets(
-        'progress reaching 100 hides the progress bar while the reload '
-        'button, gated on the same target, stays available throughout',
-        (tester) async {
-      await pump(tester, ExerciseVideoScreen(exerciseName: 'Squat'));
-
-      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(find.byType(NvWavyProgress), findsOneWidget);
       expect(find.byTooltip('Reload'), findsOneWidget);
 
       fakePlatform.lastController.navigationDelegate!.onPageFinished!('done');
       await tester.pump();
 
-      expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect(find.byType(NvWavyProgress), findsNothing);
       expect(find.byTooltip('Reload'), findsOneWidget);
     });
 
@@ -129,9 +143,7 @@ void main() {
       fakePlatform.lastController.navigationDelegate!.onProgress!(42);
       await tester.pump();
 
-      final bar = tester.widget<LinearProgressIndicator>(
-        find.byType(LinearProgressIndicator),
-      );
+      final bar = tester.widget<NvWavyProgress>(find.byType(NvWavyProgress));
       expect(bar.value, closeTo(0.42, 0.001));
     });
 
@@ -146,7 +158,7 @@ void main() {
       expect(find.text('Video unavailable'), findsOneWidget);
 
       final loadsBefore = fakePlatform.lastController.loadedUris.length;
-      await tester.tap(find.widgetWithText(FilledButton, 'Retry'));
+      await tester.tap(find.widgetWithText(NvButton, 'Try again'));
       await tester.pump();
 
       expect(find.text('Video unavailable'), findsNothing);

@@ -1,125 +1,141 @@
 import 'package:flutter/material.dart';
-
 import '../../theme/lockout_motion.dart';
 import '../../theme/lockout_theme.dart';
+import 'nv_keyboard_action.dart';
 
-/// One option in an [NvSegmentedButton].
 @immutable
 class NvSegment<T> {
   final T value;
   final String label;
-
   const NvSegment({required this.value, required this.label});
 }
 
-/// Section 5.2's segmented control: inner segments 8dp, outer ends 22dp, the
-/// selected segment a full pill.
-///
-/// Bespoke rather than a themed `SegmentedButton`, which hardcodes each
-/// segment's shape in `segmentStyleFor` and resolves the group style with
-/// `selected` permanently set — so none of the three shapes is reachable
-/// from a theme. That was deviation D9; this retires it.
 class NvSegmentedButton<T> extends StatelessWidget {
   final List<NvSegment<T>> segments;
   final T selected;
   final ValueChanged<T> onChanged;
-
   const NvSegmentedButton({
     super.key,
     required this.segments,
     required this.selected,
     required this.onChanged,
   });
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (_, constraints) {
+      final vertical =
+          MediaQuery.textScalerOf(context).scale(15) > 20 &&
+          segments.length >= 3;
+      Widget segment(int i) => _NvSegmentControl(
+        label: segments[i].label,
+        selected: segments[i].value == selected,
+        first: i == 0,
+        last: i == segments.length - 1,
+        vertical: vertical,
+        onPressed: () => onChanged(segments[i].value),
+      );
+      if (vertical) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var i = 0; i < segments.length; i++) ...[
+              segment(i),
+              if (i != segments.length - 1)
+                const SizedBox(height: LockoutTheme.groupGap),
+            ],
+          ],
+        );
+      }
+      return Row(
+        children: [
+          for (var i = 0; i < segments.length; i++) ...[
+            Expanded(child: segment(i)),
+            if (i != segments.length - 1)
+              const SizedBox(width: LockoutTheme.groupGap),
+          ],
+        ],
+      );
+    },
+  );
+}
 
+class _NvSegmentControl extends StatefulWidget {
+  final String label;
+  final bool selected, first, last, vertical;
+  final VoidCallback onPressed;
+  const _NvSegmentControl({
+    required this.label,
+    required this.selected,
+    required this.first,
+    required this.last,
+    required this.vertical,
+    required this.onPressed,
+  });
+  @override
+  State<_NvSegmentControl> createState() => _NvSegmentControlState();
+}
+
+class _NvSegmentControlState extends State<_NvSegmentControl> {
+  bool pressed = false;
+  bool focused = false;
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-    final tier = LockoutMotion.springFast;
-    final duration = tier.durationFor(context);
-
-    return Row(
-      children: [
-        for (var i = 0; i < segments.length; i++) ...[
-          Expanded(
-            // `excludeSemantics`, and the tap on the annotation rather than
-            // only on the `GestureDetector`. Two separate reasons, one
-            // knot:
-            //
-            // Without the exclusion the `Text` below contributes the same
-            // string a second time. `SemanticsNode.absorb` CONCATENATES two
-            // labels instead of rejecting the merge, so the appearance
-            // picker announced "System, System" on every one of its three
-            // segments — a doubled label, where house section 11 asks for
-            // one.
-            //
-            // And the exclusion drops the `GestureDetector`'s own semantics,
-            // tap action included, so the action has to be restated here or
-            // the segment reaches a screen reader announced and unpressable.
-            // That is the Critical this catalog has already shipped once, on
-            // `NvButton`; `nv_button.dart:120-131` carries the same pair for
-            // the same reason.
-            child: Semantics(
-              button: true,
-              selected: segments[i].value == selected,
-              label: segments[i].label,
-              onTap: () => onChanged(segments[i].value),
-              excludeSemantics: true,
-              child: GestureDetector(
-                onTap: () => onChanged(segments[i].value),
-                child: AnimatedContainer(
-                  duration: duration,
-                  curve: tier.curve,
-                  height: LockoutTheme.minTouchTarget,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: segments[i].value == selected
-                        ? colors.secondaryContainer
-                        : colors.surfaceContainer,
-                    borderRadius: _radiusFor(i),
-                  ),
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      segments[i].label,
-                      maxLines: 1,
-                      softWrap: false,
-                      style: theme.textTheme.labelLarge?.copyWith(
-                        color: segments[i].value == selected
-                            ? colors.onSecondaryContainer
-                            : colors.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                ),
+    final theme = Theme.of(context), c = theme.colorScheme;
+    final active = pressed || focused;
+    final inner = Radius.circular(
+      active ? 16 : LockoutTheme.radiusSegmentInner,
+    );
+    final end = Radius.circular(active ? 16 : LockoutTheme.radiusSegmentEnd);
+    final radius = widget.selected && !active
+        ? BorderRadius.circular(LockoutTheme.radiusChipActive)
+        : widget.vertical
+        ? BorderRadius.circular(active ? 24 : 12)
+        : BorderRadius.only(
+            topLeft: widget.first ? end : inner,
+            bottomLeft: widget.first ? end : inner,
+            topRight: widget.last ? end : inner,
+            bottomRight: widget.last ? end : inner,
+          );
+    return Semantics(
+      button: true,
+      selected: widget.selected,
+      label: widget.label,
+      onTap: widget.onPressed,
+      excludeSemantics: true,
+      child: NvKeyboardAction(
+        onPressed: widget.onPressed,
+        onFocusChanged: (v) => setState(() => focused = v),
+        child: GestureDetector(
+          onTap: widget.onPressed,
+          onTapDown: (_) => setState(() => pressed = true),
+          onTapUp: (_) => setState(() => pressed = false),
+          onTapCancel: () => setState(() => pressed = false),
+          child: AnimatedContainer(
+            duration: LockoutMotion.springFast.durationFor(context),
+            curve: LockoutMotion.springFast.curve,
+            constraints: const BoxConstraints(minHeight: 48),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: widget.selected
+                  ? c.secondaryContainer
+                  : c.surfaceContainer,
+              borderRadius: radius,
+              border: focused ? Border.all(color: c.primary, width: 2) : null,
+            ),
+            child: Text(
+              widget.label,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: widget.selected
+                    ? c.onSecondaryContainer
+                    : c.onSurfaceVariant,
               ),
             ),
           ),
-          if (i != segments.length - 1)
-            const SizedBox(width: LockoutTheme.groupGap),
-        ],
-      ],
-    );
-  }
-
-  /// A selected segment is a pill on every corner. Otherwise the group's two
-  /// ends carry 22dp on their outer side and 8dp inside, and everything
-  /// between them is 8dp all round.
-  BorderRadius _radiusFor(int index) {
-    if (segments[index].value == selected) {
-      return BorderRadius.circular(LockoutTheme.radiusChipActive);
-    }
-
-    const end = Radius.circular(LockoutTheme.radiusSegmentEnd);
-    const inner = Radius.circular(LockoutTheme.radiusSegmentInner);
-    final first = index == 0;
-    final last = index == segments.length - 1;
-
-    return BorderRadius.only(
-      topLeft: first ? end : inner,
-      bottomLeft: first ? end : inner,
-      topRight: last ? end : inner,
-      bottomRight: last ? end : inner,
+        ),
+      ),
     );
   }
 }

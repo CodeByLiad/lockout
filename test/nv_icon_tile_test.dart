@@ -3,7 +3,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lockout/theme/lockout_shapes.dart';
-import 'package:lockout/widgets/house/nv_icon_tile.dart';
+import 'package:lockout/widgets/legacy/nv_icon_tile.dart';
 
 import 'test_helpers.dart';
 

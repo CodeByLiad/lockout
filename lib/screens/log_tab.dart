@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
+import '../services/display_units.dart';
+
+import '../theme/lockout_shapes.dart';
+import '../widgets/house/nv_expressive.dart';
+import '../widgets/house/nv_grouped_list.dart';
+import '../widgets/house/nv_button.dart';
+import '../widgets/house/nv_feedback.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
 import '../services/schedule_service.dart';
-import '../theme/lockout_semantics.dart';
 import '../theme/lockout_theme.dart';
-import '../widgets/hero_card.dart';
-import '../widgets/lockout_card.dart';
-import '../widgets/stat_tile.dart';
-import '../widgets/undo_banner.dart';
 
 /// The archive card's detail line.
 ///
@@ -15,11 +17,11 @@ import '../widgets/undo_banner.dart';
 /// without pumping the screen, and so the burn's presence rule lives in one
 /// place: no estimate means the segment is absent, never "0 kcal".
 String sessionArchiveLine(SessionLog log) => [
-      log.dateStr,
-      log.durationLabel,
-      '${log.totalSets} sets',
-      if (log.kcalLabel.isNotEmpty) log.kcalLabel,
-    ].join('  -  ');
+  log.dateStr,
+  log.durationLabel,
+  '${log.totalSets} sets',
+  if (log.kcalLabel.isNotEmpty) log.kcalLabel,
+].join('  -  ');
 
 /// A whole-kilogram label, or `--` when the figure is not a real number.
 ///
@@ -77,20 +79,6 @@ class LogTabState extends State<LogTab> {
     });
   }
 
-  Future<void> _toggleExpand(SessionLog log) async {
-    if (_expanded.contains(log.id)) {
-      setState(() => _expanded.remove(log.id));
-      return;
-    }
-
-    if (!_expandedSets.containsKey(log.id)) {
-      final rows = await DatabaseService.instance.getSetLogsForSession(log.id);
-      if (!mounted) return;
-      _expandedSets[log.id] = rows.map(SetLog.fromMap).toList();
-    }
-    setState(() => _expanded.add(log.id));
-  }
-
   /// Deletes [log] and its set detail immediately (`deleteSessionLog`
   /// removes both, atomically), then offers a few seconds to reverse it
   /// through the same `showUndoBanner` mechanism BODY and FOOD already use
@@ -101,18 +89,18 @@ class LogTabState extends State<LogTab> {
   /// for restore.
   Future<void> _deleteLog(SessionLog log) async {
     final db = DatabaseService.instance;
-    final setRows = (await db.getSetLogsForSession(log.id))
-        .map(SetLog.fromMap)
-        .toList();
+    final setRows = (await db.getSetLogsForSession(
+      log.id,
+    )).map(SetLog.fromMap).toList();
 
     await db.deleteSessionLog(log.id);
     if (!mounted) return;
     await _loadLogs();
     if (!mounted) return;
 
-    showUndoBanner(
+    showNvUndo(
       context,
-      message: 'DELETED ${log.dayName.toUpperCase()} SESSION',
+      message: '${log.dayName} workout deleted',
       onUndo: () => _restoreLog(log, setRows),
     );
   }
@@ -137,19 +125,6 @@ class LogTabState extends State<LogTab> {
   double get _totalVolumeAllTime =>
       _logs.fold(0.0, (sum, l) => sum + l.totalVolumeKg);
 
-  double get _totalBurnedKcal =>
-      _logs.fold<double>(0, (s, l) => s + l.kcalBurned);
-
-  /// Estimates stay marked as estimates even in an aggregate. Reuses
-  /// `SessionLog.formatKcal` rather than re-deriving its rounding and `~`
-  /// prefix rules — the exact duplication `sessionArchiveLine` exists to
-  /// eliminate — falling back to `--` since `formatKcal` returns `''` for
-  /// "no estimate", not "0 kcal".
-  String get _totalBurnedLabel {
-    final label = SessionLog.formatKcal(_totalBurnedKcal);
-    return label.isEmpty ? '--' : label;
-  }
-
   String get _streakLabel {
     if (_streakDays == 0) return 'No active streak';
     return _streakDays == 1 ? '1 day streak' : '$_streakDays day streak';
@@ -157,227 +132,165 @@ class LogTabState extends State<LogTab> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    final theme = Theme.of(context);
-    final semantics = LockoutSemantics.of(context);
-
-    // No screen-title header here (unlike a top-level tab): this widget is
-    // the HISTORY half of `ProgressTab`'s segmented control, which already
-    // shows "Progress" above and "History" on the segment itself — the same
-    // reason `body_tab.dart`'s WEIGHT half leads straight into its content
-    // rather than repeating a title.
-    return Scaffold(
-      backgroundColor: theme.colorScheme.surface,
-      body: Padding(
-        padding: const EdgeInsets.all(LockoutTheme.screenPadding),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            HeroCard(
-              eyebrow: 'CONSISTENCY',
-              title: _streakLabel,
-              subtitle: '${_logs.length} workouts - '
-                  '${kgWhole(_totalVolumeAllTime)} kg total',
-            ),
-            Row(
-              children: [
-                Expanded(
-                  child: StatTile(
-                    label: 'WORKOUTS',
-                    value: '${_logs.length}',
-                  ),
-                ),
-                const SizedBox(width: LockoutTheme.spaceSm),
-                Expanded(
-                  child: StatTile(
-                    label: 'TOTAL BURNED',
-                    value: _totalBurnedLabel,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: LockoutTheme.spaceLg),
-
-            Text('WORKOUT ARCHIVE', style: theme.textTheme.labelSmall),
-            const SizedBox(height: LockoutTheme.spaceSm),
-
-            Expanded(
-              child: _logs.isEmpty
-                  ? Center(
-                      child: Text(
-                        'NO COMPLETED WORKOUTS YET\nFinish a live session on the TODAY tab '
-                        'and it lands here automatically.',
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    )
-                  : ListView.builder(
-                      itemCount: _logs.length,
-                      itemBuilder: (ctx, i) => _buildLogCard(_logs[i]),
-                    ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLogCard(SessionLog log) {
-    final theme = Theme.of(context);
-    final semantics = LockoutSemantics.of(context);
-    final isOpen = _expanded.contains(log.id);
-    final sets = _expandedSets[log.id] ?? const <SetLog>[];
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: LockoutTheme.spaceMd),
-      child: LockoutCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // An `InkWell` here rather than `LockoutCard(onTap:)`: the card's
-            // own `onTap` would cover the whole card, including the DELETE
-            // ENTRY zone below, so only the header row gets the ripple.
-            // `LockoutCard(onTap:)` would also have supplied the 48dp min
-            // height that comes with it; wrapping the row's child in this
-            // `ConstrainedBox` puts that back without giving up the header-
-            // only ripple.
-            InkWell(
-              onTap: () => _toggleExpand(log),
-              borderRadius: BorderRadius.circular(LockoutTheme.radiusField),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(
-                  minHeight: LockoutTheme.minTouchTarget,
-                ),
-                child: Row(
+    if (_isLoading) return const Center(child: CircularProgressIndicator());
+    final completed = _logs.where((l) => l.status == 'completed').toList();
+    return NvPage(
+      title: 'Workout history',
+      back: Navigator.of(context).canPop(),
+      children: [
+        NvSurface(
+          tone: NvTone.primary,
+          child: Row(
+            children: [
+              const NvIconBadge(
+                icon: Icons.local_fire_department_outlined,
+                shape: LockoutShape.sunny,
+                size: 64,
+                tone: NvTone.surface,
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(log.dayName, style: theme.textTheme.titleSmall),
-                          const SizedBox(height: LockoutTheme.spaceXs),
-                          Text(sessionArchiveLine(log),
-                              style: theme.textTheme.bodySmall),
-                        ],
-                      ),
+                    Text(
+                      _streakLabel,
+                      style: Theme.of(context).textTheme.headlineSmall,
                     ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          '${kgWhole(log.totalVolumeKg)} kg',
-                          style: LockoutTheme.numeric(
-                            context,
-                            size: 14,
-                            color: theme.colorScheme.primary,
-                          ),
-                        ),
-                        const SizedBox(height: LockoutTheme.spaceXs),
-                        Icon(
-                          isOpen ? Icons.expand_less : Icons.expand_more,
-                          size: 18,
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ],
+                    Text(
+                      '${completed.length} workouts · ${kgWhole(_totalVolumeAllTime)} kg total',
                     ),
                   ],
                 ),
               ),
-            ),
-
-            if (isOpen) ...[
-              const Divider(),
-              if (sets.isEmpty)
-                Text(
-                  'No set detail stored for this entry.',
-                  style: theme.textTheme.bodySmall,
-                )
-              else
-                ..._groupByExercise(sets).entries.map((entry) {
-                  final reps = entry.value.map((s) => s.reps).join(', ');
-                  final weight = entry.value.first.weightKg;
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: LockoutTheme.spaceSm),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            entry.key,
-                            style: theme.textTheme.bodyMedium
-                                ?.copyWith(fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: LockoutTheme.spaceSm,
-                              vertical: LockoutTheme.spaceXs),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.surfaceContainerHigh,
-                            borderRadius:
-                                BorderRadius.circular(LockoutTheme.radiusPill),
-                            border: Border.all(
-                                color: theme.colorScheme.outlineVariant),
-                          ),
-                          child: Text(
-                            weight > 0
-                                ? '${weight.toStringAsFixed(weight % 1 == 0 ? 0 : 1)}kg x $reps'
-                                : '$reps reps',
-                            style: LockoutTheme.numeric(context, size: 10),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }),
-              const SizedBox(height: LockoutTheme.spaceSm),
-              // Padding lives *inside* the detector so the tappable area
-              // grows to LockoutTheme.minTouchTarget (48dp) without
-              // enlarging the visible text: `labelMedium` is a 14.4dp line
-              // box (`sans(12, w500, height: 1.2)`), so 17 on each side
-              // clears 48 with room to spare. The affordance itself is
-              // deliberately not BODY/FOOD's — those use an
-              // `Icons.delete_outline` `IconButton`, which gets its 48dp hit
-              // box from the theme's `minimumSize: Size(48, 48)`; the brief
-              // specifies a red text link for LOG instead, so this detector
-              // supplies its own 48dp-tall hit box by hand rather than
-              // inheriting the button's. What matches (Ruling F) is the tap
-              // target and the shared `showUndoBanner` mechanism, not the
-              // widget. `semantics.danger` — not `colorScheme.error` —
-              // because this is a destructive-action affordance, exactly
-              // what that role is reserved for (see `LockoutSemantics`'s
-              // doc on `danger` vs `error`).
-              GestureDetector(
-                onTap: () => _deleteLog(log),
-                behavior: HitTestBehavior.opaque,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 17),
-                  child: Text(
-                    'DELETE ENTRY',
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      color: semantics.danger,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ),
             ],
+          ),
+        ),
+        const NvHeading('Your workouts'),
+        if (_logs.isEmpty)
+          const NvEmpty(
+            title: 'Your next chapter starts here',
+            message:
+                'Finish a workout and your completed sets will appear here automatically.',
+            icon: Icons.history_rounded,
+          ),
+        NvGroupedList(
+          children: [
+            for (var i = 0; i < _logs.length; i++)
+              NvListItem(
+                leading: NvIconBadge(
+                  icon: Icons.fitness_center_rounded,
+                  shape: LockoutShape.values[[11, 8, 14, 6, 9][i % 5]],
+                  tone: NvTone.values[i % 3],
+                ),
+                title: _logs[i].dayName,
+                supporting: sessionArchiveLine(_logs[i]),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () => _openDetail(_logs[i]),
+              ),
           ],
         ),
+      ],
+    );
+  }
+
+  Future<void> _openDetail(SessionLog log) async {
+    final rows = await DatabaseService.instance.getSetLogsForSession(log.id);
+    if (!mounted) return;
+    final sets = rows.map(SetLog.fromMap).toList();
+    final grouped = _groupByExercise(sets);
+    await showNvEditor<void>(
+      context: context,
+      title: log.dayName,
+      builder: (ctx) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(log.dateStr, style: Theme.of(ctx).textTheme.bodyLarge),
+          const SizedBox(height: 20),
+          NvSurface(
+            tone: NvTone.primary,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  log.durationLabel,
+                  style: Theme.of(ctx).textTheme.displayMedium,
+                ),
+                Text(
+                  '${log.totalSets} sets · ${DisplayUnits.format(ctx, log.totalVolumeKg, decimals: 0)}',
+                ),
+                if (log.kcalLabel.isNotEmpty)
+                  Text('${log.kcalLabel} estimated energy'),
+              ],
+            ),
+          ),
+          const NvHeading('Exercises'),
+          if (sets.isEmpty)
+            const Text('No set detail was stored for this workout.'),
+          for (final entry in grouped.entries) ...[
+            NvSurface(
+              tone: NvTone.secondary,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(entry.key, style: Theme.of(ctx).textTheme.titleLarge),
+                  const SizedBox(height: 16),
+                  const Row(
+                    children: [
+                      Expanded(child: Text('Set')),
+                      Expanded(child: Text('Weight')),
+                      Expanded(child: Text('Reps')),
+                    ],
+                  ),
+                  for (final set in entry.value)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '${set.setIndex}',
+                              style: LockoutTheme.numeric(ctx, size: 15),
+                            ),
+                          ),
+                          Expanded(
+                            child: Text(
+                              DisplayUnits.format(ctx, set.weightKg),
+                              style: LockoutTheme.numeric(ctx, size: 15),
+                            ),
+                          ),
+                          Expanded(
+                            child: Text(
+                              '${set.reps}',
+                              style: LockoutTheme.numeric(ctx, size: 15),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+          const SizedBox(height: 16),
+          NvButton(
+            variant: NvButtonVariant.danger,
+            label: 'Delete workout',
+            onPressed: () async {
+              await _deleteLog(log);
+              if (ctx.mounted) Navigator.of(ctx).pop();
+            },
+          ),
+        ],
       ),
     );
   }
 
-  /// Preserves insertion order so exercises read back in the order trained.
   Map<String, List<SetLog>> _groupByExercise(List<SetLog> sets) {
     final grouped = <String, List<SetLog>>{};
-    for (final s in sets) {
-      grouped.putIfAbsent(s.exerciseName, () => []).add(s);
+    for (final set in sets) {
+      grouped.putIfAbsent(set.exerciseName, () => []).add(set);
     }
     return grouped;
   }

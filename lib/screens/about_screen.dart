@@ -1,52 +1,69 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../theme/lockout_shapes.dart';
+import '../widgets/house/nv_expressive.dart';
+import '../widgets/house/nv_grouped_list.dart';
 
-import '../theme/lockout_theme.dart';
-import '../widgets/house/nv_cards.dart';
-
-/// Section 12.3's About screen.
-///
-/// Settings used to carry this body inline, inside its own card. Task 10
-/// lifts it onto its own route so Settings only ever points at it through a
-/// single row; the copy itself is unchanged from the card it replaces.
 class AboutScreen extends StatelessWidget {
   const AboutScreen({super.key});
-
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Scaffold(
-      appBar: AppBar(title: const Text('About Lockout')),
-      // Scrollable, matching SettingsScreen, which is where this copy used
-      // to live. `Text` clips by default, so an unscrollable body drops the
-      // tail of a long paragraph without an exception or an indicator: at
-      // 320dp wide and text scale 1.15 — inside the 1.0-1.15 range config.md
-      // pins layouts to — the card needs 861dp against about 600 available.
-      //
-      // The bottom inset is the same arithmetic SettingsScreen documents:
-      // this route has an AppBar but no bottomNavigationBar, so on an
-      // edge-to-edge window it runs to the physical bottom of the screen and
-      // a fixed padding alone cannot clear the navigation bar. `paddingOf`,
-      // not `viewPaddingOf`, so it collapses to 0 when the keyboard is up.
-      body: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(
-          LockoutTheme.screenPadding,
-          LockoutTheme.screenPadding,
-          LockoutTheme.screenPadding,
-          LockoutTheme.screenPadding + MediaQuery.paddingOf(context).bottom,
-        ),
-        child: NvInfoCard(
-          child: Text(
-            'LOCKOUT v1.2.1\nPublished by Jinatra Ltd. under '
-            'GPL-3.0-or-later.\nOffline-first: routines, workout logs, '
-            'nutrition and body data are stored only on this device in '
-            'SQLite. No analytics, no ads, no account.\nThe network is used '
-            'for one thing — streaming exercise form videos from YouTube '
-            'when you tap Watch.',
-            style: theme.textTheme.bodyMedium,
-          ),
+  Widget build(BuildContext context) => NvPage(
+    title: 'About Lockout',
+    back: true,
+    children: [
+      const Center(
+        child: NvIconBadge(
+          icon: Icons.fitness_center_rounded,
+          shape: LockoutShape.flower,
+          size: 112,
         ),
       ),
-    );
-  }
+      const SizedBox(height: 24),
+      Center(
+        child: Text(
+          'Lockout',
+          style: Theme.of(context).textTheme.displayMedium,
+        ),
+      ),
+      const SizedBox(height: 8),
+      const Center(child: Text('Strength, on your terms.')),
+      const NvHeading('On your device'),
+      NvGroupedList(
+        children: [
+          const NvListItem(title: 'Version', supporting: '1.3.0'),
+          const NvListItem(
+            title: 'Works offline',
+            supporting:
+                'No account, ads or analytics. Your routines, workouts, food and body data stay in SQLite on this device.',
+          ),
+          const NvListItem(title: 'License', supporting: 'GPL-3.0-or-later'),
+          const NvListItem(title: 'Published by Jinatra Ltd.'),
+          NvListItem(
+            title: 'Source code',
+            trailing: const Icon(Icons.open_in_new_rounded),
+            onTap: () async {
+              final opened = await launchUrl(
+                Uri.parse('https://github.com/CodeByLiad/lockout'),
+                mode: LaunchMode.externalApplication,
+              );
+              if (!opened && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Could not open the source code link.'),
+                  ),
+                );
+              }
+            },
+          ),
+          const NvListItem(
+            title: 'Exercise videos',
+            supporting:
+                'YouTube opens only when you tap Watch. Videos need an internet connection; your training and logs work offline.',
+          ),
+        ],
+      ),
+      const SizedBox(height: 24),
+      const Text('Built for training. Kept on your device.'),
+    ],
+  );
 }

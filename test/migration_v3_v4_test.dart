@@ -38,8 +38,7 @@ void main() {
     }
   });
 
-  test(
-      'a v3 session_logs row survives the v4 upgrade with kcal_burned '
+  test('a v3 session_logs row survives the v4 upgrade with kcal_burned '
       'defaulted, not backfilled', () async {
     await databaseFactory.deleteDatabase(dbPath);
 
@@ -120,10 +119,13 @@ void main() {
     final again = await DatabaseService.instance.database;
     expect(identical(again, upgraded), isTrue);
     expect(await again.getVersion(), 4);
-    final colsAfterRefetch =
-        await again.rawQuery('PRAGMA table_info(session_logs)');
-    expect(colsAfterRefetch.where((c) => c['name'] == 'kcal_burned'),
-        hasLength(1));
+    final colsAfterRefetch = await again.rawQuery(
+      'PRAGMA table_info(session_logs)',
+    );
+    expect(
+      colsAfterRefetch.where((c) => c['name'] == 'kcal_burned'),
+      hasLength(1),
+    );
 
     // `_addColumnIfMissing` (the guard the real migration uses) is private
     // to database_service.dart and so cannot be invoked directly from this

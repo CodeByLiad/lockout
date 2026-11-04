@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'nv_expressive.dart';
 
 import '../../theme/lockout_theme.dart';
 import '../connected_group.dart';
@@ -48,6 +49,7 @@ class NvListItem extends StatefulWidget {
 
 class _NvListItemState extends State<NvListItem> {
   bool _pressed = false;
+  bool _focused = false;
 
   bool get _enabled => widget.onTap != null;
 
@@ -58,7 +60,8 @@ class _NvListItemState extends State<NvListItem> {
 
     return Semantics(
       button: _enabled,
-      child: GestureDetector(
+      child: InkWell(
+        onFocusChange: (value) => setState(() => _focused = value),
         onTapDown: _enabled ? (_) => setState(() => _pressed = true) : null,
         onTapUp: _enabled ? (_) => setState(() => _pressed = false) : null,
         onTapCancel: _enabled ? () => setState(() => _pressed = false) : null,
@@ -66,7 +69,7 @@ class _NvListItemState extends State<NvListItem> {
         child: MorphingSurface(
           restRadius: LockoutTheme.radiusRowRest,
           activeRadius: LockoutTheme.radiusRowActive,
-          active: _pressed,
+          active: _pressed || _focused,
           color: colors.surfaceContainer,
           child: Container(
             constraints: const BoxConstraints(minHeight: 72),
@@ -74,7 +77,10 @@ class _NvListItemState extends State<NvListItem> {
             child: Row(
               children: [
                 if (widget.leading != null) ...[
-                  widget.leading!,
+                  NvPressState(
+                    active: _pressed || _focused,
+                    child: widget.leading!,
+                  ),
                   const SizedBox(width: LockoutTheme.spaceMd),
                 ],
                 Expanded(

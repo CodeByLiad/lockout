@@ -322,6 +322,16 @@ class DatabaseService {
     await db.insert('exercises', row, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
+  /// Adds a catalog selection as one operation: a failed row adds nothing.
+  Future<void> insertExercises(List<Map<String, dynamic>> rows) async {
+    final db = await instance.database;
+    await db.transaction((txn) async {
+      for (final row in rows) {
+        await txn.insert('exercises', row, conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+    });
+  }
+
   Future<void> deleteExercise(String id) async {
     final db = await instance.database;
     await db.delete('exercises', where: 'id = ?', whereArgs: [id]);

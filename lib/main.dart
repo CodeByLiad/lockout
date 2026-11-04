@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'screens/main_screen.dart';
+import 'services/display_units.dart';
 import 'services/notification_service.dart';
 import 'theme/theme_controller.dart';
 import 'widgets/house/nv_sheet.dart';
@@ -78,7 +79,8 @@ class LockoutApp extends StatelessWidget {
       // that could be const today. No key either: a changing key would
       // remount the tabs and discard an in-progress live session.
       builder: (_, _) => MaterialApp(
-        title: 'LOCKOUT',
+        title: 'Lockout',
+        builder: (_, child) => DisplayUnitsScope(child: child!),
         debugShowCheckedModeBanner: false,
         theme: ThemeController.instance.lightTheme,
         darkTheme: ThemeController.instance.darkTheme,
