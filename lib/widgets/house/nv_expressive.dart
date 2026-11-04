@@ -430,7 +430,7 @@ class _NvFieldState extends State<NvField> {
   @override
   Widget build(BuildContext context) {
     final c = Theme.of(context).colorScheme;
-    final border = OutlineInputBorder(
+    final border = UnderlineInputBorder(
       borderRadius: BorderRadius.circular(_focus.hasFocus ? 24 : 16),
       borderSide: BorderSide.none,
     );
@@ -447,6 +447,15 @@ class _NvFieldState extends State<NvField> {
       style: widget.textStyle ?? Theme.of(context).textTheme.bodyLarge,
       decoration: InputDecoration(
         labelText: widget.label,
+        floatingLabelBehavior: FloatingLabelBehavior.always,
+        floatingLabelStyle: WidgetStateTextStyle.resolveWith((states) {
+          final color = states.contains(WidgetState.error)
+              ? c.error
+              : states.contains(WidgetState.focused)
+              ? c.primary
+              : c.onSurfaceVariant;
+          return Theme.of(context).textTheme.bodyLarge!.copyWith(color: color);
+        }),
         hintText: widget.hint,
         errorText: widget.errorText,
         errorMaxLines: 6,

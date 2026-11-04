@@ -1,5 +1,25 @@
 # Lockout project instructions
 
+## Current follow-up (2026-11-04)
+
+The user requests required first-launch profile onboarding after seeing height
+entry separated from body-weight entry. Required setup is confirmed. Proposed
+five-step flow: About you, Measurements, Goal, Activity, Review. Five separate
+previews and exact prompts are in `docs/design/onboarding-preview/`; the user
+approved them with "Approve and implement" on 2026-11-04. See
+`docs/spine/specs/2026-11-04-profile-onboarding.md`.
+Preserve and prefill existing user data; do not invent profile defaults or write
+an initial measurement before final atomic completion. Implementation is authorized.
+
+The user also reports false video-unavailable notices and exercise labels
+straddling filled fields. Both fixes and onboarding are implemented with test-first
+regressions; the final serial suite passes 973 tests. The local candidate is
+v1.4.0+7. See `docs/spine/qa/profile-setup-verification.md` for evidence and limits.
+Notification default-importance behavior was diagnosed, but its channel behavior
+has not been changed. The user explicitly requested publishing this follow-up
+and updating GitHub's README on 2026-11-04. Release v1.4.0 uses the permanent
+v1.3.1 signing key. See the verification receipt for artifact identity.
+
 ## Latest user direction (2026-11-03)
 
 The user requests a complete overhaul of the whole APK's UI and flows using

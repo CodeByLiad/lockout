@@ -41,12 +41,12 @@ void main() {
     final c = await pumpField(t);
     final before =
         t.widget<TextField>(find.byType(TextField)).decoration!.enabledBorder!
-            as OutlineInputBorder;
+            as UnderlineInputBorder;
     await t.enterText(find.byType(TextField), '12');
     await t.pumpAndSettle();
     final after =
         t.widget<TextField>(find.byType(TextField)).decoration!.focusedBorder!
-            as OutlineInputBorder;
+            as UnderlineInputBorder;
     expect(after.borderRadius, isNot(before.borderRadius));
     expect(c.text, '12');
   });

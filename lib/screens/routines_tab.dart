@@ -1250,6 +1250,7 @@ class _ExerciseFormState extends State<_ExerciseForm> {
             Expanded(
               child: NvField(
                 label: 'Sets',
+                compact: true,
                 controller: _setsCtrl,
                 keyboardType: TextInputType.number,
               ),
@@ -1258,6 +1259,7 @@ class _ExerciseFormState extends State<_ExerciseForm> {
             Expanded(
               child: NvField(
                 label: 'Min reps',
+                compact: true,
                 controller: _repsMinCtrl,
                 keyboardType: TextInputType.number,
               ),
@@ -1266,6 +1268,7 @@ class _ExerciseFormState extends State<_ExerciseForm> {
             Expanded(
               child: NvField(
                 label: 'Max reps',
+                compact: true,
                 controller: _repsMaxCtrl,
                 keyboardType: TextInputType.number,
               ),

@@ -6,7 +6,7 @@ import '../widgets/house/nv_expressive.dart';
 import '../widgets/house/nv_grouped_list.dart';
 import '../widgets/house/nv_button.dart';
 import '../widgets/house/nv_feedback.dart';
-import 'settings_screen.dart';
+import 'profile_setup_screen.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
 import '../services/goal_service.dart';
@@ -314,8 +314,7 @@ class BodyTabState extends State<BodyTab> {
   Future<void> _editGoals() async {
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) =>
-            SettingsBody(onSettingsUpdated: () {}, section: 'goals'),
+        builder: (pageContext) => ProfileSetupScreen(editing:true,onCompleted:()=>Navigator.of(pageContext).pop()),
       ),
     );
     if (mounted) await reload();

@@ -33,12 +33,12 @@ class ImportResult {
   ]);
 
   ImportResult.success(int rows, {int coerced = 0})
-      : this._(
-          true,
-          'Restored $rows rows.${coercionNote(coerced)}',
-          rows,
-          coerced,
-        );
+    : this._(
+        true,
+        'Restored $rows rows.${coercionNote(coerced)}',
+        rows,
+        coerced,
+      );
 
   const ImportResult.cancelled() : this._(false, 'Import cancelled.', 0);
 
@@ -77,7 +77,7 @@ class BackupService {
       'app': appTag,
       'schemaVersion': schemaVersion,
       'exportedAt': DateTime.now().toIso8601String(),
-      'appVersion': '1.3.1',
+      'appVersion': '1.4.0',
       'data': data,
     });
   }
@@ -91,10 +91,7 @@ class BackupService {
     await file.writeAsString(json);
 
     await SharePlus.instance.share(
-      ShareParams(
-        files: [XFile(file.path)],
-        text: 'LOCKOUT backup - $stamp',
-      ),
+      ShareParams(files: [XFile(file.path)], text: 'LOCKOUT backup - $stamp'),
     );
   }
 
@@ -106,7 +103,7 @@ class BackupService {
     PlatformFile? picked;
     try {
       picked = await FilePicker.pickFile(
-        dialogTitle: 'Choose a LOCKOUT backup',
+        dialogTitle: 'Choose a Lockout backup',
         type: FileType.custom,
         allowedExtensions: ['json'],
       );

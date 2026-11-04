@@ -1,6 +1,7 @@
 import '../theme/lockout_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../data/exercise_library.dart';
 import '../theme/lockout_shapes.dart';
 import '../widgets/house/nv_expressive.dart';
@@ -65,6 +66,7 @@ Uri searchVideoUri(String exerciseName) => Uri.parse(
 class ExerciseVideoScreen extends StatefulWidget {
   final String exerciseName;
   final String videoUrl;
+  final Future<bool> Function(Uri)? externalLauncher;
 
   // Non-const constructor: see "Why some constructors in this app are
   // not const" at the top of lib/widgets/day_block.dart.
@@ -73,6 +75,7 @@ class ExerciseVideoScreen extends StatefulWidget {
     super.key,
     required this.exerciseName,
     this.videoUrl = '',
+    this.externalLauncher,
   });
 
   @override
@@ -112,7 +115,9 @@ class _ExerciseVideoScreenState extends State<ExerciseVideoScreen> {
           onPageFinished: (_) {
             if (mounted) setState(() => _progress = 100);
           },
-          onWebResourceError: (_) {
+          onWebResourceError: (error) {
+            // A blocked image, ad or script must not replace a usable page.
+            if (error.isForMainFrame != true) return;
             if (mounted) setState(() => _failed = true);
           },
         ),
@@ -161,6 +166,35 @@ class _ExerciseVideoScreenState extends State<ExerciseVideoScreen> {
       _progress = 0;
     });
     _controller.loadRequest(target);
+  }
+
+  String get _externalLabel {
+    final host = _target?.host.toLowerCase() ?? '';
+    return host == 'youtu.be' ||
+            host == 'youtube.com' ||
+            host.endsWith('.youtube.com')
+        ? 'Open in YouTube'
+        : 'Open video link';
+  }
+
+  Future<void> _openExternally() async {
+    final target = _target;
+    if (target == null) return;
+    var opened = false;
+    try {
+      opened =
+          await (widget.externalLauncher?.call(target) ??
+              launchUrl(target, mode: LaunchMode.externalApplication));
+    } catch (_) {
+      // Retain the in-app retry path when no external handler is available.
+    }
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not open the video link. Try again.'),
+        ),
+      );
+    }
   }
 
   @override
@@ -259,12 +293,19 @@ class _ExerciseVideoScreenState extends State<ExerciseVideoScreen> {
         NvEmpty(
           title: 'Video unavailable',
           message:
-              'Form videos stream from YouTube and need a connection. Your routines, logs and body data stay on-device and work offline.',
-          icon: Icons.wifi_off_rounded,
+              'The video page could not load. Try again or open the link in another app. Your training data stays available offline.',
+          icon: Icons.error_outline_rounded,
           action: 'Try again',
           onPressed: _retry,
         ),
         const SizedBox(height: 20),
+        NvButton(
+          variant: NvButtonVariant.tonal,
+          label: _externalLabel,
+          icon: Icons.open_in_new_rounded,
+          onPressed: _openExternally,
+        ),
+        const SizedBox(height: 12),
         NvButton(
           variant: NvButtonVariant.tonal,
           label: 'Back to exercise',

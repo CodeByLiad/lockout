@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-04T06:08:11.850Z",
+  "generatedAt": "2026-11-04T12:30:46.761Z",
   "title": "Design System: Lockout",
   "extensions": {
     "platform": {
@@ -380,6 +380,31 @@
       "scrolling": "Safe-area-aware pages; 128dp bottom allowance when both nav and FAB are present."
     },
     "nativeDataPatterns": {
+      "profileSetup": {
+        "sources": [
+          "lib/screens/profile_setup_screen.dart",
+          "lib/services/profile_setup_service.dart"
+        ],
+        "gate": "ProfileGate requires a valid saved profile before mounting the task shell; no Skip action.",
+        "steps": ["About you", "Measurements", "Goal", "Activity", "Review"],
+        "newProfile": "Missing fields start empty; sex is not silently selected.",
+        "existingProfile": "Prefill valid settings and the latest real body measurement; preserve history.",
+        "drafts": "Persist raw input and step separately from active profile/calculations; setup/edit drafts are baseline-bound and isolated.",
+        "completion": "Finish setup / Save profile validate all fields, check active baseline, and commit settings, unit preferences, completion, needed weight measurement and draft removal atomically.",
+        "measurement": "Append first/changed weight only when needed; stored weight kg and height cm; no historical rewrite.",
+        "reviewEditing": "Connected rows with Edit return through Review changes. Unified later editor starts at Review and uses Save profile. Calculated targets and existing planner explanations appear after completion, without invented pre-save numbers.",
+        "recovery": "Busy controls disabled; visible failure retains values and reload/retry path. Restore backup requires explicit replacement confirmation and cannot be overwritten by stale drafts.",
+        "units": "Units changes weight/height preferences and links to Edit profile; enter actual weight and height together in Profile."
+      },
+      "videoRecovery": {
+        "source": "lib/screens/exercise_video_screen.dart",
+        "failureTrigger": "WebResourceError.isForMainFrame == true only; subresource and unknown-frame errors do not replace usable content.",
+        "copy": "Video unavailable; no unsupported inference that Wi-Fi is off.",
+        "recovery": "Try again / Reload in app; explicit Open in YouTube or Open video link launches externally through existing dependency.",
+        "launchFailure": "Catch errors, show visible failure and keep in-app retry available.",
+        "automaticExternalLaunch": false,
+        "invalidLink": "Separate Link not usable state; training data remains local."
+      },
       "today": {
         "source": "lib/screens/today_tab.dart",
         "surface": "NvSurface, NvTone.primary, contextual 36dp rest radius",
@@ -495,6 +520,30 @@
         "Artifact installation/hash provenance and unchanged-screen confirmation supplied by root; the final reviewer performed a bounded chart finding check.",
         "This documentation task ran no tests or builds."
       ]
+    },
+    "profileOnboardingExtraction": {
+      "candidate": "1.4.0+7",
+      "status": "Local candidate; independent follow-up review records Ship within bounded onboarding/field scope. No publication claim.",
+      "review": ".impeccable/review/profile-setup-finish-review.md",
+      "serialSuite": {"passed": 973, "log": ".spine/profile-setup-final-tests.log"},
+      "analysis": {"errors": 0, "warnings": 0, "baselineInfoNotices": 2, "log": ".spine/profile-setup-final-analysis.log", "note": "Latest record supersedes the review's earlier three-info snapshot."},
+      "artifact": {"path": ".spine/release/LOCKOUT-v1.4.0-preview.apk", "localOnly": true, "permanentCertificateMatches": true, "signatureLog": ".spine/profile-setup-signature.log"},
+      "approvedConcepts": "docs/design/onboarding-preview/ (five separate concepts, approved 2026-11-04)",
+      "spec": "docs/spine/specs/2026-11-04-profile-onboarding.md",
+      "report": ".impeccable/review/profile-onboarding-documenter.md",
+      "evidence": [
+        ".impeccable/review/final/onboarding-early-about.png",
+        ".impeccable/review/final/onboarding-early-measurements.png",
+        ".impeccable/review/final/onboarding-early-goal.png",
+        ".impeccable/review/final/onboarding-early-activity.png",
+        ".impeccable/review/final/onboarding-early-review.png",
+        ".impeccable/review/final/onboarding-stress-review.png",
+        ".impeccable/review/final/onboarding-stress-review-bottom.png",
+        ".impeccable/review/final/profile-editor-dark-stress.png",
+        ".impeccable/review/final/profile-measurements-dark-stress-keyboard.png"
+      ],
+      "testsRunByDocumenter": false,
+      "scope": "Native onboarding/field follow-up with representative phone screenshots; no physical hardware, tablet, TalkBack, measured contrast or motion smoothness certification. Video recovery source/test-reviewed; no independent final video-error capture or external playback certification. Incumbent tokens/branding and past release provenance retained."
     },
     "androidBranding": {
       "name": "The last rep",
@@ -623,6 +672,14 @@
           "focusStrokeDp": 2,
           "errorStrokeDp": 1,
           "focusedErrorStrokeDp": 2
+        },
+        "borderType": "UnderlineInputBorder with rounded fill; rest border none, focus/error underline only.",
+        "label": {
+          "behavior": "FloatingLabelBehavior.always; stays inside the filled surface.",
+          "styleSource": "Theme.textTheme.bodyLarge via WidgetStateTextStyle",
+          "nominalRenderedFloatSp": 12,
+          "textScale": "User text scaling applies to the framework floating-label layout.",
+          "roles": {"rest": "ColorScheme.onSurfaceVariant", "focus": "ColorScheme.primary", "error": "ColorScheme.error"}
         },
         "paddingDp": {
           "normal": {
@@ -765,6 +822,39 @@
           "focusOutlineDp": 2
         },
         "adaptation": "Stack when at least three segments and textScaler.scale(15) > 20."
+      }
+    },
+    {
+      "name": "Five-step setup header",
+      "kind": "custom",
+      "description": "Native brand row and real five-segment step progress; no fabricated completion state.",
+      "native": {
+        "widget": "NvSetupHeader",
+        "source": "lib/widgets/house/nv_setup_header.dart",
+        "logo": {"asset": "assets/branding/exports/monochrome/192.png", "sizeDp": 32, "tintRole": "ColorScheme.primary", "decorativeSemanticsExcluded": true},
+        "type": {"brand": "TextTheme.headlineSmall", "count": "TextTheme.labelLarge"},
+        "brandGapDp": 10,
+        "progressTopGapDp": 16,
+        "segments": {"count": 5, "equalWidth": true, "heightDp": 6, "gapDp": 6, "radiusDp": 8, "filledThroughCurrent": "ColorScheme.primary", "remaining": "ColorScheme.surfaceContainerHighest"},
+        "motion": "LockoutMotion.effects.durationFor(context); reduced motion immediate",
+        "semantics": "Step n of 5 announced once; duplicate visual step count excluded."
+      }
+    },
+    {
+      "name": "Profile setup shell",
+      "kind": "custom",
+      "description": "Fixed header and adaptive action footer around a separately scrolling form body.",
+      "native": {
+        "widget": "ProfileSetupScreen",
+        "source": "lib/screens/profile_setup_screen.dart",
+        "structure": "Scaffold > SafeArea > Column: padded header, Expanded SingleChildScrollView, intrinsic action footer.",
+        "roles": {"background": "ColorScheme.surface", "error": "ColorScheme.error"},
+        "paddingDp": {"header": [20, 16, 20, 12], "body": [20, 12, 20, 24], "footer": [20, 12, 20, 16]},
+        "footer": {"backVariant": "NvButtonVariant.tonal", "primaryVariant": "NvButtonVariant.filled", "backFlex": 2, "gapDp": 12, "primaryFlex": 3, "labels": ["Continue", "Review changes", "Finish setup", "Save profile"]},
+        "adaptation": "Scaffold keyboard insets reduce scroll-body space; fixed footer remains above IME. Wrapped labels grow controls rather than shrinking user type.",
+        "intro": {"badgeDp": 72, "heading": "TextTheme.displaySmall", "supporting": "TextTheme.bodyLarge"},
+        "busy": "Absorb input; disable actions; show NvWavyProgress.",
+        "persistence": "Isolated local drafts; only validated atomic Finish/Save activates profile."
       }
     },
     {

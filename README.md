@@ -25,6 +25,20 @@ QA profile. These are screenshots, not generated design concepts.
 |:---:|:---:|:---:|:---:|
 | <img src="docs/screenshots/progress.png" width="240" alt="Weekly workout chart with all seven days"> | <img src="docs/screenshots/appearance.png" width="240" alt="Appearance with a live component preview"> | <img src="docs/screenshots/today-dark.png" width="240" alt="Today in the dark generated scheme"> | <img src="docs/screenshots/training-dark.png" width="240" alt="Training in the dark generated scheme"> |
 
+| First-time setup | Measurements | Review |
+|:---:|:---:|:---:|
+| <img src="docs/screenshots/onboarding.png" width="240" alt="Required first-time profile setup with blank age"> | <img src="docs/screenshots/measurements.png" width="240" alt="Current weight and height entered together"> | <img src="docs/screenshots/profile-review.png" width="240" alt="Profile review with direct edit actions"> |
+
+## What's new in v1.4.0
+
+[Download v1.4.0](https://github.com/CodeByLiad/lockout/releases/tag/v1.4.0).
+
+- Required five-step profile setup: About you, Measurements, Goal, Activity and Review.
+- Existing details prefill; interrupted setup resumes. Finish saves the profile and first weigh-in together without duplicates.
+- Edit weight, height and goals together in Profile & goals. Units contains display preferences.
+- Exercise labels stay inside filled fields. Embedded-video resource errors no longer falsely replace a usable page; an explicit external-video fallback is available.
+- Existing data, offline operation and backup/restore are preserved. Notification popup behavior is unchanged.
+
 ## What's new in v1.3.1
 
 **v1.3.1** adds the user-approved **The last rep** dumbbell icon, including round,

@@ -30,7 +30,7 @@ class AboutScreen extends StatelessWidget {
       const NvHeading('On your device'),
       NvGroupedList(
         children: [
-          const NvListItem(title: 'Version', supporting: '1.3.1'),
+          const NvListItem(title: 'Version', supporting: '1.4.0'),
           const NvListItem(
             title: 'Works offline',
             supporting:

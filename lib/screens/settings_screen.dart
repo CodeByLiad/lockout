@@ -1,5 +1,6 @@
 import '../widgets/house/nv_expressive.dart';
 import 'package:flutter/material.dart';
+import 'profile_setup_screen.dart';
 import '../services/display_units.dart';
 
 import '../services/backup_service.dart';
@@ -796,6 +797,7 @@ class SettingsBodyState extends State<SettingsBody> {
                   'appearance' => 'Appearance',
                   'units' => 'Units',
                   'goals' => 'Profile & goals',
+                  'nutrition' => 'Nutrition targets',
                   'training' => 'Training preferences',
                   'reminders' => 'Reminders',
                   'data' => 'Backup & restore',
@@ -851,7 +853,7 @@ class SettingsBodyState extends State<SettingsBody> {
                   _buildUnitsCard(context),
                 if (widget.section == null || widget.section == 'training')
                   _buildTrainingCard(context),
-                if (widget.section == null || widget.section == 'goals')
+                if (widget.section == null || widget.section == 'goals' || widget.section == 'nutrition')
                   _buildFoodCard(context),
                 if (widget.section == null || widget.section == 'reminders')
                   _buildNotificationsCard(context),
@@ -1104,6 +1106,13 @@ class SettingsBodyState extends State<SettingsBody> {
     );
   }
 
+  Future<void> _openProfile() async {
+    await Navigator.of(context).push(MaterialPageRoute<void>(builder:(pageContext)=>ProfileSetupScreen(editing:true,onCompleted:()=>Navigator.of(pageContext).pop())));
+    if(!mounted)return;
+    await _loadSettings();
+    widget.onSettingsUpdated();
+  }
+
   Widget _buildUnitsCard(BuildContext context) {
     return _section(
       context,
@@ -1139,8 +1148,23 @@ class SettingsBodyState extends State<SettingsBody> {
             NvSegment(value: 'ft', label: 'Feet / inches'),
           ],
           selected: _heightUnit,
-          onChanged: _switchHeightUnit,
+          onChanged: (unit) async {
+            if(widget.section!='units'){_switchHeightUnit(unit);return;}
+            try {
+              await DatabaseService.instance.saveSetting('height_unit',unit);
+              if(!mounted)return;
+              _switchHeightUnit(unit);
+              _markSaved('height_unit',unit);
+              widget.onSettingsUpdated();
+            } catch(_){_toast('Units not saved. Try again.',warn:true);}
+          },
         ),
+        if(widget.section=='units') ...[
+          const SizedBox(height:24),
+          const Text('Enter or update your weight and height together in Profile.'),
+          const SizedBox(height:12),
+          NvButton(variant:NvButtonVariant.filled,label:'Edit profile',onPressed:_openProfile),
+        ] else ...[
         const SizedBox(height: LockoutTheme.spaceMd),
         if (_heightUnit == 'ft')
           Row(
@@ -1179,6 +1203,7 @@ class SettingsBodyState extends State<SettingsBody> {
           label: 'Save height',
           onPressed: _saveHeightSettings,
         ),
+        ],
       ],
     );
   }
@@ -1293,7 +1318,7 @@ class SettingsBodyState extends State<SettingsBody> {
 
     return _section(
       context,
-      heading: 'Profile & goals',
+      heading: widget.section=='nutrition'?'Nutrition targets':'Profile & goals',
       rows: [
         NvSwitchRow(
           title: 'Enable nutrition tab',
@@ -1303,12 +1328,17 @@ class SettingsBodyState extends State<SettingsBody> {
       ],
       extras: [
         Text(
-          'Calories are calculated from these, not guessed — BMR by the '
+          widget.section=='nutrition'
+          ? 'Your saved profile supplies the calorie estimate. Edit your profile to change those inputs.'
+          : 'Calories are calculated from these, not guessed — BMR by the '
           'Mifflin-St Jeor equation, then activity, then the deficit or '
           'surplus your goal needs.',
           style: theme.textTheme.bodySmall,
         ),
         const SizedBox(height: LockoutTheme.spaceMd),
+        if(widget.section=='nutrition')
+          NvButton(variant:NvButtonVariant.tonal,label:'Edit profile',onPressed:_openProfile)
+        else ...[
         Row(
           children: [
             Expanded(
@@ -1362,6 +1392,7 @@ class SettingsBodyState extends State<SettingsBody> {
           label: 'Calculate my target',
           onPressed: _saveGoalAndRecalculate,
         ),
+        ],
         if (plan != null) ...[
           const SizedBox(height: LockoutTheme.spaceMd),
           // A card, so it takes the card margin and stays flush with the
@@ -1450,14 +1481,16 @@ class SettingsBodyState extends State<SettingsBody> {
         ],
         const Divider(height: LockoutTheme.sectionGap),
         NvTextField(
-          label: 'Daily calorie target (kcal)',
+          label: widget.section=='nutrition'?'Fallback daily target (kcal)':'Daily calorie target (kcal)',
           controller: _calorieCtrl,
           keyboardType: TextInputType.number,
         ),
         Padding(
           padding: const EdgeInsets.symmetric(vertical: LockoutTheme.spaceSm),
           child: Text(
-            'Set automatically by "Calculate my target" above. Override it '
+            widget.section=='nutrition'
+            ? 'Used when a profile-derived target is unavailable. Your calculated profile target takes precedence.'
+            : 'Set automatically by "Calculate my target" above. Override it '
             'here only if you already know what you are doing.',
             style: theme.textTheme.bodySmall,
           ),

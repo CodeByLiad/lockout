@@ -67,6 +67,7 @@ const List<String> _rebuiltFiles = [
   'lib/screens/food_tab.dart',
   'lib/screens/exercise_video_screen.dart',
   'lib/screens/settings_hub.dart',
+  'lib/screens/profile_setup_screen.dart',
 ];
 
 /// The screens rebuilt so far. Appended to as screens land.
@@ -83,6 +84,7 @@ const List<String> _rebuiltScreens = [
   'lib/screens/about_screen.dart',
   'lib/screens/settings_screen.dart',
   'lib/screens/profile_tab.dart',
+  'lib/screens/profile_setup_screen.dart',
 ];
 
 /// The pre-rebuild widgets a rebuilt screen must not reach for.

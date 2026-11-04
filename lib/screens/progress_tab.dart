@@ -12,7 +12,7 @@ import '../widgets/house/nv_segmented_button.dart';
 import '../widgets/house/nv_button.dart';
 import 'body_tab.dart';
 import 'log_tab.dart';
-import 'settings_screen.dart';
+import 'profile_setup_screen.dart';
 
 enum ProgressSegment { weight, history }
 
@@ -263,10 +263,7 @@ class ProgressTabState extends State<ProgressTab> {
               onTap: () async {
                 await Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (_) => SettingsBody(
-                      onSettingsUpdated: () {},
-                      section: 'goals',
-                    ),
+                    builder: (pageContext) => ProfileSetupScreen(editing:true,onCompleted:()=>Navigator.of(pageContext).pop()),
                   ),
                 );
                 if (mounted) await reload();

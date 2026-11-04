@@ -11,6 +11,8 @@ import 'package:lockout/widgets/bottom_nav.dart';
 import 'package:lockout/widgets/house/nv_navigation_bar.dart';
 
 import 'test_helpers.dart';
+import 'package:lockout/services/profile_setup_service.dart';
+import 'profile_setup_service_test.dart' show validProfile;
 
 /// The only coverage `lib/main.dart` has.
 ///
@@ -35,6 +37,7 @@ void main() {
 
   setUp(() async {
     await wipeDatabaseAndReseed(DatabaseService.instance);
+    await ProfileSetupService().complete(validProfile());
     ThemeController.instance.resetForTest();
     await ThemeController.instance.load();
   });

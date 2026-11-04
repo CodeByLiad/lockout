@@ -220,6 +220,8 @@ Functional verification: the final v1.3.1 serial suite passed all 940 tests (`.s
 
 The verdict covers the representative native API 36 emulator evidence reviewed. It does not certify every approved screen/state, physical hardware, tablet behavior, TalkBack listening, a measured contrast matrix or independent motion quality. Passing tests and seven closed findings do not expand that visual-review scope.
 
+The approved profile-setup follow-up extends this same world in local candidate `1.4.0+7`. Its five individually approved concepts are in `docs/design/onboarding-preview/`; the governing flow is `docs/spine/specs/2026-11-04-profile-onboarding.md`. Its independent finish review, `.impeccable/review/profile-setup-finish-review.md`, records **Ship** within the bounded onboarding/field scope. The final serial suite passed 973 tests (`.spine/profile-setup-final-tests.log`); the latest analysis has zero errors/warnings and two baseline information notices (`.spine/profile-setup-final-analysis.log`), superseding the review's earlier three-notice snapshot. The local signed artifact is `.spine/release/LOCKOUT-v1.4.0-preview.apk`; its signature record matches the permanent certificate. This is a local candidate record, not publication. See `.impeccable/review/profile-onboarding-documenter.md` for extraction evidence and limits. This documentation pass ran no tests or builds.
+
 Frontmatter uses the portable format's CSS-length notation. In this native app those lengths represent Flutter logical pixels (dp), not a browser layout or physical display pixels. It contains actual authored seed/semantic values, type, spacing and radii. Generated color roles deliberately have no frozen hex substitute: their native bindings and generator are recorded below and in the sidecar. No CSS implementation or web component library is implied.
 
 ## Colors
@@ -278,6 +280,8 @@ Navigation has Today, Training, Progress and optional Food; Settings is a focuse
 
 There are no web breakpoints. Native constraints and text scaling drive adaptation: three-or-more segmented options stack vertically when a scaled 15dp label exceeds 20dp; navigation labels allow two lines and the bar grows; text buttons wrap and grow from minimum target height. Required stress evidence is a 360dp phone at 1.5x text, alongside normal phone captures. Fixed control-height and nav-height constants elsewhere in theme compatibility APIs do not override D18.
 
+Required profile setup uses a safe-area Column: the setup header stays above an Expanded scrolling body, and an intrinsic-height action footer stays outside that scroll view. Keyboard insets reduce the available body space while the footer remains reachable above the keyboard. Header, body and footer retain 20dp horizontal margins; their native vertical paddings are 16/12dp, 12/24dp and 12/16dp respectively. Paired footer actions use Back at flex 2, a 12dp gap, and the primary action at flex 3; wrapping labels can grow the footer. The body can scroll independently at large text sizes rather than compressing its type.
+
 ## Elevation & Depth
 
 Depth is mainly tonal layering, with no surface tint overlay. The theme clears `surfaceTint`; app bars have zero elevation and zero scrolled-under elevation. Theme defaults retain card elevation 1 and dialog/bottom-sheet elevation 6, while the active `NvSurface` and `NvInfoCard` implementations use tonal fill without custom box shadows. These native elevation numbers are not CSS shadow recipes.
@@ -316,7 +320,7 @@ Labels wrap and controls grow; ordinary buttons have a minimum 48dp target and l
 
 ### Inputs / Fields
 
-`NvField` is the active filled native text form field: `surfaceContainerHigh`, body-large text, field-to-focused radius, a 2dp primary focus stroke, and error-role strokes/messages. Normal padding is screen padding; compact set fields use 10dp horizontal and 12dp vertical padding. Error text may occupy up to six lines. `NvSetRow` uses compact fields for workout numbers rather than outlining a separate legacy input design.
+`NvField` is the active filled native text form field: `surfaceContainerHigh`, body-large value text, field-to-focused radius, and error-role strokes/messages. Its label always floats **inside** the fill using `FloatingLabelBehavior.always` and `UnderlineInputBorder`; it does not straddle a notched outline. The border's rounded fill still morphs from 16dp to 24dp on focus. Rest has no stroke, focus has a 2dp primary underline, error has an error-role underline, and focused error uses 2dp. The floating-label style resolves from theme body-large, with `onSurfaceVariant` at rest, `primary` in focus and `error` on error; Flutter's floating-label layout renders it at a nominal 12sp before user text scaling, rather than displaying the full body-large size. This framework label treatment does not add a new global typography token. Normal padding is screen padding; compact set fields use 10dp horizontal and 12dp vertical padding. Error text may occupy up to six lines. `NvSetRow` uses compact fields for workout numbers rather than outlining a separate legacy input design.
 
 ### Navigation
 
@@ -342,6 +346,22 @@ The finish review snapshots completion time when opened. Save persists the displ
 **The Truthful visualization Rule.** Show actual records for the selected period and describe missing data instead of inventing sample activity.
 
 Display units convert values at input and presentation boundaries; weights remain stored in kilograms. These native patterns preserve offline behavior and require no schema or dependency changes. Explicit Watch and About source-link actions are user-triggered external destinations, not permission to add background requests.
+
+### Profile setup and unified editing
+
+`NvSetupHeader` uses the approved monochrome dumbbell asset (`assets/branding/exports/monochrome/192.png`) at 32dp, tinted with generated `primary`, beside headline-small “Lockout” and a label-large step count. Below a 16dp gap, five equal 6dp-high rounded segments have 6dp gaps and 8dp corners. Current and preceding segments use `primary`; remaining segments use `surfaceContainerHighest`. The color changes use the effects motion tier and become immediate under reduced motion. Decorative logo/duplicate count semantics are excluded; the progress row announces “Step n of 5” once.
+
+`ProfileGate` requires a valid saved profile before the task shell is shown. The five steps are About you, Measurements, Goal, Activity and Review. Introductory shaped badges are 72dp, headings use display-small, and explanatory copy uses body-large. A new profile starts with missing values empty and no silently selected sex; existing valid fields and the latest real measurement prefill setup. The first page offers Restore backup, with an explicit replacement confirmation. No Skip action, account request or early notification prompt is introduced.
+
+Continue validates the current step. Back and interruption retain local raw-input drafts; draft values do not change active calculations. Review uses connected rows with direct Edit actions; editing a section returns through Review changes. Calculated nutrition targets and the existing planner's limiting/explanation behavior appear after completion, not as invented pre-save preview numbers. Busy state disables input/actions and shows the house wavy progress indicator; failure retains input with a visible explanation and reload/retry path.
+
+Finish setup and Save profile call the same validated atomic completion service. It checks that the active baseline has not changed, writes profile values/unit preferences/completion together, adds the initial or changed weight measurement only when needed, and removes setup/edit drafts in the same transaction. Existing measurement history stays intact. Raw input is converted to stored kilograms/centimeters at completion, while interrupted drafts retain the chosen units. A conflicting restore or saved-profile change requires reload instead of silently overwriting the newer state.
+
+The later Profile route uses the same editor, opening at Review with Save profile. Units contains weight/height **preferences** and an Edit profile entry; actual weight and height are entered together in Profile. These are native data-entry conventions, not a new palette or component family.
+
+### Video recovery
+
+The exercise-form WebView presents “Video unavailable” only after a resource error explicitly identifies the main frame (`isForMainFrame == true`). A blocked image, ad/script failure or unknown frame classification does not replace a usable page. The failure copy does not infer that Wi-Fi is off. Try again/Reload retains the in-app path; an explicit Open in YouTube or Open video link action invokes the existing external launcher, catches launch failure and keeps recovery available. External launching is never automatic. Invalid links have a separate Link not usable state. Training data remains locally available throughout.
 
 ## Android identity
 

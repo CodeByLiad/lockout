@@ -4,6 +4,7 @@ import '../widgets/house/nv_grouped_list.dart';
 import '../theme/lockout_shapes.dart';
 import 'settings_screen.dart';
 import 'about_screen.dart';
+import 'profile_setup_screen.dart';
 
 class SettingsHub extends StatelessWidget {
   final VoidCallback onSettingsUpdated;
@@ -13,16 +14,32 @@ class SettingsHub extends StatelessWidget {
     required this.onSettingsUpdated,
     this.workoutActive = false,
   });
-  void _open(BuildContext context, String section) =>
+  void _open(BuildContext context, String section) {
+    if (section == 'goals') {
       Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => SettingsBody(
-            onSettingsUpdated: onSettingsUpdated,
-            section: section,
-            restoreAllowed: !workoutActive,
+        MaterialPageRoute<void>(
+          builder: (pageContext) => ProfileSetupScreen(
+            editing: true,
+            onCompleted: () {
+              onSettingsUpdated();
+              Navigator.of(pageContext).pop();
+            },
           ),
         ),
       );
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SettingsBody(
+          onSettingsUpdated: onSettingsUpdated,
+          section: section,
+          restoreAllowed: !workoutActive,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     Widget row(
@@ -78,7 +95,7 @@ class SettingsHub extends StatelessWidget {
             ),
             row(
               'Units',
-              'Weight and height',
+              'Weight and height units',
               Icons.straighten_rounded,
               LockoutShape.pentagon,
               NvTone.tertiary,
@@ -97,6 +114,7 @@ class SettingsHub extends StatelessWidget {
               NvTone.primary,
               'goals',
             ),
+            row('Nutrition targets','Calculated targets and food preferences',Icons.restaurant_outlined,LockoutShape.clamShell,NvTone.secondary,'nutrition'),
             row(
               'Training preferences',
               'Days per week and activity level',

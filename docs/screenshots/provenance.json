@@ -114,6 +114,51 @@
         1080,
         2337
       ]
+    },
+    {
+      "file": "onboarding.png",
+      "source": ".impeccable/review/final/onboarding-signed-release-fresh.png",
+      "sourceSize": [
+        1080,
+        2400
+      ],
+      "cropBox": [
+        0,
+        128,
+        1080,
+        2337
+      ],
+      "version": "1.4.0+7"
+    },
+    {
+      "file": "measurements.png",
+      "source": ".impeccable/review/final/onboarding-early-measurements.png",
+      "sourceSize": [
+        1080,
+        2400
+      ],
+      "cropBox": [
+        0,
+        128,
+        1080,
+        2337
+      ],
+      "version": "pre-release implementation device pass"
+    },
+    {
+      "file": "profile-review.png",
+      "source": ".impeccable/review/final/onboarding-early-review.png",
+      "sourceSize": [
+        1080,
+        2400
+      ],
+      "cropBox": [
+        0,
+        128,
+        1080,
+        2337
+      ],
+      "version": "pre-release implementation device pass"
     }
   ]
 }

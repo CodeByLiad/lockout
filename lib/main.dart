@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'screens/main_screen.dart';
+import 'screens/profile_setup_screen.dart';
 import 'services/display_units.dart';
 import 'services/notification_service.dart';
 import 'theme/theme_controller.dart';
@@ -87,7 +88,7 @@ class LockoutApp extends StatelessWidget {
         themeMode: ThemeController.instance.themeMode,
         home: StartupNotice(
           appearanceUnreadable: appearanceUnreadable,
-          child: MainScreen(),
+          child: ProfileGate(child: MainScreen()),
         ),
       ),
     );

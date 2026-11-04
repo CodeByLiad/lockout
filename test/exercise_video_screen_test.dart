@@ -30,6 +30,100 @@ void main() {
   }
 
   group('ExerciseVideoScreen', () {
+    testWidgets(
+      'external fallback opens the pinned URL only after the user taps',
+      (tester) async {
+        Uri? opened;
+        const pinned = 'https://youtu.be/example?t=30#details';
+        await pump(
+          tester,
+          ExerciseVideoScreen(
+            exerciseName: 'Bench',
+            videoUrl: pinned,
+            externalLauncher: (uri) async {
+              opened = uri;
+              return true;
+            },
+          ),
+        );
+        fakePlatform.lastController.navigationDelegate!.onWebResourceError!(
+          const WebResourceError(
+            errorCode: -2,
+            description: 'page error',
+            isForMainFrame: true,
+          ),
+        );
+        await tester.pump();
+        expect(opened, isNull);
+        await tester.tap(find.text('Open in YouTube'));
+        await tester.pump();
+        expect(opened?.toString(), pinned);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets('a failed external launch leaves a useful recovery state', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        ExerciseVideoScreen(
+          exerciseName: 'Bench',
+          externalLauncher: (_) async => false,
+        ),
+      );
+      fakePlatform.lastController.navigationDelegate!.onWebResourceError!(
+        const WebResourceError(
+          errorCode: -2,
+          description: 'page error',
+          isForMainFrame: true,
+        ),
+      );
+      await tester.pump();
+      await tester.tap(find.text('Open in YouTube'));
+      await tester.pump();
+      expect(
+        find.text('Could not open the video link. Try again.'),
+        findsOneWidget,
+      );
+      expect(find.text('Try again'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a failed subresource does not hide a usable video page', (
+      tester,
+    ) async {
+      await pump(tester, ExerciseVideoScreen(exerciseName: 'Bench Press'));
+      fakePlatform.lastController.navigationDelegate!.onWebResourceError!(
+        const WebResourceError(
+          errorCode: -2,
+          description: 'blocked page asset',
+          isForMainFrame: false,
+        ),
+      );
+      await tester.pump();
+      expect(find.byType(WebViewWidget), findsOneWidget);
+      expect(find.text('Video unavailable'), findsNothing);
+    });
+
+    testWidgets(
+      'a main-page failure offers YouTube without claiming Wi-Fi is off',
+      (tester) async {
+        await pump(tester, ExerciseVideoScreen(exerciseName: 'Bench Press'));
+        fakePlatform.lastController.navigationDelegate!.onWebResourceError!(
+          const WebResourceError(
+            errorCode: -2,
+            description: 'page could not load',
+            isForMainFrame: true,
+          ),
+        );
+        await tester.pump();
+        expect(find.text('Video unavailable'), findsOneWidget);
+        expect(find.text('Open in YouTube'), findsOneWidget);
+        expect(find.byIcon(Icons.wifi_off_rounded), findsNothing);
+      },
+    );
+
     // Finding 1. This is the test that turns the crash into evidence: run
     // it against the pre-fix `initState` (with `setBackgroundColor` back in
     // the cascade, ahead of `super.initState()` completing) and it fails
@@ -111,7 +205,11 @@ void main() {
         expect(find.byType(WebViewWidget), findsOneWidget);
 
         fakePlatform.lastController.navigationDelegate!.onWebResourceError!(
-          const WebResourceError(errorCode: -2, description: 'no connection'),
+          const WebResourceError(
+            errorCode: -2,
+            description: 'no connection',
+            isForMainFrame: true,
+          ),
         );
         await tester.pump();
 
@@ -152,7 +250,11 @@ void main() {
       await pump(tester, ExerciseVideoScreen(exerciseName: 'Squat'));
 
       fakePlatform.lastController.navigationDelegate!.onWebResourceError!(
-        const WebResourceError(errorCode: -2, description: 'no connection'),
+        const WebResourceError(
+          errorCode: -2,
+          description: 'no connection',
+          isForMainFrame: true,
+        ),
       );
       await tester.pump();
       expect(find.text('Video unavailable'), findsOneWidget);
