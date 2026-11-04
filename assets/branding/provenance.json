@@ -1,0 +1,39 @@
+{
+  "approvedConcept": "docs/design/icon-preview/concept-03.png, center: The last rep",
+  "approval": "2026-11-04: I like the last rep one. so use that",
+  "method": "Deterministic native vector reconstruction and resolution exports; no new generated logo variant.",
+  "generator": "tools/generate_brand_assets.py",
+  "prompt": "User-approved The last rep from docs/design/icon-preview/concept-03.png: upward-angled dumbbell with chunky rounded plates; production reconstruction as flat vector geometry.",
+  "sizes": [
+    16,
+    24,
+    32,
+    48,
+    64,
+    72,
+    96,
+    108,
+    128,
+    144,
+    162,
+    192,
+    216,
+    256,
+    324,
+    384,
+    432,
+    512,
+    1024
+  ],
+  "types": [
+    "square",
+    "rounded-square",
+    "round",
+    "foreground",
+    "monochrome"
+  ],
+  "colors": {
+    "ink": "#1F2E00",
+    "lime": "#C2EE7B"
+  }
+}

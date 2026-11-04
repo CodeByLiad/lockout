@@ -1,0 +1,6 @@
+# Copy to key.properties (ignored by Git), then fill from your private signing backup.
+# Never commit real passwords or keystores. Paths may use forward slashes on Windows.
+storeFile=
+storePassword=
+keyAlias=lockout-release
+keyPassword=

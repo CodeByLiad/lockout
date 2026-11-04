@@ -1,5 +1,9 @@
 # Whole-app overhaul verification
 
+Historical UI-candidate checkpoint. The published icon/signing release is
+documented in [v1.3.1 verification](release-v1.3.1.md), with its final artifact
+identity and 940-test result. Original UI-review evidence below is preserved.
+
 Date: 2026-11-04. Branch: `fix/workout-tab-dead-ends`. Changes remain uncommitted.
 
 ## Delivered scope
@@ -90,4 +94,5 @@ documents rather than shipped raster assets. The asset provenance scan found
 zero new rasters requiring prompts. `DESIGN.md` and `.impeccable/design.json`
 record the actual native design system.
 
-No commit, push, PR or release publication was performed.
+At this UI-candidate checkpoint, no commit, push, PR or release publication had
+been performed. The user subsequently authorized source push and publication.

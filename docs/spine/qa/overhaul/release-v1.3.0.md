@@ -1,5 +1,8 @@
 # v1.3.0 release verification
 
+Superseded draft candidate; never published. The user then approved a new icon
+and requested a permanent signing key. See [v1.3.1 verification](release-v1.3.1.md).
+
 Date: 2026-11-04. User explicitly requested a source push to
 `https://github.com/CodeByLiad/lockout.git`, a GitHub release with the APK, and a
 README with real app screenshots cropped to remove Android's system bars.

@@ -439,7 +439,7 @@
         ".impeccable/review/finish-confirmation.md"
       ],
       "disposition": "Ship within the reviewed scope. All seven original findings are closed.",
-      "qaReport": "docs/spine/qa/overhaul/verification.md",
+      "qaReport": "docs/spine/qa/overhaul/release-v1.3.1.md",
       "screenshots": ".impeccable/review/ (first round); .impeccable/review/final/ (fresh confirmation captures)",
       "sourceCorrectionsRecorded": [
         "Adaptive NvButton labels",
@@ -455,25 +455,27 @@
       ],
       "serialSuite": {
         "status": "Complete final serial suite passed.",
-        "passed": 937,
-        "log": ".spine/overhaul-final-tests.log",
+        "passed": 940,
+        "log": ".spine/release-v1.3.1-tests.log",
         "latestTargetedTestsPassed": 3
       },
       "analysis": {
         "warnings": 0,
         "errors": 0,
         "preExistingTestInfoNotices": 2,
-        "log": ".spine/overhaul-final-analysis.log"
+        "log": ".spine/release-v1.3.1-analysis.log"
       },
       "releaseArtifact": {
         "built": true,
-        "bytes": 57051572,
-        "sha256": "5BE97C81CCC79971CF07EB96744AB63AE0DA98BC3418B353969FB8DB33DE22DD",
-        "installation": "Installed with replacement successfully on lockout_qa after emulator cold boot; existing data preserved.",
-        "package": "com.jinatra.lockout"
+        "bytes": 57066084,
+        "sha256": "9C84D39AB6CDD87D7583703D843EAA5BCFD6B69D64A94776600708E4CE77A4BF",
+        "installation": "Installed and launched on an isolated read-only API 36 emulator replica; original QA disk/data preserved.",
+        "package": "com.jinatra.lockout",
+        "version": "1.3.1+6",
+        "certificateSha256": "5580479C76233D86FD10A50B557F3585127A16C0AF807CF7E2622420F3858C24"
       },
       "runtime": {
-        "log": ".spine/overhaul-final-runtime.log",
+        "log": ".spine/release-v1.3.1-runtime.log",
         "observed": "Captured log contains Flutter engine initialization and no exceptions."
       },
       "confirmedNativeCaptures": [
@@ -493,6 +495,19 @@
         "Artifact installation/hash provenance and unchanged-screen confirmation supplied by root; the final reviewer performed a bounded chart finding check.",
         "This documentation task ran no tests or builds."
       ]
+    },
+    "androidBranding": {
+      "name": "The last rep",
+      "approval": "2026-11-04: I like the last rep one. so use that",
+      "master": "assets/branding/lockout-square.svg",
+      "generator": "tools/generate_brand_assets.py",
+      "exports": "95 PNGs and five SVG variants; legacy, adaptive, round and Android 13 monochrome launcher resources.",
+      "colors": {
+        "lime": "#C2EE7B",
+        "ink": "#1F2E00"
+      },
+      "scope": "Fixed launcher identity. In-app generated accent schemes remain unchanged.",
+      "signing": "Permanent key outside Git. See docs/releasing.md; private backup is not a public asset."
     }
   },
   "components": [

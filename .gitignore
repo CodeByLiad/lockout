@@ -47,6 +47,10 @@ app.*.map.json
 # Release artifacts — distributed via GitHub Releases, not committed
 *.apk
 *.aab
+*.keystore
+*.jks
+*.p12
+android/key.properties
 /android/build/
 /android/.gradle/
 

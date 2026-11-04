@@ -1,5 +1,7 @@
 # Lockout
 
+<img src="assets/branding/exports/rounded-square/192.png" width="96" alt="Lockout's angled dumbbell app icon">
+
 An offline strength training tracker for Android, rebuilt with Material 3 Expressive.
 
 Plan your training, log sets, track food and follow your progress. Your routines,
@@ -23,7 +25,11 @@ QA profile. These are screenshots, not generated design concepts.
 |:---:|:---:|:---:|:---:|
 | <img src="docs/screenshots/progress.png" width="240" alt="Weekly workout chart with all seven days"> | <img src="docs/screenshots/appearance.png" width="240" alt="Appearance with a live component preview"> | <img src="docs/screenshots/today-dark.png" width="240" alt="Today in the dark generated scheme"> | <img src="docs/screenshots/training-dark.png" width="240" alt="Training in the dark generated scheme"> |
 
-## What's new in v1.3.0
+## What's new in v1.3.1
+
+**v1.3.1** adds the user-approved **The last rep** dumbbell icon, including round,
+square, adaptive and monochrome formats, and permanent release signing for
+future updates. [Logo assets](assets/branding) include vector masters and PNG exports.
 
 - A whole-app Expressive rebuild: Today, Training, Progress and optional Food destinations, with focused settings and editors.
 - Seed-generated color throughout. Choose light, dark or system brightness, one of five accents, and a tonal, vibrant or expressive scheme style.
@@ -97,9 +103,9 @@ internet access. Backups leave the app only when you export/share them.
 
 ### Updating an existing installation
 
-Recent locally distributed builds can update in place. The published v1.1.0 APK
-uses a different signing certificate from this build, so Android will reject an
-in-place update from that release. **Do not uninstall before exporting a backup.**
+v1.3.1 starts the permanent release-signing identity. Older published and local
+debug-signed builds use different certificates, so Android will reject an
+in-place update from those builds. **Do not uninstall before exporting a backup.**
 Keep the exported JSON outside the app and confirm the file exists before
 removing the old installation. Uninstalling removes its local data. Install the
 new APK, then import your backup. A fresh installation needs no migration.
@@ -111,12 +117,19 @@ Validated with Flutter 3.47.2 / Dart 3.13.2 and the Android SDK.
 ```sh
 flutter pub get
 flutter run
+flutter build apk --debug
+# Configure private signing first; see docs/releasing.md
 flutter build apk --release
 ```
 
 The APK is written to `build/app/outputs/flutter-apk/app-release.apk`.
 Prebuilt APKs are attached to [GitHub releases](https://github.com/CodeByLiad/lockout/releases).
 This project's Windows setup uses `C:\src\flutter\bin\flutter.bat` by absolute path.
+Release builds require private signing configuration and fail if it is missing;
+they never silently use a debug key locally. The existing GitHub Actions
+workflow produces disposable debug-signed test APKs without private keys;
+those artifacts cannot update official releases. Official release APKs use
+the permanent signing key.
 
 ## Tests and verification
 
@@ -127,7 +140,7 @@ flutter test --concurrency=1
 flutter analyze
 ```
 
-The overhaul passed **937 tests**, including backup round trips, migrations,
+The release passed **940 tests**, including launcher masks, backup round trips, migrations,
 storage, units, theme persistence, contrast, navigation and new screen flows.
 Analysis has no errors or warnings; two pre-existing test information notices
 remain. Release-version checks also run before publication.
@@ -135,7 +148,8 @@ remain. Release-version checks also run before publication.
 Native emulator checks cover representative light/dark flows, keyboards and
 360dp width with enlarged text. All seven independent finish-review findings
 were resolved. This does not certify every state on every device or a TalkBack
-listening session. See the [verification record](docs/spine/qa/overhaul/verification.md).
+listening session. See the [release verification](docs/spine/qa/overhaul/release-v1.3.1.md)
+and [UI verification record](docs/spine/qa/overhaul/verification.md).
 
 ## Architecture
 

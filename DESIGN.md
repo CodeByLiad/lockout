@@ -216,7 +216,7 @@ Authority: `PRODUCT.md`, `AGENTS.md`, `CODEX_HANDOVER.md`, the unchanged `docs/d
 
 This extraction includes the source and Today recovery corrections verified on 2026-11-04, plus the final chart-width and finish-review snapshot fixes. First-round emulator evidence lives in `.impeccable/review/`; native confirmation captures live in `.impeccable/review/final/`. Confirmation covers named styles/live preview, the actual schedule strip, range-specific charts, filled workout inputs with one Add exercise action, singular finish/saved copy, and the inspected 360dp large-text phone and measurement-keyboard views. The final independent verdict is **Ship within the reviewed scope. All seven original findings are closed.** The current disposition is recorded in `.impeccable/review/finish-final-disposition.md`; `finish-review.md` and `finish-confirmation.md` retain historical findings and evidence. The final chart captures show all seven weekdays at 411dp and reveal the enlarged weekend labels with horizontal drag at 360dp/1.5x. Display settings were restored after the pass.
 
-Functional verification: the complete final serial suite passed all 937 tests (`.spine/overhaul-final-tests.log`). Final analysis reports only two pre-existing test information notices, with no warnings or errors (`.spine/overhaul-final-analysis.log`). The final release APK was built (57,051,572 bytes; SHA-256 `5BE97C81CCC79971CF07EB96744AB63AE0DA98BC3418B353969FB8DB33DE22DD`) and installed with replacement on `lockout_qa` as `com.jinatra.lockout`, preserving emulator data. The captured runtime log contains engine initialization and no exceptions (`.spine/overhaul-final-runtime.log`). The consolidated record is `docs/spine/qa/overhaul/verification.md`.
+Functional verification: the final v1.3.1 serial suite passed all 940 tests (`.spine/release-v1.3.1-tests.log`). Analysis reports two pre-existing test information notices, zero warnings and zero errors. The final APK is 57,066,084 bytes, SHA-256 `9C84D39AB6CDD87D7583703D843EAA5BCFD6B69D64A94776600708E4CE77A4BF`. It uses the permanent release key and was installed and launched on an isolated read-only API 36 replica, preserving the original QA disk. Android displays the approved icon in its round adaptive mask. See `docs/spine/qa/overhaul/release-v1.3.1.md`; the earlier UI-candidate artifact identity remains historical in `verification.md`.
 
 The verdict covers the representative native API 36 emulator evidence reviewed. It does not certify every approved screen/state, physical hardware, tablet behavior, TalkBack listening, a measured contrast matrix or independent motion quality. Passing tests and seven closed findings do not expand that visual-review scope.
 
@@ -342,6 +342,20 @@ The finish review snapshots completion time when opened. Save persists the displ
 **The Truthful visualization Rule.** Show actual records for the selected period and describe missing data instead of inventing sample activity.
 
 Display units convert values at input and presentation boundaries; weights remain stored in kilograms. These native patterns preserve offline behavior and require no schema or dependency changes. Explicit Watch and About source-link actions are user-triggered external destinations, not permission to add background requests.
+
+## Android identity
+
+The user approved **The last rep**, the angled dumbbell in icon exploration 03,
+on 2026-11-04. A flat vector reconstruction uses Rep lime and dark ink. It is a
+fixed launcher identity; the user-selected accent still generates the in-app
+scheme. The master and five SVG/95 PNG variants live in `assets/branding`.
+Legacy density icons, round/adaptive launchers and the Android 13 monochrome
+layer share its geometry. The actual foreground passes the circular safe-zone
+test. `tools/generate_brand_assets.py` regenerates these assets and provenance.
+
+The private permanent signing key and recovery Markdown stay outside Git.
+`docs/releasing.md` documents fail-closed local official release signing; the
+unchanged CI workflow produces debug-signed test artifacts without the private key.
 
 ## Do's and Don'ts
 
