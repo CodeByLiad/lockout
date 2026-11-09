@@ -1,5 +1,13 @@
 # Lockout project instructions
 
+## Saturday-first reporting follow-up (2026-11-09)
+
+The user clarified their week starts Saturday and explicitly requested publishing
+the fix to GitHub. Progress uses Saturday–Friday, matching chart order and an
+explicit date range. Preserve stored dates/history and training schedules.
+Release v1.4.1+8 reuses the permanent signing key. See
+`docs/spine/qa/2026-11-09-saturday-progress-week.md` for validation.
+
 ## Current follow-up (2026-11-04)
 
 The user requests required first-launch profile onboarding after seeing height

@@ -1,5 +1,6 @@
 import '../widgets/house/nv_activity_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../services/display_units.dart';
 
 import '../models/models.dart';
@@ -19,10 +20,12 @@ enum ProgressSegment { weight, history }
 class ProgressTab extends StatefulWidget {
   final ProgressSegment initialSegment;
   final VoidCallback? onOpenSettings;
+  final DateTime Function()? clock;
   const ProgressTab({
     super.key,
     this.initialSegment = ProgressSegment.weight,
     this.onOpenSettings,
+    this.clock,
   });
   @override
   State<ProgressTab> createState() => ProgressTabState();
@@ -80,10 +83,12 @@ class ProgressTabState extends State<ProgressTab> {
         .whereType<DateTime>()
         .toList();
     if (_range == 'Week') {
-      const names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      const names = ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
       return {
         for (var i = 0; i < 7; i++)
-          names[i]: dates.where((d) => d.weekday == i + 1).length,
+          names[i]: dates
+              .where((d) => d.weekday == (start.weekday + i - 1) % 7 + 1)
+              .length,
       };
     }
     if (_range == 'Month') {
@@ -103,26 +108,36 @@ class ProgressTabState extends State<ProgressTab> {
     };
   }
 
+  String _weekLabel(DateTime start, DateTime end) {
+    final firstPattern = start.year != end.year
+        ? 'd MMM y'
+        : start.month != end.month
+        ? 'd MMM'
+        : 'd';
+    return 'This week · ${DateFormat(firstPattern).format(start)}–${DateFormat('d MMM y').format(end)}';
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!_loaded) return const Center(child: CircularProgressIndicator());
-    final today = DateTime.now();
+    final today = widget.clock?.call() ?? DateTime.now();
     final start = _range == 'Week'
         ? DateTime(
             today.year,
             today.month,
-            today.day,
-          ).subtract(Duration(days: today.weekday - 1))
+            today.day - (today.weekday - DateTime.saturday + 7) % 7,
+          )
         : _range == 'Month'
         ? DateTime(today.year, today.month, 1)
         : DateTime(1900);
-    final logs = _logs
-        .where(
-          (l) =>
-              l.status == 'completed' &&
-              !(DateTime.tryParse(l.dateStr) ?? DateTime(1900)).isBefore(start),
-        )
-        .toList();
+    final weekEnd = DateTime(start.year, start.month, start.day + 7);
+    final logs = _logs.where((l) {
+      final date = DateTime.tryParse(l.dateStr);
+      return l.status == 'completed' &&
+          date != null &&
+          !date.isBefore(start) &&
+          (_range != 'Week' || date.isBefore(weekEnd));
+    }).toList();
     final volume = logs.fold<double>(
       0,
       (sum, l) => sum + (l.totalVolumeKg.isFinite ? l.totalVolumeKg : 0),
@@ -166,6 +181,16 @@ class ProgressTabState extends State<ProgressTab> {
                 '${logs.length} ${logs.length == 1 ? 'workout' : 'workouts'}',
                 style: Theme.of(context).textTheme.displayMedium,
               ),
+              if (_range == 'Week') ...[
+                const SizedBox(height: 8),
+                Text(
+                  _weekLabel(
+                    start,
+                    DateTime(start.year, start.month, start.day + 6),
+                  ),
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ],
               const SizedBox(height: 20),
               NvActivityChart(
                 buckets: _activityBuckets(logs, start, today),
@@ -263,7 +288,10 @@ class ProgressTabState extends State<ProgressTab> {
               onTap: () async {
                 await Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (pageContext) => ProfileSetupScreen(editing:true,onCompleted:()=>Navigator.of(pageContext).pop()),
+                    builder: (pageContext) => ProfileSetupScreen(
+                      editing: true,
+                      onCompleted: () => Navigator.of(pageContext).pop(),
+                    ),
                   ),
                 );
                 if (mounted) await reload();

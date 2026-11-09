@@ -437,7 +437,7 @@
         "dataIntegrity": "Weekday gaps are recovery, not missing-routine setup. Presentation does not reset or rewrite plan data."
       },
       "training": "Real weekday strip or named rotating cycle; planned is distinct from completed.",
-      "activityChart": "Actual sessions aggregated for selected Week / Month / All time; zero-data message. Width is max(available width, bucket count * textScaler.scale(12) * 3): week fits an ordinary phone; enlarged labels or more buckets may scroll horizontally.",
+      "activityChart": "Actual sessions aggregated for selected Week / Month / All time; zero-data message. Progress Week runs Saturday through Friday, orders buckets Sat/Sun/Mon/Tue/Wed/Thu/Fri, and shows the exact date range below its count. Exclude dates outside that Saturday-to-next-Saturday interval without changing stored dates or training schedules. Width is max(available width, bucket count * textScaler.scale(12) * 3): week fits an ordinary phone; enlarged labels or more buckets may scroll horizontally.",
       "finishReview": "Opening review snapshots completion time. Save persists the displayed duration and completion date despite waiting or crossing midnight. Keep training continues the session; reopening review takes a fresh snapshot.",
       "measurements": "Actual finite values; trend requires at least two measurements.",
       "units": "Convert input/display values; preserve kilogram storage.",

@@ -15,7 +15,9 @@ No account, ads, analytics or server.
 
 Real captures from the Android app. Android's status and system navigation bars
 are cropped out; the app's own navigation remains. Data shown is from a local
-QA profile. These are screenshots, not generated design concepts.
+QA profile. These are screenshots, not generated design concepts. The gallery
+was captured in v1.3.1/v1.4.0; v1.4.1 changes Progress to Saturday-first weeks
+and adds the exact date range as described below.
 
 | Today | Training | Live workout | Food |
 |:---:|:---:|:---:|:---:|
@@ -28,6 +30,16 @@ QA profile. These are screenshots, not generated design concepts.
 | First-time setup | Measurements | Review |
 |:---:|:---:|:---:|
 | <img src="docs/screenshots/onboarding.png" width="240" alt="Required first-time profile setup with blank age"> | <img src="docs/screenshots/measurements.png" width="240" alt="Current weight and height entered together"> | <img src="docs/screenshots/profile-review.png" width="240" alt="Profile review with direct edit actions"> |
+
+## What's new in v1.4.1
+
+[Download v1.4.1](https://github.com/CodeByLiad/lockout/releases/tag/v1.4.1).
+
+Progress now counts weeks from **Saturday to Friday**, with the chart in the same
+order and the exact date range shown below the workout count. For example, a
+workout on Sunday 8 November is included in the week of 7–13 November. Saved
+workouts are preserved; this corrects the reporting boundary without rewriting
+history. Install over v1.4.0 without uninstalling or clearing data.
 
 ## What's new in v1.4.0
 
