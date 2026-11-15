@@ -10,6 +10,7 @@ import '../widgets/house/nv_feedback.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
 import '../services/numeric_guard.dart';
+import '../services/burn_service.dart';
 import '../services/goal_service.dart';
 
 class FoodTab extends StatefulWidget {
@@ -33,6 +34,8 @@ class FoodTabState extends State<FoodTab> {
 
   List<FoodEntry> _foodLogs = [];
   int _targetKcal = DatabaseService.defaultCalorieTarget;
+  double _burnedKcal = 0;
+  bool _countBurn = true;
   bool _isLoading = true;
   DateTime _date = DateTime.now();
   String? _loadError;
@@ -58,11 +61,16 @@ class FoodTabState extends State<FoodTab> {
     // value first, then the manual override, then the default" order lives
     // — so this can never disagree with what HOME shows for the same day.
     final snapshot = await GoalService.instance.snapshot();
+    final sessions = await db.getSessionLogsForDate(dateToday);
+    final burned = BurnService.totals(sessions, now: _date).todayKcal;
+    final countBurn = await BurnService.countsInBudget();
 
     if (!mounted || revision != _loadRevision) return;
     setState(() {
       _foodLogs = rows.map(FoodEntry.fromMap).toList();
       _targetKcal = snapshot.calorieTarget;
+      _burnedKcal = burned;
+      _countBurn = countBurn;
       _isLoading = false;
       _loadError = null;
     });
@@ -157,7 +165,15 @@ class FoodTabState extends State<FoodTab> {
     if (_isLoading) return const Center(child: CircularProgressIndicator());
     final theme = Theme.of(context);
     final date = DateFormat('EEE, d MMM').format(_date);
-    final remaining = _targetKcal - _totalKcal;
+    // Workout burn widens the day's budget (Cal AI / BitePal pattern) unless
+    // the user turned that off in Settings > Nutrition.
+    final budget = _countBurn ? _targetKcal + _burnedKcal.round() : _targetKcal;
+    final remaining = BurnService.remainingKcal(
+      target: _targetKcal,
+      eaten: _totalKcal,
+      burned: _burnedKcal,
+      countBurn: _countBurn,
+    )!;
     final allSlots = [
       ...mealSlots,
       if (_foodLogs.any((f) => !mealSlots.contains(f.mealSlot))) 'Other',
@@ -232,6 +248,13 @@ class FoodTabState extends State<FoodTab> {
                           'of $_targetKcal kcal',
                           style: theme.textTheme.titleMedium,
                         ),
+                        if (_burnedKcal > 0)
+                          Text(
+                            _countBurn
+                                ? '+ ${SessionLog.formatKcal(_burnedKcal)} burned'
+                                : '${SessionLog.formatKcal(_burnedKcal)} burned · not counted',
+                            style: theme.textTheme.bodyMedium,
+                          ),
                       ],
                     ),
                   ),
@@ -251,9 +274,9 @@ class FoodTabState extends State<FoodTab> {
               ),
               const SizedBox(height: 16),
               NvWavyProgress(
-                value: _targetKcal <= 0
+                value: budget <= 0
                     ? 0
-                    : (_totalKcal / _targetKcal).clamp(0.0, 1.0),
+                    : (_totalKcal / budget).clamp(0.0, 1.0),
               ),
             ],
           ),

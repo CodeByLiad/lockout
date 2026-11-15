@@ -4,6 +4,8 @@ import 'profile_setup_screen.dart';
 import '../services/display_units.dart';
 
 import '../services/backup_service.dart';
+import '../models/models.dart';
+import '../services/burn_service.dart';
 import '../services/database_service.dart';
 import '../services/goal_service.dart';
 import '../services/notification_service.dart';
@@ -102,6 +104,8 @@ class SettingsBodyState extends State<SettingsBody> {
   NutritionPlan? _plan;
 
   bool _foodTabEnabled = true;
+  bool _countBurn = true;
+  BurnTotals _burn = BurnTotals.empty;
   bool _remindersEnabled = false;
   bool _streakAlertsEnabled = true;
   TimeOfDay _reminderTime = const TimeOfDay(hour: 18, minute: 0);
@@ -245,6 +249,8 @@ class SettingsBodyState extends State<SettingsBody> {
 
     final goal = await GoalService.instance.loadProfile();
     final snap = await GoalService.instance.snapshot();
+    final countBurn = await BurnService.countsInBudget();
+    final burn = await BurnService.load();
 
     // Height comes from the profile, not a second raw read of the same row:
     // `GoalService.loadProfile` is where `height_cm` is clamped, and
@@ -280,6 +286,8 @@ class SettingsBodyState extends State<SettingsBody> {
         _heightUnit,
         u == 'ft' ? 'ft' : 'cm',
       );
+      _countBurn = countBurn;
+      _burn = burn;
       _remindersEnabled = rEnabled == 'true';
       _streakAlertsEnabled = sAlerts == 'true';
       _reminderTime = TimeOfDay(
@@ -855,6 +863,8 @@ class SettingsBodyState extends State<SettingsBody> {
                   _buildTrainingCard(context),
                 if (widget.section == null || widget.section == 'goals' || widget.section == 'nutrition')
                   _buildFoodCard(context),
+                if (widget.section == null || widget.section == 'nutrition')
+                  _buildBurnCard(context),
                 if (widget.section == null || widget.section == 'reminders')
                   _buildNotificationsCard(context),
                 if (widget.section == null || widget.section == 'data')
@@ -1500,6 +1510,72 @@ class SettingsBodyState extends State<SettingsBody> {
           label: 'Save food settings',
           onPressed: _saveFoodSettings,
         ),
+      ],
+    );
+  }
+
+  /// Workout burn: the running totals and whether it widens the food budget.
+  /// The switch saves on change — it is one independent preference, not part
+  /// of the food settings form below it.
+  Widget _buildBurnCard(BuildContext context) {
+    String kcal(double v) => v <= 0 ? '—' : SessionLog.formatKcal(v);
+    return _section(
+      context,
+      heading: 'Workout burn',
+      rows: [
+        NvSwitchRow(
+          title: 'Count workout burn in daily budget',
+          supporting: _countBurn
+              ? 'Finished workouts add their estimated burn to kcal left.'
+              : 'Burn is recorded but kcal left uses your target only.',
+          value: _countBurn,
+          onChanged: (v) async {
+            setState(() => _countBurn = v);
+            await BurnService.setCountsInBudget(v);
+            widget.onSettingsUpdated();
+          },
+        ),
+      ],
+      extras: [
+        Row(
+          children: [
+            Expanded(child: NvMetric(label: 'Today', value: kcal(_burn.todayKcal))),
+            const SizedBox(width: 12),
+            Expanded(
+              child: NvMetric(
+                label: 'This week',
+                value: kcal(_burn.weekKcal),
+                tone: NvTone.secondary,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: NvMetric(
+                label: 'All time',
+                value: kcal(_burn.allTimeKcal),
+                tone: NvTone.tertiary,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: NvMetric(
+                label: _burn.sessions == 1 ? 'Workout' : 'Workouts',
+                value: '${_burn.sessions}',
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Estimates from workout length, main muscle group and your latest '
+          'weight. Weeks run Saturday to Friday.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: LockoutTheme.sectionGap),
       ],
     );
   }

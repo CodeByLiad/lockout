@@ -31,6 +31,28 @@ and adds the exact date range as described below.
 |:---:|:---:|:---:|
 | <img src="docs/screenshots/onboarding.png" width="240" alt="Required first-time profile setup with blank age"> | <img src="docs/screenshots/measurements.png" width="240" alt="Current weight and height entered together"> | <img src="docs/screenshots/profile-review.png" width="240" alt="Profile review with direct edit actions"> |
 
+## What's new in v1.5.0
+
+[Download v1.5.0](https://github.com/CodeByLiad/lockout/releases/tag/v1.5.0).
+
+- **Workout burn now counts.** When you finish a workout, its estimated burn
+  appears on Today and Food, and it is added to your calories left for the day.
+  For example, a 2,000 kcal target with a ~300 kcal workout leaves 2,300 kcal to
+  eat. Turn this off in **Settings > Nutrition targets > Count workout burn in
+  daily budget** if you prefer a fixed target.
+- **Burn totals in Settings.** Nutrition targets shows burn today, this week
+  (Saturday to Friday), all time and the number of workouts counted.
+- **Correct the estimate.** The workout saved screen shows "Your workout burned"
+  with an edit button, so you can replace the estimate with a number from your
+  watch or another source.
+- **New routine builder.** Creating or opening a plan now lands on one page that
+  shows the whole week: every day with its exercises inline, sets adjustable
+  with − and +, and an estimated time and burn for each day and the week.
+  Day settings, warm-ups and exercise details open from the same page. The flow
+  follows the MyFitnessPal and Hevy builders studied on Mobbin.
+
+No schema change. Install over v1.4.1 without uninstalling or clearing data.
+
 ## What's new in v1.4.1
 
 [Download v1.4.1](https://github.com/CodeByLiad/lockout/releases/tag/v1.4.1).
@@ -166,7 +188,7 @@ flutter test --concurrency=1
 flutter analyze
 ```
 
-The release passed **940 tests**, including launcher masks, backup round trips, migrations,
+The release passed **995 tests**, including launcher masks, backup round trips, migrations,
 storage, units, theme persistence, contrast, navigation and new screen flows.
 Analysis has no errors or warnings; two pre-existing test information notices
 remain. Release-version checks also run before publication.

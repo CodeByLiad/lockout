@@ -7,6 +7,7 @@ import '../theme/lockout_shapes.dart';
 import '../theme/lockout_semantics.dart';
 import '../theme/lockout_theme.dart';
 import '../models/models.dart';
+import '../services/burn_service.dart';
 import '../services/database_service.dart';
 import '../services/energy_estimator.dart';
 import '../services/goal_service.dart';
@@ -232,6 +233,8 @@ class TodayTabState extends State<TodayTab> {
   bool _restSheetOpen = false;
   bool _isLoading = true;
 
+  /// Settings > Nutrition: whether workout burn widens today's food budget.
+  bool _countBurn = true;
   _TodaySummary _summary = const _TodaySummary(
     kcalEaten: 0,
     kcalTarget: null,
@@ -343,6 +346,7 @@ class TodayTabState extends State<TodayTab> {
     // A session that *was* logged but couldn't be estimated (no bodyweight
     // on record) sums to 0.0, which is a real, different state: the row
     // must not claim there was no session at all. See `HomeHub._burnValue`.
+    final countBurn = await BurnService.countsInBudget();
     final burnedToday = sessionRows.isEmpty
         ? null
         : sessionRows.fold<double>(
@@ -352,6 +356,7 @@ class TodayTabState extends State<TodayTab> {
 
     if (!mounted) return;
     setState(() {
+      _countBurn = countBurn;
       _recentSessions = recentRows
           .map(SessionLog.fromMap)
           .where((s) => s.status == 'completed')
@@ -756,6 +761,12 @@ class TodayTabState extends State<TodayTab> {
               ),
             ),
             const SizedBox(height: 16),
+            _SavedBurnCard(
+              sessionId: session.id,
+              initialKcal: session.kcalBurned,
+              onChanged: _loadSummary,
+            ),
+            const SizedBox(height: 16),
             NvSurface(
               child: NvWeekStrip(
                 dates: _recentSessions.map((s) => s.dateStr).toSet(),
@@ -906,9 +917,14 @@ class TodayTabState extends State<TodayTab> {
       'November',
       'December',
     ][now.month - 1];
-    final kcalLeft = _summary.kcalTarget == null
-        ? null
-        : _summary.kcalTarget! - _summary.kcalEaten;
+    final burnedToday = _summary.burnedTodayKcal ?? 0;
+    final kcalLeft = BurnService.remainingKcal(
+      target: _summary.kcalTarget,
+      eaten: _summary.kcalEaten,
+      burned: burnedToday,
+      countBurn: _countBurn,
+    );
+    final burnLabel = SessionLog.formatKcal(burnedToday);
     return NvPage(
       title: 'Today',
       subtitle: '$day, ${now.day} $month',
@@ -1023,7 +1039,10 @@ class TodayTabState extends State<TodayTab> {
                     title: 'Log food',
                     subtitle: kcalLeft == null
                         ? 'Add your first meal'
-                        : '${kcalLeft < 0 ? 0 : kcalLeft} kcal left',
+                        : burnLabel.isEmpty
+                        ? '${kcalLeft < 0 ? 0 : kcalLeft} kcal left'
+                        : '${kcalLeft < 0 ? 0 : kcalLeft} kcal left · '
+                              '$burnLabel burned',
                     icon: Icons.restaurant_rounded,
                     shape: LockoutShape.bun,
                     tone: NvTone.secondary,
@@ -1061,7 +1080,10 @@ class TodayTabState extends State<TodayTab> {
           NvListItem(
             leading: const NvIconBadge(icon: Icons.fitness_center_rounded),
             title: _recentSessions.first.dayName,
-            supporting: _recentSessions.first.dateStr,
+            supporting: _recentSessions.first.kcalLabel.isEmpty
+                ? _recentSessions.first.dateStr
+                : '${_recentSessions.first.dateStr} · '
+                      '${_recentSessions.first.kcalLabel} burned',
             trailing: const Icon(Icons.chevron_right_rounded),
             onTap: () => widget.onNavigate?.call(
               'progress',
@@ -1675,6 +1697,118 @@ class _SessionStat extends StatelessWidget {
           style: LockoutTheme.numeric(context, size: 20),
         ),
       ],
+    );
+  }
+}
+
+
+/// "Your workout burned ~N kcal" with a way to correct it, after the Cal AI
+/// burned-calories screen. The estimate is only as good as its inputs, so the
+/// user can overwrite it; the correction is stored on this session alone.
+class _SavedBurnCard extends StatefulWidget {
+  final String sessionId;
+  final double initialKcal;
+  final Future<void> Function() onChanged;
+
+  const _SavedBurnCard({
+    required this.sessionId,
+    required this.initialKcal,
+    required this.onChanged,
+  });
+
+  @override
+  State<_SavedBurnCard> createState() => _SavedBurnCardState();
+}
+
+class _SavedBurnCardState extends State<_SavedBurnCard> {
+  late double _kcal = widget.initialKcal;
+
+  Future<void> _edit() async {
+    final ctrl = TextEditingController(
+      text: _kcal > 0 ? _kcal.round().toString() : '',
+    );
+    final value = await showNvSheet<double>(
+      context: context,
+      title: 'Workout burn',
+      child: Builder(
+        builder: (sheetCtx) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            NvField(
+              label: 'Calories burned (kcal)',
+              controller: ctrl,
+              keyboardType: TextInputType.number,
+              autofocus: true,
+            ),
+            const SizedBox(height: 16),
+            NvButton(
+              key: const ValueKey('save-burn'),
+              variant: NvButtonVariant.filled,
+              label: 'Save burn',
+              onPressed: () {
+                final parsed = NumericGuard.parse(ctrl.text, min: 0);
+                if (parsed == null || parsed > 5000) {
+                  showNvSnackbar(
+                    context: sheetCtx,
+                    message: 'Enter a number from 0 to 5000.',
+                  );
+                  return;
+                }
+                Navigator.of(sheetCtx).pop(parsed);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+    if (value == null || !mounted) return;
+    try {
+      await DatabaseService.instance.updateSessionBurn(widget.sessionId, value);
+    } catch (_) {
+      if (mounted) {
+        showNvSnackbar(context: context, message: 'Burn not saved. Try again.');
+      }
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _kcal = value);
+    await widget.onChanged();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final label = SessionLog.formatKcal(_kcal);
+    return NvSurface(
+      tone: NvTone.tertiary,
+      child: Row(
+        children: [
+          const NvIconBadge(
+            icon: Icons.local_fire_department_rounded,
+            shape: LockoutShape.verySunny,
+            tone: NvTone.surface,
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Your workout burned', style: theme.textTheme.titleMedium),
+                Text(
+                  label.isEmpty ? 'No estimate yet' : label,
+                  style: theme.textTheme.headlineMedium,
+                ),
+              ],
+            ),
+          ),
+          NvShapeButton(
+            key: const ValueKey('edit-burn'),
+            icon: Icons.edit_outlined,
+            label: 'Edit burn',
+            onPressed: _edit,
+          ),
+        ],
+      ),
     );
   }
 }

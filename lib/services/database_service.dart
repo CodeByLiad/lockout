@@ -617,6 +617,17 @@ class DatabaseService {
   /// backgrounded — left a header claiming `totalSets: N` with nothing
   /// behind it, the exact state the delete and restore transactions exist
   /// to prevent.
+  /// Corrects the estimated burn of one saved session. Only that row changes.
+  Future<void> updateSessionBurn(String id, double kcal) async {
+    final db = await instance.database;
+    await db.update(
+      'session_logs',
+      {'kcal_burned': kcal < 0 ? 0.0 : kcal},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
   Future<void> insertSessionWithSets(
     Map<String, dynamic> sessionRow,
     List<Map<String, dynamic>> setRows,

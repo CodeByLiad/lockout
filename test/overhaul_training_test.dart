@@ -24,6 +24,8 @@ void main() {
         createdAt: '2026-11-03',
       ).toMap(),
     );
+    await tester.binding.setSurfaceSize(const Size(600, 2400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       MaterialApp(theme: lockoutTestTheme(), home: RoutinesTab()),
     );
@@ -50,6 +52,8 @@ void main() {
     expect(tester.takeException(), isNull);
   });
   testWidgets('blank custom routine explains the missing name', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(600, 2400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       MaterialApp(theme: lockoutTestTheme(), home: RoutinesTab()),
     );
@@ -84,6 +88,8 @@ void main() {
         orderIndex: 0,
       ).toMap(),
     );
+    await tester.binding.setSurfaceSize(const Size(600, 2400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       MaterialApp(theme: lockoutTestTheme(), home: RoutinesTab()),
     );

@@ -4,7 +4,9 @@ import '../services/display_units.dart';
 import '../data/exercise_library.dart';
 import '../data/routine_templates.dart';
 import '../models/models.dart';
+import '../services/burn_service.dart';
 import '../services/database_service.dart';
+import '../services/goal_service.dart';
 import '../services/numeric_guard.dart';
 import '../services/routine_factory.dart';
 import '../services/schedule_service.dart';
@@ -142,12 +144,16 @@ class RoutinesTabState extends State<RoutinesTab> {
   /// than hoisting, is what keeps typed state alive across a non-dismissing
   /// drag without also reintroducing a use-after-dispose).
   Future<void> _openCreateRoutineSheet() async {
-    final saved = await showNvEditor<bool>(
+    final routineId = await showNvEditor<String>(
       context: context,
       title: 'Create routine',
       builder: (ctx) => _CreateRoutineForm(),
     );
-    if (saved == true && mounted) await reload();
+    if (routineId == null || !mounted) return;
+    await reload();
+    final created = _routines.where((r) => r.id == routineId).firstOrNull;
+    // Straight into the builder: a new routine is only a starting point.
+    if (created != null && mounted) await _openRoutine(created);
   }
 
   // --- ADD / EDIT TRAINING DAY ---
@@ -496,112 +502,407 @@ class RoutinesTabState extends State<RoutinesTab> {
     );
   }
 
+  /// The routine builder, after the MyFitnessPal and Hevy builders on
+  /// Mobbin: one page shows the whole week, every day's exercises inline,
+  /// sets adjustable in place and a live time and burn estimate. Day settings,
+  /// warm-ups and exercise details still open their own forms from here.
   Future<void> _openRoutine(Routine routine) async {
-    await showNvEditor<void>(
-      context: context,
+    final snapshot = await GoalService.instance.snapshot();
+    final bodyweightKg = snapshot.currentWeightKg;
+    if (!mounted) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (ctx) => StatefulBuilder(
+          builder: (ctx, update) {
+            Future<void> refresh() async {
+              await reload();
+              if (ctx.mounted) update(() {});
+            }
+
+            final current =
+                _routines.where((r) => r.id == routine.id).firstOrNull ??
+                routine;
+            return _buildRoutineBuilder(ctx, current, bodyweightKg, refresh);
+          },
+        ),
+      ),
+    );
+  }
+
+  String _minutes(int seconds) => '~${(seconds / 60).round()} min';
+
+  Widget _buildRoutineBuilder(
+    BuildContext ctx,
+    Routine routine,
+    double? bodyweightKg,
+    Future<void> Function() refresh,
+  ) {
+    final theme = Theme.of(ctx);
+    final days = _routineDays[routine.id] ?? [];
+    final training = days.where((d) => !d.isRestDay).toList();
+    final weekExercises = [
+      for (final d in training) ...(_dayExercises[d.id] ?? <ExerciseDef>[]),
+    ];
+    final weekSeconds = RoutineEstimate.seconds(weekExercises);
+    var weekKcal = 0.0;
+    for (final d in training) {
+      weekKcal +=
+          RoutineEstimate.kcal(_dayExercises[d.id] ?? [], bodyweightKg) ?? 0;
+    }
+    final isActive = routine.id == _activeRoutineId;
+
+    return NvPage(
       title: routine.name,
-      builder: (ctx) => StatefulBuilder(
-        builder: (_, update) {
-          final days = _routineDays[routine.id] ?? [];
-          return Column(
+      subtitle: isActive ? 'Active plan' : 'Training plan',
+      back: true,
+      actions: [
+        NvShapeButton(
+          key: const ValueKey('rename-routine'),
+          icon: Icons.edit_outlined,
+          label: 'Rename routine',
+          shape: LockoutShape.puffy,
+          tone: NvTone.secondary,
+          onPressed: () async {
+            if (await _renameRoutine(routine) == true) await refresh();
+          },
+        ),
+      ],
+      footer: NvButton(
+        key: const ValueKey('routine-builder-done'),
+        variant: NvButtonVariant.filled,
+        label: 'Done',
+        large: true,
+        onPressed: () => Navigator.of(ctx).pop(),
+      ),
+      children: [
+        NvSurface(
+          tone: NvTone.primary,
+          radius: 36,
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              NvSurface(
-                tone: NvTone.primary,
-                child: Row(
-                  children: [
-                    const NvIconBadge(
-                      icon: Icons.fitness_center_rounded,
-                      shape: LockoutShape.flower,
-                      size: 64,
-                      tone: NvTone.surface,
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            routine.id == _activeRoutineId
-                                ? 'Active plan'
-                                : 'Training plan',
-                            style: Theme.of(ctx).textTheme.titleLarge,
-                          ),
-                          Text(
-                            '${days.length} ${days.length == 1 ? 'day' : 'days'} · ${routine.schedulingMode == SchedulingMode.weekday ? 'Weekly schedule' : 'Rotating cycle'}',
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const NvHeading('Your week'),
-              if (days.isEmpty)
-                const Text('No days yet. Add your first training or rest day.'),
-              NvGroupedList(
+              Row(
                 children: [
-                  for (var i = 0; i < days.length; i++)
-                    NvListItem(
-                      leading: NvIconBadge(
-                        icon: days[i].isRestDay
-                            ? Icons.bedtime_outlined
-                            : Icons.fitness_center_rounded,
-                        shape: LockoutShape.values[[11, 8, 14, 6, 9][i % 5]],
-                        tone: NvTone.values[i % 3],
-                      ),
-                      title: days[i].name,
-                      supporting:
-                          '${_dayLabel(days[i].tag)} · ${(_dayExercises[days[i].id] ?? []).length} exercises',
-                      trailing: const Icon(Icons.chevron_right_rounded),
-                      onTap: () async {
-                        await _openDaySheet(routine, days[i]);
-                        if (ctx.mounted) update(() {});
-                      },
+                  Expanded(
+                    child: Text(
+                      '${training.length} training '
+                      '${training.length == 1 ? 'day' : 'days'} · '
+                      '${weekExercises.length} '
+                      '${weekExercises.length == 1 ? 'exercise' : 'exercises'}',
+                      style: theme.textTheme.titleLarge,
                     ),
+                  ),
+                  const NvIconBadge(
+                    icon: Icons.fitness_center_rounded,
+                    shape: LockoutShape.flower,
+                    size: 64,
+                    tone: NvTone.surface,
+                  ),
                 ],
               ),
-              const SizedBox(height: 20),
-              NvButton(
-                variant: NvButtonVariant.filled,
-                label: 'Add day',
-                icon: Icons.add_rounded,
-                onPressed: () async {
-                  final changed = await _openDayFormSheet(routine.id);
-                  if (changed == true) {
-                    await reload();
-                    if (ctx.mounted) update(() {});
-                  }
-                },
-              ),
-              const SizedBox(height: 12),
-              if (routine.id != _activeRoutineId)
-                NvButton(
-                  variant: NvButtonVariant.tonal,
-                  label: 'Use this plan',
-                  onPressed: () async {
-                    await _setActive(routine);
-                    if (ctx.mounted) update(() {});
-                  },
-                ),
               const SizedBox(height: 16),
-              NvButton(
-                variant: NvButtonVariant.danger,
-                label: 'Delete routine',
+              Row(
+                children: [
+                  Expanded(
+                    child: NvMetric(
+                      label: 'Est. time / week',
+                      value: weekSeconds == 0 ? '—' : _minutes(weekSeconds),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: NvMetric(
+                      label: 'Est. burn / week',
+                      value: weekKcal <= 0
+                          ? '—'
+                          : SessionLog.formatKcal(weekKcal),
+                    ),
+                  ),
+                ],
+              ),
+              if (bodyweightKg == null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Log your weight to see burn estimates.',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ],
+            ],
+          ),
+        ),
+        const NvHeading('Scheduling'),
+        NvSegmentedButton<SchedulingMode>(
+          segments: const [
+            NvSegment(value: SchedulingMode.weekday, label: 'Weekdays'),
+            NvSegment(value: SchedulingMode.rotating, label: 'Rotating'),
+          ],
+          selected: routine.schedulingMode,
+          onChanged: (mode) async {
+            if (mode == routine.schedulingMode) return;
+            await DatabaseService.instance.insertRoutine(
+              Routine(
+                id: routine.id,
+                name: routine.name,
+                schedulingMode: mode,
+                createdAt: routine.createdAt,
+              ).toMap(),
+            );
+            await refresh();
+          },
+        ),
+        const NvHeading('Your week'),
+        if (days.isEmpty)
+          const Text('No days yet. Add your first training or rest day.'),
+        for (var i = 0; i < days.length; i++) ...[
+          _buildBuilderDay(ctx, routine, days[i], i, bodyweightKg, refresh),
+          const SizedBox(height: 12),
+        ],
+        const SizedBox(height: 8),
+        NvButton(
+          variant: NvButtonVariant.tonal,
+          label: 'Add day',
+          icon: Icons.add_rounded,
+          onPressed: () async {
+            if (await _openDayFormSheet(routine.id) == true) await refresh();
+          },
+        ),
+        const SizedBox(height: 12),
+        if (!isActive)
+          NvButton(
+            variant: NvButtonVariant.tonal,
+            label: 'Use this plan',
+            onPressed: () async {
+              await _setActive(routine);
+              await refresh();
+            },
+          ),
+        const SizedBox(height: 16),
+        NvButton(
+          variant: NvButtonVariant.danger,
+          label: 'Delete routine',
+          onPressed: () async {
+            await _confirmDeleteRoutine(routine);
+            await reload();
+            if (ctx.mounted && !_routines.any((r) => r.id == routine.id)) {
+              Navigator.of(ctx).pop();
+            }
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBuilderDay(
+    BuildContext ctx,
+    Routine routine,
+    TrainingDay day,
+    int index,
+    double? bodyweightKg,
+    Future<void> Function() refresh,
+  ) {
+    final theme = Theme.of(ctx);
+    final exercises = _dayExercises[day.id] ?? [];
+    final seconds = RoutineEstimate.seconds(exercises);
+    final kcal = RoutineEstimate.kcal(exercises, bodyweightKg);
+    final when = routine.schedulingMode == SchedulingMode.weekday
+        ? _dayLabel(day.tag)
+        : 'Day ${index + 1}';
+    final facts = day.isRestDay
+        ? '$when · Rest day'
+        : [
+            when,
+            '${exercises.length} '
+                '${exercises.length == 1 ? 'exercise' : 'exercises'}',
+            if (seconds > 0) _minutes(seconds),
+            if (kcal != null) SessionLog.formatKcal(kcal),
+          ].join(' · ');
+
+    return NvSurface(
+      key: ValueKey('builder-day-${day.id}'),
+      tone: NvTone.values[index % 3],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              NvIconBadge(
+                icon: day.isRestDay
+                    ? Icons.bedtime_outlined
+                    : Icons.fitness_center_rounded,
+                shape: LockoutShape.values[[11, 8, 14, 6, 9][index % 5]],
+                tone: NvTone.surface,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () async {
+                    await _openDaySheet(routine, day);
+                    await refresh();
+                  },
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(day.name, style: theme.textTheme.titleLarge),
+                      Text(facts, style: theme.textTheme.bodyMedium),
+                    ],
+                  ),
+                ),
+              ),
+              NvShapeButton(
+                key: ValueKey('day-settings-${day.id}'),
+                icon: Icons.tune_rounded,
+                label: 'Day settings',
+                shape: LockoutShape.gem,
+                tone: NvTone.surface,
                 onPressed: () async {
-                  await _confirmDeleteRoutine(routine);
-                  await reload();
-                  if (ctx.mounted &&
-                      !_routines.any((r) => r.id == routine.id)) {
-                    Navigator.of(ctx).pop();
+                  if (await _openDayFormSheet(routine.id, existing: day) ==
+                      true) {
+                    await refresh();
                   }
                 },
               ),
             ],
-          );
-        },
+          ),
+          if (!day.isRestDay) ...[
+            const SizedBox(height: 12),
+            if (exercises.isEmpty)
+              Text('No exercises yet.', style: theme.textTheme.bodyMedium),
+            for (var j = 0; j < exercises.length; j++)
+              _buildBuilderExercise(ctx, exercises[j], refresh),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                NvButton(
+                  key: ValueKey('builder-add-exercise-${day.id}'),
+                  variant: NvButtonVariant.filled,
+                  label: 'Add exercises',
+                  icon: Icons.add_rounded,
+                  onPressed: () async {
+                    if (await _addExerciseToDay(day.id) == true) {
+                      await refresh();
+                    }
+                  },
+                ),
+                NvButton(
+                  variant: NvButtonVariant.text,
+                  label: 'Warm-up and details',
+                  onPressed: () async {
+                    await _openDaySheet(routine, day);
+                    await refresh();
+                  },
+                ),
+              ],
+            ),
+          ],
+        ],
       ),
     );
+  }
+
+  Widget _buildBuilderExercise(
+    BuildContext ctx,
+    ExerciseDef ex,
+    Future<void> Function() refresh,
+  ) {
+    final theme = Theme.of(ctx);
+    Future<void> setSets(int sets) async {
+      await DatabaseService.instance.insertExercise(
+        ex.copyWith(targetSets: sets).toMap(),
+      );
+      await refresh();
+    }
+
+    final reps = ex.targetRepsMin == ex.targetRepsMax
+        ? '${ex.targetRepsMin}'
+        : '${ex.targetRepsMin}–${ex.targetRepsMax}';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: NvSurface(
+        key: ValueKey('builder-exercise-${ex.id}'),
+        tone: NvTone.surface,
+        padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+        onPressed: () async {
+          if (await _openExerciseSheet(ex) == true) await refresh();
+        },
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(ex.name, style: theme.textTheme.titleMedium),
+                  Text(
+                    '${ex.targetSets} × $reps reps · rest ${ex.restDefaultS} s',
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                ],
+              ),
+            ),
+            NvShapeButton(
+              key: ValueKey('sets-minus-${ex.id}'),
+              icon: Icons.remove_rounded,
+              label: 'Fewer sets',
+              shape: LockoutShape.pill,
+              tone: NvTone.secondary,
+              onPressed: () {
+                if (ex.targetSets > 1) setSets(ex.targetSets - 1);
+              },
+            ),
+            const SizedBox(width: 4),
+            NvShapeButton(
+              key: ValueKey('sets-plus-${ex.id}'),
+              icon: Icons.add_rounded,
+              label: 'More sets',
+              shape: LockoutShape.pill,
+              tone: NvTone.primary,
+              onPressed: () {
+                if (ex.targetSets < 20) setSets(ex.targetSets + 1);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Renames in a short sheet; resolves true when the name changed.
+  Future<bool?> _renameRoutine(Routine routine) async {
+    final ctrl = TextEditingController(text: routine.name);
+    final name = await showNvSheet<String>(
+      context: context,
+      title: 'Rename routine',
+      child: Builder(
+        builder: (sheetCtx) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            NvField(label: 'Routine name', controller: ctrl, autofocus: true),
+            const SizedBox(height: 16),
+            NvButton(
+              variant: NvButtonVariant.filled,
+              label: 'Save name',
+              onPressed: () {
+                final value = ctrl.text.trim();
+                if (value.isEmpty) return;
+                Navigator.of(sheetCtx).pop(value);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+    if (name == null || name == routine.name) return false;
+    await DatabaseService.instance.insertRoutine(
+      Routine(
+        id: routine.id,
+        name: name,
+        schedulingMode: routine.schedulingMode,
+        createdAt: routine.createdAt,
+      ).toMap(),
+    );
+    return true;
   }
 
   String _dayLabel(String code) => code.isEmpty
@@ -924,12 +1225,12 @@ class _CreateRoutineFormState extends State<_CreateRoutineForm> {
                   }
                   setState(() => _saving = true);
                   try {
-                    await RoutineFactory.createFromTemplate(
+                    final id = await RoutineFactory.createFromTemplate(
                       name: name,
                       mode: _mode,
                       template: template,
                     );
-                    if (context.mounted) Navigator.pop(context, true);
+                    if (context.mounted) Navigator.pop(context, id);
                   } catch (_) {
                     if (context.mounted) {
                       setState(() => _saving = false);

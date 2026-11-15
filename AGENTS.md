@@ -142,3 +142,13 @@ These are decisions the user has made. Do not re-open them.
   No widgets without a consumer.
 
 ---
+
+## Burn tracking and routine builder (2026-11-15)
+
+User reported finished-workout burn not counted and not tracked in Settings, and
+disliked routine making; asked to use Mobbin and publish a release within 2h.
+Approved: burn adds to kcal left (switch count_burn_in_budget), burn totals and
+switch in Settings > Nutrition, editable burn on the saved-workout page,
+Hevy/MFP single-page routine builder. Spec:
+docs/spine/specs/2026-11-15-burn-tracking-and-routine-builder-design.md.
+Release v1.5.0+9 reuses the permanent signing key.
