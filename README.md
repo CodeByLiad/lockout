@@ -31,6 +31,14 @@ and adds the exact date range as described below.
 |:---:|:---:|:---:|
 | <img src="docs/screenshots/onboarding.png" width="240" alt="Required first-time profile setup with blank age"> | <img src="docs/screenshots/measurements.png" width="240" alt="Current weight and height entered together"> | <img src="docs/screenshots/profile-review.png" width="240" alt="Profile review with direct edit actions"> |
 
+## What's new in v1.5.1
+
+[Download v1.5.1](https://github.com/CodeByLiad/lockout/releases/tag/v1.5.1).
+
+- Changing sets or editing an exercise no longer moves it to the end of
+  a day in plans made with older versions.
+- The burn and rename sheets release their text fields when they close.
+
 ## What's new in v1.5.0
 
 [Download v1.5.0](https://github.com/CodeByLiad/lockout/releases/tag/v1.5.0).
@@ -188,7 +196,7 @@ flutter test --concurrency=1
 flutter analyze
 ```
 
-The release passed **995 tests**, including launcher masks, backup round trips, migrations,
+The release passed **997 tests**, including launcher masks, backup round trips, migrations,
 storage, units, theme persistence, contrast, navigation and new screen flows.
 Analysis has no errors or warnings; two pre-existing test information notices
 remain. Release-version checks also run before publication.

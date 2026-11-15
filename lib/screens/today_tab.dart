@@ -1724,42 +1724,10 @@ class _SavedBurnCardState extends State<_SavedBurnCard> {
   late double _kcal = widget.initialKcal;
 
   Future<void> _edit() async {
-    final ctrl = TextEditingController(
-      text: _kcal > 0 ? _kcal.round().toString() : '',
-    );
     final value = await showNvSheet<double>(
       context: context,
       title: 'Workout burn',
-      child: Builder(
-        builder: (sheetCtx) => Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            NvField(
-              label: 'Calories burned (kcal)',
-              controller: ctrl,
-              keyboardType: TextInputType.number,
-              autofocus: true,
-            ),
-            const SizedBox(height: 16),
-            NvButton(
-              key: const ValueKey('save-burn'),
-              variant: NvButtonVariant.filled,
-              label: 'Save burn',
-              onPressed: () {
-                final parsed = NumericGuard.parse(ctrl.text, min: 0);
-                if (parsed == null || parsed > 5000) {
-                  showNvSnackbar(
-                    context: sheetCtx,
-                    message: 'Enter a number from 0 to 5000.',
-                  );
-                  return;
-                }
-                Navigator.of(sheetCtx).pop(parsed);
-              },
-            ),
-          ],
-        ),
-      ),
+      child: _BurnForm(initialKcal: _kcal),
     );
     if (value == null || !mounted) return;
     try {
@@ -1809,6 +1777,60 @@ class _SavedBurnCardState extends State<_SavedBurnCard> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Owns its controller so the field is disposed with the sheet.
+class _BurnForm extends StatefulWidget {
+  const _BurnForm({required this.initialKcal});
+
+  final double initialKcal;
+
+  @override
+  State<_BurnForm> createState() => _BurnFormState();
+}
+
+class _BurnFormState extends State<_BurnForm> {
+  late final _ctrl = TextEditingController(
+    text: widget.initialKcal > 0 ? widget.initialKcal.round().toString() : '',
+  );
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        NvField(
+          label: 'Calories burned (kcal)',
+          controller: _ctrl,
+          keyboardType: TextInputType.number,
+          autofocus: true,
+        ),
+        const SizedBox(height: 16),
+        NvButton(
+          key: const ValueKey('save-burn'),
+          variant: NvButtonVariant.filled,
+          label: 'Save burn',
+          onPressed: () {
+            final parsed = NumericGuard.parse(_ctrl.text, min: 0);
+            if (parsed == null || parsed > 5000) {
+              showNvSnackbar(
+                context: context,
+                message: 'Enter a number from 0 to 5000.',
+              );
+              return;
+            }
+            Navigator.of(context).pop(parsed);
+          },
+        ),
+      ],
     );
   }
 }

@@ -322,6 +322,21 @@ class DatabaseService {
     await db.insert('exercises', row, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
+  /// Saves an edited exercise in place, for the same reason as below: a
+  /// replace would move it within plans saved before exercise ordering.
+  Future<void> updateExercise(Map<String, dynamic> row) async {
+    final db = await instance.database;
+    await db.update('exercises', row, where: 'id = ?', whereArgs: [row['id']]);
+  }
+
+  /// Changes the target sets in place. A replace would delete and re-add the
+  /// row, giving it a new rowid and moving it within plans saved before
+  /// exercise ordering, where every order_index is 0.
+  Future<void> updateExerciseSets(String id, int sets) async {
+    final db = await instance.database;
+    await db.update('exercises', {'target_sets': sets}, where: 'id = ?', whereArgs: [id]);
+  }
+
   /// Adds a catalog selection as one operation: a failed row adds nothing.
   Future<void> insertExercises(List<Map<String, dynamic>> rows) async {
     final db = await instance.database;
@@ -607,16 +622,6 @@ class DatabaseService {
   ) =>
       _writeSessionAtomically(sessionRow, setRows);
 
-  /// Writes a finished session and its sets atomically — the create path's
-  /// counterpart to the two transactions above, and the only place set data
-  /// is ever produced in the first place.
-  ///
-  /// `TodayTab._finishSession` previously called `insertSessionLog` and
-  /// `insertSetLogs` back to back. A kill between them — a low-memory
-  /// process death right after a workout, when the app is most likely to be
-  /// backgrounded — left a header claiming `totalSets: N` with nothing
-  /// behind it, the exact state the delete and restore transactions exist
-  /// to prevent.
   /// Corrects the estimated burn of one saved session. Only that row changes.
   Future<void> updateSessionBurn(String id, double kcal) async {
     final db = await instance.database;
@@ -628,6 +633,16 @@ class DatabaseService {
     );
   }
 
+  /// Writes a finished session and its sets atomically — the create path's
+  /// counterpart to the two transactions above, and the only place set data
+  /// is ever produced in the first place.
+  ///
+  /// `TodayTab._finishSession` previously called `insertSessionLog` and
+  /// `insertSetLogs` back to back. A kill between them — a low-memory
+  /// process death right after a workout, when the app is most likely to be
+  /// backgrounded — left a header claiming `totalSets: N` with nothing
+  /// behind it, the exact state the delete and restore transactions exist
+  /// to prevent.
   Future<void> insertSessionWithSets(
     Map<String, dynamic> sessionRow,
     List<Map<String, dynamic>> setRows,

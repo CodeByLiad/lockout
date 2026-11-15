@@ -809,9 +809,7 @@ class RoutinesTabState extends State<RoutinesTab> {
   ) {
     final theme = Theme.of(ctx);
     Future<void> setSets(int sets) async {
-      await DatabaseService.instance.insertExercise(
-        ex.copyWith(targetSets: sets).toMap(),
-      );
+      await DatabaseService.instance.updateExerciseSets(ex.id, sets);
       await refresh();
     }
 
@@ -870,28 +868,10 @@ class RoutinesTabState extends State<RoutinesTab> {
 
   /// Renames in a short sheet; resolves true when the name changed.
   Future<bool?> _renameRoutine(Routine routine) async {
-    final ctrl = TextEditingController(text: routine.name);
     final name = await showNvSheet<String>(
       context: context,
       title: 'Rename routine',
-      child: Builder(
-        builder: (sheetCtx) => Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            NvField(label: 'Routine name', controller: ctrl, autofocus: true),
-            const SizedBox(height: 16),
-            NvButton(
-              variant: NvButtonVariant.filled,
-              label: 'Save name',
-              onPressed: () {
-                final value = ctrl.text.trim();
-                if (value.isEmpty) return;
-                Navigator.of(sheetCtx).pop(value);
-              },
-            ),
-          ],
-        ),
-      ),
+      child: _RenameRoutineForm(initial: routine.name),
     );
     if (name == null || name == routine.name) return false;
     await DatabaseService.instance.insertRoutine(
@@ -1639,7 +1619,8 @@ class _ExerciseFormState extends State<_ExerciseForm> {
             var maxReps = int.tryParse(_repsMaxCtrl.text) ?? ex.targetRepsMax;
             if (maxReps < minReps) maxReps = minReps;
 
-            await DatabaseService.instance.insertExercise(
+            final db = DatabaseService.instance;
+            await (widget.isNew ? db.insertExercise : db.updateExercise)(
               ex
                   .copyWith(
                     targetSets: targetSets,
@@ -1682,6 +1663,46 @@ class _ExerciseFormState extends State<_ExerciseForm> {
             label: 'Remove exercise',
           ),
         ],
+      ],
+    );
+  }
+}
+
+/// Owns its controller so the field is disposed with the sheet.
+class _RenameRoutineForm extends StatefulWidget {
+  const _RenameRoutineForm({required this.initial});
+
+  final String initial;
+
+  @override
+  State<_RenameRoutineForm> createState() => _RenameRoutineFormState();
+}
+
+class _RenameRoutineFormState extends State<_RenameRoutineForm> {
+  late final _ctrl = TextEditingController(text: widget.initial);
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        NvField(label: 'Routine name', controller: _ctrl, autofocus: true),
+        const SizedBox(height: 16),
+        NvButton(
+          variant: NvButtonVariant.filled,
+          label: 'Save name',
+          onPressed: () {
+            final value = _ctrl.text.trim();
+            if (value.isEmpty) return;
+            Navigator.of(context).pop(value);
+          },
+        ),
       ],
     );
   }

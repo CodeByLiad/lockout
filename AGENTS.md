@@ -152,3 +152,8 @@ switch in Settings > Nutrition, editable burn on the saved-workout page,
 Hevy/MFP single-page routine builder. Spec:
 docs/spine/specs/2026-11-15-burn-tracking-and-routine-builder-design.md.
 Release v1.5.0+9 reuses the permanent signing key.
+
+Release v1.5.1+10 fixes the three v1.5.0 review findings:
+sets steppers and the exercise form update in place (updateExerciseSets,
+updateExercise) so old plans keep their order,
+sheet controllers are owned by stateful forms, and the burn doc comment is moved.

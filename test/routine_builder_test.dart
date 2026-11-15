@@ -82,6 +82,53 @@ void main() {
     expect(row['target_sets'], 3);
   });
 
+  testWidgets('changing sets keeps exercises in place on old data', (
+    t,
+  ) async {
+    await _seedPlan();
+    // Plans saved before v2 have every order_index at 0, so order falls back
+    // to rowid. A replace would give the edited row a new rowid.
+    await DatabaseService.instance.insertExercise(
+      ExerciseDef(
+        id: 'f',
+        dayId: 'd',
+        name: 'Row',
+        targetSets: 3,
+        targetRepsMin: 8,
+        targetRepsMax: 12,
+      ).toMap(),
+    );
+    await pumpPage(t, RoutinesTab());
+    await t.tap(find.text('My plan').last);
+    await settle(t);
+
+    await t.tap(find.byKey(const ValueKey('sets-plus-e')));
+    await settle(t);
+    final rows = await DatabaseService.instance.getExercisesForDay('d');
+    expect(rows.map((r) => r['id']), ['e', 'f']);
+    expect(rows.first['target_sets'], 4);
+  });
+
+  test('editing an exercise keeps its place on old data', () async {
+    await _seedPlan();
+    final db = DatabaseService.instance;
+    await db.insertExercise(
+      ExerciseDef(
+        id: 'f',
+        dayId: 'd',
+        name: 'Row',
+        targetSets: 3,
+        targetRepsMin: 8,
+        targetRepsMax: 12,
+      ).toMap(),
+    );
+    final first = ExerciseDef.fromMap((await db.getExercisesForDay('d')).first);
+    await db.updateExercise(first.copyWith(targetRepsMax: 15).toMap());
+    final rows = await db.getExercisesForDay('d');
+    expect(rows.map((r) => r['id']), ['e', 'f']);
+    expect(rows.first['target_reps_max'], 15);
+  });
+
   testWidgets('creating a routine lands in its builder', (t) async {
     await pumpPage(t, RoutinesTab());
     await press(t, 'Create routine');
